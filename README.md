@@ -75,8 +75,8 @@ Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ P
 
 ```bash
 # Clone & install
-git clone <repo-url>
-cd my-project
+git clone https://github.com/siabang35/anchor-solana.git
+cd anchor-solana
 yarn install
 
 # Build smart contract
@@ -136,7 +136,7 @@ my-project/
 
 ## 📄 Smart Contract
 
-**Program ID:** `95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN`
+**Program ID:** Your Program ID
 
 | Instruction | Description |
 |---|---|
