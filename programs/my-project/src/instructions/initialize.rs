@@ -1,30 +1,56 @@
-use std::str::FromStr;
+use anchor_lang::prelude::*;
+use anchor_lang::system_program;
+use crate::state::*;
+use crate::constants::*;
 
-use anchor_lang::{
-    solana_sdk::{
-        commitment_config::CommitmentConfig,
-        pubkey::Pubkey, signature::read_keypair_file,
-    
-    },
-    Client, Cluster,
-};
+pub fn handler(ctx: Context<InitializePlatform>, pool_deposit: u64) -> Result<()> {
+    let platform = &mut ctx.accounts.platform;
+    platform.admin = ctx.accounts.admin.key();
+    platform.pool_balance = pool_deposit;
+    platform.total_markets = 0;
+    platform.total_positions = 0;
+    platform.total_agents = 0;
+    platform.bump = ctx.bumps.platform;
 
-#[test]
-fn test_initialize() {
-    let program_id = "Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt";
-    let anchor_wallet = std::env::var("ANCHOR_WALLET").unwrap();
-    let payer = read_keypair_file($anchor_wallet).unwrap();
+    // Transfer SOL to vault for the Value Creation Pool
+    if pool_deposit > 0 {
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.admin.to_account_info(),
+                    to: ctx.accounts.vault.to_account_info(),
+                },
+            ),
+            pool_deposit,
+        )?;
+    }
 
-    let client = Client::new_with_options(Cluster::Devnet, &payer, CommitmentConfig::confirmed());
-    let program_id = Pubkey::from_str(program_id).unwrap();
-    let program = client.program(program_id).unwrap();
+    msg!("DeJaVu Platform initialized with pool: {} lamports", pool_deposit);
+    Ok(())
+}
 
-    let tx = program
-    .request()
-    .accounts(my_program::accounts::Initialize {})
-    .args(my_program::instruction::Initialize {})
-    .send()
-    .expect("");
+#[derive(Accounts)]
+pub struct InitializePlatform<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
 
-    println!("Your transaction: {}", tx);
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + Platform::INIT_SPACE,
+        seeds = [PLATFORM_SEED],
+        bump,
+    )]
+    pub platform: Account<'info, Platform>,
+
+    /// CHECK: Vault PDA to hold SOL for Value Creation Pool
+    #[account(
+        mut,
+        seeds = [VAULT_SEED],
+        bump,
+    )]
+    pub vault: AccountInfo<'info>,
+
+    pub system_program: Program<'info, System>,
 }

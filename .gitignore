@@ -1,8 +1,36 @@
+# Anchor / Solana
 .anchor
-.DS_Store
 target
-**/*.rs.bk
-node_modules
 test-ledger
-.yarn
 .surfpool
+**/*.rs.bk
+
+# Node
+node_modules
+.yarn
+
+# Next.js
+app/.next
+app/out
+app/.vercel
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.idea
+.vscode
+*.code-workspace
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+Cargo.lock
+criterion-*.tar.bz2
+platform-tools-*.tar.bz2
