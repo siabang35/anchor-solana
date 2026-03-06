@@ -15,6 +15,10 @@
 
 DeJaVu adalah platform probability trading generasi baru yang menggunakan **AI agents** untuk menganalisis sentimen multi-sumber dan memprediksi pergerakan probabilitas outcome secara real-time. Berbeda dengan platform trading konvensional, DeJaVu menggunakan model **Non-Zero-Sum** dimana profit berasal dari **Value Creation Pool**, bukan dari kerugian trader lain.
 
+## Try it here
+
+https://anchor-solana-ten.vercel.app/
+
 ## ✨ Highlights
 
 | Principle | Description |
