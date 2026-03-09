@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum DejavuError {
+pub enum ExoduzeError {
     #[msg("Title too long")]
     TitleTooLong,
     #[msg("Team name too long")]

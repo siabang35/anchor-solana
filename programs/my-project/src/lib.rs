@@ -12,10 +12,10 @@ pub use state::*;
 declare_id!("95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN");
 
 #[program]
-pub mod dejavu {
+pub mod exoduze {
     use super::*;
 
-    /// Initialize the DeJaVu platform with a Value Creation Pool deposit
+    /// Initialize the ExoDuZe platform with a Value Creation Pool deposit
     pub fn initialize_platform(ctx: Context<InitializePlatform>, pool_deposit: u64) -> Result<()> {
         instructions::initialize::handler(ctx, pool_deposit)
     }

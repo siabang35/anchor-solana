@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
-use crate::error::DejavuError;
+use crate::error::ExoduzeError;
 use crate::constants::*;
 
 pub fn handler(
@@ -10,13 +10,13 @@ pub fn handler(
     direction: u8,
     risk_level: u8,
 ) -> Result<()> {
-    require!(strategy_prompt.len() <= MAX_STRATEGY_LENGTH, DejavuError::StrategyTooLong);
-    require!(target_outcome < MAX_OUTCOMES as u8, DejavuError::InvalidOutcome);
-    require!(direction <= 1, DejavuError::InvalidDirection);
-    require!(risk_level >= 1 && risk_level <= 5, DejavuError::InvalidRiskLevel);
+    require!(strategy_prompt.len() <= MAX_STRATEGY_LENGTH, ExoduzeError::StrategyTooLong);
+    require!(target_outcome < MAX_OUTCOMES as u8, ExoduzeError::InvalidOutcome);
+    require!(direction <= 1, ExoduzeError::InvalidDirection);
+    require!(risk_level >= 1 && risk_level <= 5, ExoduzeError::InvalidRiskLevel);
 
     let market = &ctx.accounts.market;
-    require!(market.status == MarketStatus::Active, DejavuError::MarketNotActive);
+    require!(market.status == MarketStatus::Active, ExoduzeError::MarketNotActive);
 
     let platform = &mut ctx.accounts.platform;
     let agent = &mut ctx.accounts.agent;
@@ -25,13 +25,13 @@ pub fn handler(
         0 => Outcome::Home,
         1 => Outcome::Draw,
         2 => Outcome::Away,
-        _ => return Err(DejavuError::InvalidOutcome.into()),
+        _ => return Err(ExoduzeError::InvalidOutcome.into()),
     };
 
     let direction_enum = match direction {
         0 => Direction::Long,
         1 => Direction::Short,
-        _ => return Err(DejavuError::InvalidDirection.into()),
+        _ => return Err(ExoduzeError::InvalidDirection.into()),
     };
 
     agent.owner = ctx.accounts.owner.key();
@@ -48,7 +48,7 @@ pub fn handler(
     agent.bump = ctx.bumps.agent;
 
     platform.total_agents = platform.total_agents.checked_add(1)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
 
     msg!("AI Agent deployed at index {}", agent.agent_index);
     Ok(())
@@ -67,7 +67,7 @@ pub struct DeployAgent<'info> {
     pub platform: Account<'info, Platform>,
 
     #[account(
-        constraint = market.status == MarketStatus::Active @ DejavuError::MarketNotActive,
+        constraint = market.status == MarketStatus::Active @ ExoduzeError::MarketNotActive,
     )]
     pub market: Account<'info, Market>,
 

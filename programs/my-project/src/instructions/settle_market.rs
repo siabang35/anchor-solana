@@ -1,22 +1,22 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
-use crate::error::DejavuError;
+use crate::error::ExoduzeError;
 use crate::constants::*;
 
 pub fn handler(
     ctx: Context<SettleMarket>,
     winning_outcome: u8,
 ) -> Result<()> {
-    require!(winning_outcome < MAX_OUTCOMES as u8, DejavuError::InvalidOutcome);
+    require!(winning_outcome < MAX_OUTCOMES as u8, ExoduzeError::InvalidOutcome);
 
     let market = &mut ctx.accounts.market;
-    require!(market.status == MarketStatus::Active, DejavuError::MarketNotActive);
+    require!(market.status == MarketStatus::Active, ExoduzeError::MarketNotActive);
 
     let outcome_enum = match winning_outcome {
         0 => Outcome::Home,
         1 => Outcome::Draw,
         2 => Outcome::Away,
-        _ => return Err(DejavuError::InvalidOutcome.into()),
+        _ => return Err(ExoduzeError::InvalidOutcome.into()),
     };
 
     market.status = MarketStatus::Settled;
@@ -35,13 +35,13 @@ pub struct SettleMarket<'info> {
     #[account(
         seeds = [PLATFORM_SEED],
         bump = platform.bump,
-        has_one = admin @ DejavuError::Unauthorized,
+        has_one = admin @ ExoduzeError::Unauthorized,
     )]
     pub platform: Account<'info, Platform>,
 
     #[account(
         mut,
-        constraint = market.status == MarketStatus::Active @ DejavuError::MarketNotActive,
+        constraint = market.status == MarketStatus::Active @ ExoduzeError::MarketNotActive,
     )]
     pub market: Account<'info, Market>,
 }

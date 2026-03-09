@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use crate::state::*;
-use crate::error::DejavuError;
+use crate::error::ExoduzeError;
 use crate::constants::*;
 
 pub fn handler(
@@ -10,12 +10,12 @@ pub fn handler(
     direction: u8,
     amount: u64,
 ) -> Result<()> {
-    require!(amount >= MIN_POSITION_AMOUNT, DejavuError::AmountTooSmall);
-    require!(outcome < MAX_OUTCOMES as u8, DejavuError::InvalidOutcome);
-    require!(direction <= 1, DejavuError::InvalidDirection);
+    require!(amount >= MIN_POSITION_AMOUNT, ExoduzeError::AmountTooSmall);
+    require!(outcome < MAX_OUTCOMES as u8, ExoduzeError::InvalidOutcome);
+    require!(direction <= 1, ExoduzeError::InvalidDirection);
 
     let market = &mut ctx.accounts.market;
-    require!(market.status == MarketStatus::Active, DejavuError::MarketNotActive);
+    require!(market.status == MarketStatus::Active, ExoduzeError::MarketNotActive);
 
     let platform = &mut ctx.accounts.platform;
     let position = &mut ctx.accounts.position;
@@ -24,13 +24,13 @@ pub fn handler(
         0 => Outcome::Home,
         1 => Outcome::Draw,
         2 => Outcome::Away,
-        _ => return Err(DejavuError::InvalidOutcome.into()),
+        _ => return Err(ExoduzeError::InvalidOutcome.into()),
     };
 
     let direction_enum = match direction {
         0 => Direction::Long,
         1 => Direction::Short,
-        _ => return Err(DejavuError::InvalidDirection.into()),
+        _ => return Err(ExoduzeError::InvalidDirection.into()),
     };
 
     let entry_prob = market.probabilities[outcome as usize];
@@ -63,14 +63,14 @@ pub fn handler(
 
     // Update platform and market counters
     platform.total_positions = platform.total_positions.checked_add(1)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
     platform.pool_balance = platform.pool_balance.checked_add(amount)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
 
     market.total_positions = market.total_positions.checked_add(1)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
     market.total_volume = market.total_volume.checked_add(amount)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
 
     msg!(
         "Position taken: outcome={}, direction={}, amount={}, entry_prob={}",
@@ -96,7 +96,7 @@ pub struct TakePosition<'info> {
 
     #[account(
         mut,
-        constraint = market.status == MarketStatus::Active @ DejavuError::MarketNotActive,
+        constraint = market.status == MarketStatus::Active @ ExoduzeError::MarketNotActive,
     )]
     pub market: Account<'info, Market>,
 

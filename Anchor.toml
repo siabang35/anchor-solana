@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-dejavu = "95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN"
+exoduze = "95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN"
 
 [programs.localnet]
-dejavu = "Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt"
+exoduze = "Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt"
 
 [registry]
 url = "https://api.apr.dev"

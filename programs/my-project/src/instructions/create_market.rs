@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
-use crate::error::DejavuError;
+use crate::error::ExoduzeError;
 use crate::constants::*;
 
 pub fn handler(
@@ -10,13 +10,13 @@ pub fn handler(
     team_away: String,
     initial_probabilities: [u16; 3],
 ) -> Result<()> {
-    require!(title.len() <= MAX_TITLE_LENGTH, DejavuError::TitleTooLong);
-    require!(team_home.len() <= MAX_TEAM_NAME_LENGTH, DejavuError::TeamNameTooLong);
-    require!(team_away.len() <= MAX_TEAM_NAME_LENGTH, DejavuError::TeamNameTooLong);
+    require!(title.len() <= MAX_TITLE_LENGTH, ExoduzeError::TitleTooLong);
+    require!(team_home.len() <= MAX_TEAM_NAME_LENGTH, ExoduzeError::TeamNameTooLong);
+    require!(team_away.len() <= MAX_TEAM_NAME_LENGTH, ExoduzeError::TeamNameTooLong);
 
     // Probabilities must sum to 10000 (100%)
     let sum: u32 = initial_probabilities.iter().map(|p| *p as u32).sum();
-    require!(sum == PROBABILITY_DECIMALS as u32, DejavuError::InvalidProbabilities);
+    require!(sum == PROBABILITY_DECIMALS as u32, ExoduzeError::InvalidProbabilities);
 
     let platform = &mut ctx.accounts.platform;
     let market = &mut ctx.accounts.market;
@@ -36,7 +36,7 @@ pub fn handler(
     market.bump = ctx.bumps.market;
 
     platform.total_markets = platform.total_markets.checked_add(1)
-        .ok_or(DejavuError::MathOverflow)?;
+        .ok_or(ExoduzeError::MathOverflow)?;
 
     msg!("Market '{}' created at index {}", market.title, market.market_index);
     Ok(())
@@ -51,7 +51,7 @@ pub struct CreateMarket<'info> {
         mut,
         seeds = [PLATFORM_SEED],
         bump = platform.bump,
-        has_one = admin @ DejavuError::Unauthorized,
+        has_one = admin @ ExoduzeError::Unauthorized,
     )]
     pub platform: Account<'info, Platform>,
 

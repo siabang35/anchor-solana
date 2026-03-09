@@ -24,7 +24,7 @@ export default function Header({ theme, onToggleTheme }: Props) {
         <header className="header">
             <div className="header-left">
                 <div>
-                    <div className="logo">DeJaVu</div>
+                    <div className="logo">ExoDuZe</div>
                     <div className="logo-sub">AI-Native Probability Trading · Non-Zero-Sum</div>
                 </div>
                 <span className="badge live">● LIVE</span>

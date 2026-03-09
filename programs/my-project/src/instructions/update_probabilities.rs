@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use crate::state::*;
-use crate::error::DejavuError;
+use crate::error::ExoduzeError;
 use crate::constants::*;
 
 pub fn handler(
@@ -9,10 +9,10 @@ pub fn handler(
 ) -> Result<()> {
     // Probabilities must sum to 10000 (100%)
     let sum: u32 = new_probabilities.iter().map(|p| *p as u32).sum();
-    require!(sum == PROBABILITY_DECIMALS as u32, DejavuError::InvalidProbabilities);
+    require!(sum == PROBABILITY_DECIMALS as u32, ExoduzeError::InvalidProbabilities);
 
     let market = &mut ctx.accounts.market;
-    require!(market.status == MarketStatus::Active, DejavuError::MarketNotActive);
+    require!(market.status == MarketStatus::Active, ExoduzeError::MarketNotActive);
 
     market.probabilities = new_probabilities;
 
@@ -33,13 +33,13 @@ pub struct UpdateProbabilities<'info> {
     #[account(
         seeds = [PLATFORM_SEED],
         bump = platform.bump,
-        has_one = admin @ DejavuError::Unauthorized,
+        has_one = admin @ ExoduzeError::Unauthorized,
     )]
     pub platform: Account<'info, Platform>,
 
     #[account(
         mut,
-        constraint = market.status == MarketStatus::Active @ DejavuError::MarketNotActive,
+        constraint = market.status == MarketStatus::Active @ ExoduzeError::MarketNotActive,
     )]
     pub market: Account<'info, Market>,
 }

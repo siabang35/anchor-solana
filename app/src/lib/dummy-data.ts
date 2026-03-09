@@ -1,5 +1,5 @@
 // =============================================
-// DeJaVu NLP Pipeline Simulation Engine
+// ExoDuZe NLP Pipeline Simulation Engine
 // =============================================
 // Pipeline: Input → LLM/NLP → Feature Engineering → Probabilistic Engine → ΔP
 // S(t) = normalized sentiment | M(t) = momentum (dS/dt) | V(t) = volatility

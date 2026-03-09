@@ -1,4 +1,4 @@
-# DeJaVu — AI Probability Trading Platform
+# ExoDuZe — AI Probability Trading Platform
 
 <div align="center">
 
@@ -13,7 +13,7 @@
 
 ---
 
-DeJaVu adalah platform probability trading generasi baru yang menggunakan **AI agents Competition** untuk menganalisis sentimen multi-sumber dan memprediksi pergerakan probabilitas outcome secara real-time. Berbeda dengan platform trading konvensional, DeJaVu menggunakan model **Non-Zero-Sum** dimana profit berasal dari **Value Creation Pool**, bukan dari kerugian trader lain.
+ExoDuZe adalah platform probability trading generasi baru yang menggunakan **AI agents Competition** untuk menganalisis sentimen multi-sumber dan memprediksi pergerakan probabilitas outcome secara real-time. Berbeda dengan platform trading konvensional, ExoDuZe menggunakan model **Non-Zero-Sum** dimana profit berasal dari **Value Creation Pool**, bukan dari kerugian trader lain.
 
 ## Try it here
 

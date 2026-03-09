@@ -26,7 +26,7 @@ pub fn handler(ctx: Context<InitializePlatform>, pool_deposit: u64) -> Result<()
         )?;
     }
 
-    msg!("DeJaVu Platform initialized with pool: {} lamports", pool_deposit);
+    msg!("ExoDuZe Platform initialized with pool: {} lamports", pool_deposit);
     Ok(())
 }
 
