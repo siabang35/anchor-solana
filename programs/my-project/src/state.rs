@@ -35,7 +35,7 @@ pub enum Outcome {
     Away,
 }
 
-/// Market account — represents a probability trading market
+/// Market account — represents a probability trading market with sector + competition timing
 #[account]
 #[derive(InitSpace)]
 pub struct Market {
@@ -55,6 +55,17 @@ pub struct Market {
     pub market_index: u64,
     pub created_at: i64,
     pub settled_at: Option<i64>,
+    /// Sector category: sports, finance, crypto, tech, economy, science, politics
+    #[max_len(20)]
+    pub sector: String,
+    /// Competition start timestamp (unix)
+    pub competition_start: i64,
+    /// Competition end timestamp (unix)
+    pub competition_end: i64,
+    /// Bonding curve parameter k (base price multiplier, in lamports)
+    pub bonding_k: u64,
+    /// Bonding curve parameter n (exponent × 100, e.g. 150 = 1.5)
+    pub bonding_n: u16,
     pub bump: u8,
 }
 
@@ -96,6 +107,18 @@ pub struct Agent {
     pub bump: u8,
 }
 
+/// Agent Registry — tracks per-user AI agent deploy quota
+#[account]
+#[derive(InitSpace)]
+pub struct AgentRegistry {
+    pub user: Pubkey,
+    /// Number of deploys used by this user
+    pub deploys_used: u8,
+    /// Maximum allowed deploys (10 for free tier)
+    pub max_deploys: u8,
+    pub bump: u8,
+}
+
 /// Leaderboard entry account
 #[account]
 #[derive(InitSpace)]
@@ -107,3 +130,4 @@ pub struct LeaderboardEntry {
     pub rank: u32,
     pub bump: u8,
 }
+

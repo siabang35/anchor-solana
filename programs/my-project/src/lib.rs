@@ -9,7 +9,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN");
+declare_id!("56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7");
 
 #[program]
 pub mod exoduze {
@@ -20,18 +20,26 @@ pub mod exoduze {
         instructions::initialize::handler(ctx, pool_deposit)
     }
 
-    /// Create a new probability market (e.g. football match)
+    /// Create a new probability market with sector, competition timing, and bonding curve
     pub fn create_market(
         ctx: Context<CreateMarket>,
         title: String,
         team_home: String,
         team_away: String,
         initial_probabilities: [u16; 3],
+        sector: String,
+        competition_start: i64,
+        competition_end: i64,
+        bonding_k: u64,
+        bonding_n: u16,
     ) -> Result<()> {
-        instructions::create_market::handler(ctx, title, team_home, team_away, initial_probabilities)
+        instructions::create_market::handler(
+            ctx, title, team_home, team_away, initial_probabilities,
+            sector, competition_start, competition_end, bonding_k, bonding_n,
+        )
     }
 
-    /// Take a position (Long/Short) on a market outcome
+    /// Take a position (Long/Short) on a market outcome with bonding curve pricing
     pub fn take_position(
         ctx: Context<TakePosition>,
         outcome: u8,
@@ -41,7 +49,12 @@ pub mod exoduze {
         instructions::take_position::handler(ctx, outcome, direction, amount)
     }
 
-    /// Deploy an AI agent with custom strategy
+    /// Register user for AI agent deployment (creates quota PDA)
+    pub fn register_agent_user(ctx: Context<RegisterAgentUser>) -> Result<()> {
+        instructions::register_agent_user::handler(ctx)
+    }
+
+    /// Deploy an AI agent with custom strategy (checks quota)
     pub fn deploy_agent(
         ctx: Context<DeployAgent>,
         strategy_prompt: String,

@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-exoduze = "95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN"
+exoduze = "56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7"
 
 [programs.localnet]
 exoduze = "Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt"

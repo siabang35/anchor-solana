@@ -1,0 +1,31 @@
+-- ============================================================================
+-- Admin User Setup (011_add_example_super_admin.sql)
+-- ============================================================================
+--
+-- IMPORTANT: Do NOT use direct SQL inserts into auth.users for creating admin users.
+-- Supabase Auth uses an internal password validation mechanism that is incompatible
+-- with manual bcrypt hashes.
+--
+-- ============================================================================
+-- RECOMMENDED APPROACH: Use the Node.js seed script
+-- ============================================================================
+--
+-- Run from the apps/api directory:
+--   npx ts-node scripts/seed-admin.ts
+--
+-- This script uses Supabase Admin API to properly create admin users.
+--
+-- ============================================================================
+-- ALTERNATIVE: Promote an existing user to Super Admin
+-- ============================================================================
+--
+-- If you already have a user registered via the normal signup flow,
+-- you can promote them to Super Admin using:
+--
+--   SELECT public.promote_to_super_admin('your-email@example.com');
+--
+-- ============================================================================
+
+-- This migration is intentionally empty as admin user creation
+-- should be done via the API script or by promoting existing users.
+-- See instructions above.

@@ -32,4 +32,12 @@ pub enum ExoduzeError {
     InvalidRiskLevel,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("AI Agent deploy limit reached (max 10 for free tier)")]
+    AgentDeployLimitReached,
+    #[msg("Competition has not started yet")]
+    CompetitionNotStarted,
+    #[msg("Competition has already ended")]
+    CompetitionEnded,
+    #[msg("Sector name too long")]
+    SectorTooLong,
 }

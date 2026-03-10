@@ -1,0 +1,30 @@
+# ==========================
+# Render Blueprint Configuration
+# ==========================
+# Deploy to Render with: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: exoduze-api
+    runtime: node
+    plan: free
+    rootDir: api
+    buildCommand: npm install --include=dev && npm run build && npm prune --production
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: API_PREFIX
+        value: api/v1
+      # Add your environment variables in Render Dashboard:
+      # - SUPABASE_URL
+      # - SUPABASE_KEY (Service Role Key)
+      # - JWT_SECRET
+      # - CORS_ORIGINS (your frontend URL)
+      # - GOOGLE_CLIENT_ID
+      # - GOOGLE_CLIENT_SECRET
+      # - API_SPORTS_KEY
+      # - RABBITMQ_URL (if using RabbitMQ)

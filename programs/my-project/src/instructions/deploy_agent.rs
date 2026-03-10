@@ -18,6 +18,19 @@ pub fn handler(
     let market = &ctx.accounts.market;
     require!(market.status == MarketStatus::Active, ExoduzeError::MarketNotActive);
 
+    // Check competition timing
+    let now = Clock::get()?.unix_timestamp;
+    if market.competition_start > 0 {
+        require!(now >= market.competition_start, ExoduzeError::CompetitionNotStarted);
+    }
+    if market.competition_end > 0 {
+        require!(now < market.competition_end, ExoduzeError::CompetitionEnded);
+    }
+
+    // Check agent deploy quota
+    let registry = &mut ctx.accounts.agent_registry;
+    require!(registry.deploys_used < registry.max_deploys, ExoduzeError::AgentDeployLimitReached);
+
     let platform = &mut ctx.accounts.platform;
     let agent = &mut ctx.accounts.agent;
 
@@ -47,10 +60,14 @@ pub fn handler(
     agent.created_at = Clock::get()?.unix_timestamp;
     agent.bump = ctx.bumps.agent;
 
+    // Increment counters
     platform.total_agents = platform.total_agents.checked_add(1)
         .ok_or(ExoduzeError::MathOverflow)?;
+    registry.deploys_used = registry.deploys_used.checked_add(1)
+        .ok_or(ExoduzeError::MathOverflow)?;
 
-    msg!("AI Agent deployed at index {}", agent.agent_index);
+    msg!("AI Agent deployed at index {} (deploys: {}/{})", 
+        agent.agent_index, registry.deploys_used, registry.max_deploys);
     Ok(())
 }
 
@@ -70,6 +87,14 @@ pub struct DeployAgent<'info> {
         constraint = market.status == MarketStatus::Active @ ExoduzeError::MarketNotActive,
     )]
     pub market: Account<'info, Market>,
+
+    #[account(
+        mut,
+        seeds = [AGENT_REGISTRY_SEED, owner.key().as_ref()],
+        bump = agent_registry.bump,
+        constraint = agent_registry.user == owner.key() @ ExoduzeError::Unauthorized,
+    )]
+    pub agent_registry: Account<'info, AgentRegistry>,
 
     #[account(
         init,

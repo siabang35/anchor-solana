@@ -5,6 +5,7 @@ pub mod deploy_agent;
 pub mod update_probabilities;
 pub mod settle_market;
 pub mod claim_reward;
+pub mod register_agent_user;
 
 pub use initialize::*;
 pub use create_market::*;
@@ -13,3 +14,5 @@ pub use deploy_agent::*;
 pub use update_probabilities::*;
 pub use settle_market::*;
 pub use claim_reward::*;
+pub use register_agent_user::*;
+

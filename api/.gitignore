@@ -1,0 +1,47 @@
+# ==========================
+# Dependencies & build
+# ==========================
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# ==========================
+# Environment files (NEVER COMMIT)
+# ==========================
+.env
+.env.example
+.env.*
+*.env
+
+# ==========================
+# Logs
+# ==========================
+logs/
+*.log
+server.log
+
+# ==========================
+# IDE / OS
+# ==========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Supabase local
+# ==========================
+supabase/.temp/
+supabase/.branches/
+
+# ==========================
+# Secrets
+# ==========================
+*.pem
+*.key
+*.crt
+*.secret
+secrets/
+private/

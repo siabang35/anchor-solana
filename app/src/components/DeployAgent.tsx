@@ -2,27 +2,64 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
+import { useCompetitions, Competition } from '@/hooks/useCompetitions';
+import { apiFetch } from '@/lib/supabase';
 import {
-    DeployedAgent,
-    createAgentDeployLogs,
-    simulateAgentStep,
-    nlpEngine,
-    ProbabilityPoint,
     CATEGORIES,
     MODEL_TIERS,
     getMarketsForCategory,
     MarketTemplate,
-    ModelTier,
 } from '@/lib/dummy-data';
 
-interface Props {
-    currentProbs: ProbabilityPoint;
+interface AgentType {
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    sector: string;
+    default_strategy: string;
+    example_prompts: string[];
+    icon_emoji: string;
+    color_hex: string;
+}
+
+interface DeployedAgentResponse {
+    id: string;
+    name: string;
+    status: string;
+    strategy_prompt: string;
+    target_outcome: string;
+    direction: string;
+    risk_level: number;
+    deploy_number: number;
+    accuracy_score: number;
+    total_trades: number;
+    total_pnl: number;
+    win_rate: number;
+    deployed_at: string;
+    agent_type?: AgentType;
+}
+
+interface AgentLog {
+    timestamp: number;
+    type: 'info' | 'analysis' | 'trade' | 'signal';
+    message: string;
+}
+
+interface QuotaInfo {
+    total_deployed: number;
+    max_deploys: number;
+    deploys_remaining: number;
+    active_agents: number;
 }
 
 type BuilderStep = 'config' | 'deploying' | 'active';
 
-export default function DeployAgent({ currentProbs }: Props) {
-    const { connected } = useWallet();
+export default function DeployAgent() {
+    const { connected, publicKey } = useWallet();
+    const { agents: realtimeAgents } = useRealtimeAgents(publicKey?.toString() || null);
+    const { competitions } = useCompetitions();
 
     // Builder state
     const [agentName, setAgentName] = useState('');
@@ -37,11 +74,24 @@ export default function DeployAgent({ currentProbs }: Props) {
     const [step, setStep] = useState<BuilderStep>('config');
 
     // Agent state
-    const [agent, setAgent] = useState<DeployedAgent | null>(null);
-    const [logIndex, setLogIndex] = useState(0);
+    const [deployedAgent, setDeployedAgent] = useState<DeployedAgentResponse | null>(null);
+    const [logs, setLogs] = useState<AgentLog[]>([]);
+    const [quota, setQuota] = useState<QuotaInfo | null>(null);
+    const [agentTypes, setAgentTypes] = useState<AgentType[]>([]);
+    const [deploying, setDeploying] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const selectedCategory = useMemo(() => CATEGORIES.find(c => c.id === categoryId), [categoryId]);
-    const availableMarkets = useMemo(() => getMarketsForCategory(categoryId, subCategoryId || undefined), [categoryId, subCategoryId]);
+    const availableMarkets = useMemo(() => {
+        return competitions
+            .filter(c => c.sector === categoryId)
+            .map(c => ({
+                id: c.id,
+                title: c.title,
+                outcomes: c.outcomes || ['Bullish', 'Neutral', 'Bearish'],
+                subCategoryId: undefined,
+            }));
+    }, [competitions, categoryId]);
     const selectedMarket = useMemo(() => availableMarkets.find(m => m.id === marketId), [availableMarkets, marketId]);
     const selectedTier = useMemo(() => MODEL_TIERS.find(t => t.id === modelTierId) || MODEL_TIERS[0], [modelTierId]);
 
@@ -50,58 +100,118 @@ export default function DeployAgent({ currentProbs }: Props) {
     useEffect(() => { setMarketId(''); setSelectedOutcome(0); }, [subCategoryId]);
     useEffect(() => { setSelectedOutcome(0); }, [marketId]);
 
-    const canDeploy = connected && agentName.trim() && categoryId && marketId && strategy.trim();
+    // Fetch agent types and quota from backend
+    useEffect(() => {
+        const fetchMeta = async () => {
+            try {
+                const types = await apiFetch<AgentType[]>('/agents/types');
+                if (types) setAgentTypes(types);
+            } catch { /* Backend may not be running */ }
+            try {
+                const q = await apiFetch<QuotaInfo>('/agents/quota');
+                if (q) setQuota(q);
+            } catch { /* Backend may not be running */ }
+        };
+        fetchMeta();
+    }, [deployedAgent]); // Refresh quota after deploy
 
-    const handleDeploy = useCallback(() => {
+    const canDeploy = connected && agentName.trim() && categoryId && marketId && strategy.trim()
+        && (!quota || quota.deploys_remaining > 0);
+
+    // ========================
+    // Deploy via Backend API
+    // ========================
+    const handleDeploy = useCallback(async () => {
         if (!canDeploy || !selectedMarket) return;
         setStep('deploying');
+        setDeploying(true);
+        setError(null);
+        setLogs([]);
 
-        const logs = createAgentDeployLogs(strategy);
-        const newAgent: DeployedAgent = {
-            id: `agent-${Date.now()}`,
-            name: agentName.trim(),
-            strategy,
-            targetOutcome: selectedOutcome,
-            direction,
-            riskLevel,
-            status: 'deploying',
-            createdAt: Date.now(),
-            trades: [],
-            accuracy: 0,
-            totalPnl: 0,
-            logs: [],
-        };
+        // Simulate deployment progress logs
+        const deployLogs: AgentLog[] = [
+            { timestamp: Date.now(), type: 'info', message: '🚀 Initializing AI Agent deployment...' },
+            { timestamp: Date.now() + 500, type: 'info', message: `📝 Strategy loaded: "${strategy.slice(0, 80)}${strategy.length > 80 ? '...' : ''}"` },
+            { timestamp: Date.now() + 1200, type: 'info', message: '🔗 Connecting to backend API...' },
+        ];
 
-        setAgent(newAgent);
-        setLogIndex(0);
+        // Show initial logs
+        for (let i = 0; i < deployLogs.length; i++) {
+            await new Promise(r => setTimeout(r, 800));
+            setLogs(prev => [...prev, deployLogs[i]]);
+        }
 
-        logs.forEach((log, i) => {
-            setTimeout(() => {
-                setAgent(prev => {
-                    if (!prev) return prev;
-                    const updatedLogs = [...prev.logs, log];
-                    const newStatus = i < 2 ? 'deploying' : i < 5 ? 'analyzing' : i < 7 ? 'trading' : 'active';
-                    return { ...prev, logs: updatedLogs, status: newStatus };
-                });
-                setLogIndex(i + 1);
-                if (i === logs.length - 1) setStep('active');
-            }, (i + 1) * 1000);
-        });
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, selectedMarket]);
+        try {
+            // Find matching agent type from backend
+            const matchingType = agentTypes.find(t => t.sector === categoryId) || agentTypes[0];
 
-    // Agent simulation loop
-    useEffect(() => {
-        if (!agent || step !== 'active') return;
-        const interval = setInterval(() => {
-            setAgent(prev => (prev ? simulateAgentStep(prev, currentProbs) : prev));
-        }, 3000);
-        return () => clearInterval(interval);
-    }, [agent, step, currentProbs]);
+            const body = {
+                name: agentName.trim(),
+                agent_type_id: matchingType?.id || categoryId,
+                market_id: marketId,
+                strategy_prompt: strategy,
+                target_outcome: selectedMarket.outcomes[selectedOutcome] || 'home',
+                direction: direction === 'UP' ? 'long' : 'short',
+                risk_level: riskLevel,
+            };
 
-    const handleTerminate = () => {
-        setAgent(null);
+            // Call backend API
+            const result = await apiFetch<DeployedAgentResponse>('/agents/deploy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            setDeployedAgent(result);
+            setLogs(prev => [
+                ...prev,
+                { timestamp: Date.now(), type: 'info', message: '✅ Backend deployment successful!' },
+                { timestamp: Date.now() + 100, type: 'info', message: `🆔 Agent ID: ${result.id}` },
+                { timestamp: Date.now() + 200, type: 'info', message: `📊 Deploy #${result.deploy_number} — Quota: ${quota ? `${quota.total_deployed + 1}/${quota.max_deploys}` : 'N/A'}` },
+                { timestamp: Date.now() + 300, type: 'info', message: '🔗 On-chain registration queued (Solana devnet)...' },
+                { timestamp: Date.now() + 500, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
+            ]);
+            setStep('active');
+        } catch (err: any) {
+            setError(err.message || 'Deployment failed');
+            setLogs(prev => [
+                ...prev,
+                { timestamp: Date.now(), type: 'info', message: `❌ API Error: ${err.message || 'Unknown error'}` },
+                { timestamp: Date.now() + 100, type: 'info', message: '⚡ Falling back to local simulation mode...' },
+            ]);
+            // Fallback: create a simulated agent
+            setDeployedAgent({
+                id: `local-${Date.now()}`,
+                name: agentName.trim(),
+                status: 'active',
+                strategy_prompt: strategy,
+                target_outcome: selectedMarket.outcomes[selectedOutcome],
+                direction: direction === 'UP' ? 'long' : 'short',
+                risk_level: riskLevel,
+                deploy_number: 0,
+                accuracy_score: 0,
+                total_trades: 0,
+                total_pnl: 0,
+                win_rate: 0,
+                deployed_at: new Date().toISOString(),
+            });
+            setStep('active');
+        } finally {
+            setDeploying(false);
+        }
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, selectedMarket, agentTypes, categoryId, marketId, quota]);
+
+    const handleTerminate = async () => {
+        if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
+            try {
+                await apiFetch(`/agents/${deployedAgent.id}/toggle`, { method: 'PATCH' });
+            } catch { /* Best-effort */ }
+        }
+        setDeployedAgent(null);
         setAgentName('');
         setStrategy('');
+        setLogs([]);
+        setError(null);
         setStep('config');
     };
 
@@ -110,6 +220,8 @@ export default function DeployAgent({ currentProbs }: Props) {
         analyzing: '🧠 Analyzing Data...',
         trading: '📊 Executing Trades...',
         active: '✅ Active & Trading',
+        paused: '⏸ Paused',
+        terminated: '🛑 Terminated',
     };
 
     // ===== CONFIG STEP =====
@@ -118,8 +230,24 @@ export default function DeployAgent({ currentProbs }: Props) {
             <div className="glass-card card-body animate-in">
                 <div className="section-header">
                     <h3 className="section-title"><span className="icon">🔓</span> Build AI Agent</h3>
-                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>OpenClaw Engine</span>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                        {quota ? `${quota.deploys_remaining}/${quota.max_deploys} deploys left` : 'Max 10 free deploys'}
+                    </span>
                 </div>
+
+                {/* Quota Warning */}
+                {quota && quota.deploys_remaining <= 2 && (
+                    <div style={{
+                        padding: '0.4rem 0.65rem', marginBottom: '0.5rem',
+                        borderRadius: 'var(--radius-xs)',
+                        background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+                        fontSize: '0.6rem', color: 'var(--accent-amber)',
+                    }}>
+                        ⚠️ {quota.deploys_remaining === 0
+                            ? 'Deploy limit reached! Terminate an active agent to free a slot.'
+                            : `Only ${quota.deploys_remaining} deploy(s) remaining in free tier.`}
+                    </div>
+                )}
 
                 {/* Agent Name */}
                 <div className="form-group">
@@ -325,10 +453,14 @@ export default function DeployAgent({ currentProbs }: Props) {
                 <button
                     className="btn-primary"
                     onClick={handleDeploy}
-                    disabled={!canDeploy}
+                    disabled={!canDeploy || deploying}
                     style={{ marginTop: '0.5rem' }}
                 >
-                    {!connected ? '🔗 Connect Wallet First' : !canDeploy ? '⚠️ Complete All Fields' : `🚀 Deploy "${agentName || 'Agent'}" — ${selectedTier.badge} Tier`}
+                    {!connected ? '🔗 Connect Wallet First'
+                        : quota && quota.deploys_remaining <= 0 ? '⚠️ Deploy Limit Reached'
+                        : !canDeploy ? '⚠️ Complete All Fields'
+                        : deploying ? '⏳ Deploying...'
+                        : `🚀 Deploy "${agentName || 'Agent'}" — ${selectedTier.badge} Tier`}
                 </button>
 
                 {!connected && (
@@ -355,7 +487,7 @@ export default function DeployAgent({ currentProbs }: Props) {
                         {selectedCategory?.subCategories && subCategoryId && ` → ${selectedCategory.subCategories.find(s => s.id === subCategoryId)?.name}`}
                         {` → ${selectedMarket.title}`}
                         <br />
-                        This agent will only analyze data relevant to this specific market. It will not interfere with agents scoped to other categories.
+                        🔗 Deploys via NestJS API → Supabase (realtime) + Solana devnet (on-chain)
                     </div>
                 )}
             </div>
@@ -366,8 +498,8 @@ export default function DeployAgent({ currentProbs }: Props) {
     return (
         <div className="glass-card card-body animate-in">
             <div className="section-header">
-                <h3 className="section-title"><span className="icon">🤖</span> {agent?.name || 'Agent'}</h3>
-                {agent && <span className={`agent-status ${agent.status}`}><span className="status-dot" />{statusLabels[agent.status]}</span>}
+                <h3 className="section-title"><span className="icon">🤖</span> {deployedAgent?.name || 'Agent'}</h3>
+                {deployedAgent && <span className={`agent-status ${deployedAgent.status}`}><span className="status-dot" />{statusLabels[deployedAgent.status] || deployedAgent.status}</span>}
             </div>
 
             {/* Agent context banner */}
@@ -392,18 +524,24 @@ export default function DeployAgent({ currentProbs }: Props) {
                 }}>
                     {selectedTier.icon} {selectedTier.badge}
                 </span>
+                {deployedAgent?.id && !deployedAgent.id.startsWith('local-') && (
+                    <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-round)', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)', fontFamily: 'var(--font-mono)', fontSize: '0.5rem' }}>
+                        ID: {deployedAgent.id.slice(0, 8)}...
+                    </span>
+                )}
             </div>
 
             {/* Stats */}
-            {agent && agent.trades.length > 0 && (
+            {deployedAgent && (
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                     {[
-                        { label: 'Trades', value: `${agent.trades.length}`, color: 'var(--text-primary)' },
-                        { label: 'P&L', value: `${agent.totalPnl >= 0 ? '+' : ''}${agent.totalPnl.toFixed(3)}`, color: agent.totalPnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' },
-                        { label: 'Accuracy', value: `${agent.accuracy.toFixed(0)}%`, color: 'var(--accent-cyan)' },
+                        { label: 'Trades', value: `${deployedAgent.total_trades}`, color: 'var(--text-primary)' },
+                        { label: 'P&L', value: `${deployedAgent.total_pnl >= 0 ? '+' : ''}${deployedAgent.total_pnl.toFixed(3)}`, color: deployedAgent.total_pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' },
+                        { label: 'Accuracy', value: `${deployedAgent.accuracy_score.toFixed(0)}%`, color: 'var(--accent-cyan)' },
+                        { label: 'Deploy #', value: `${deployedAgent.deploy_number}`, color: 'var(--accent-amber)' },
                     ].map(s => (
                         <div key={s.label} style={{
-                            flex: 1, minWidth: 80, textAlign: 'center', padding: '0.45rem',
+                            flex: 1, minWidth: 70, textAlign: 'center', padding: '0.45rem',
                             borderRadius: 'var(--radius-xs)', background: 'var(--gradient-card)', border: '1px solid var(--border-card)',
                         }}>
                             <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>{s.label}</div>
@@ -413,9 +551,20 @@ export default function DeployAgent({ currentProbs }: Props) {
                 </div>
             )}
 
+            {error && (
+                <div style={{
+                    padding: '0.35rem 0.6rem', marginBottom: '0.5rem',
+                    borderRadius: 'var(--radius-xs)',
+                    background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+                    fontSize: '0.6rem', color: 'var(--accent-amber)',
+                }}>
+                    ⚠️ Running in simulation mode — backend API not available
+                </div>
+            )}
+
             {/* Console */}
             <div className="agent-console">
-                {agent?.logs.map((log, i) => (
+                {logs.map((log, i) => (
                     <div key={i} className={`agent-log ${log.type}`}>
                         <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         {log.message}
