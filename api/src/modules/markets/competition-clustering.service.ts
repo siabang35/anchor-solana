@@ -48,9 +48,23 @@ export class CompetitionClusteringService {
                 return;
             }
 
-            // Determine K: Max 15 clusters, or roughly 1 cluster per 3-5 items
-            const k = Math.min(15, Math.max(1, Math.ceil(allIds.length / 4)));
-            this.logger.log(`Clustering ${allIds.length} sources into ${k} clusters for ${category}`);
+            // Fetch current active/upcoming competitions for this sector
+            const activeComps = await this.competitionsService.findActive(category, 50);
+            const currentCount = activeComps.length;
+            const maxAllowed = 15;
+
+            if (currentCount >= maxAllowed) {
+                this.logger.log(`Category ${category} already has ${currentCount} competitions (max ${maxAllowed}). Skipping new clustering.`);
+                return;
+            }
+
+            const availableSlots = maxAllowed - currentCount;
+
+            // Determine K: Max available slots, or roughly 1 cluster per 3-5 items
+            const desiredK = Math.max(1, Math.ceil(allIds.length / 4));
+            const k = Math.min(availableSlots, Math.min(15, desiredK));
+            
+            this.logger.log(`Clustering ${allIds.length} sources into ${k} clusters for ${category} (Available slots: ${availableSlots})`);
 
             // Compute TF-IDF
             const vectors = computeTfIdf(allTexts);

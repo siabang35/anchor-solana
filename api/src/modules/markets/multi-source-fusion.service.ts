@@ -538,7 +538,8 @@ export class MultiSourceFusionService {
         }
 
         // Generate deep entropy from all source texts combined
-        const entropySource = allTexts.join('|') + `|${Date.now()}|${category}`;
+        // Adding totalPoints and variance to hash makes it resistant to single-source spam
+        const entropySource = allTexts.join('|') + `|${Date.now()}|${category}|${totalPoints}|${this.std(allValues)}`;
         const entropyPool = this.hashToEntropyPool(entropySource, 40);
 
         // Compute signal vector using weighted sentiment + value aggregation
@@ -546,11 +547,21 @@ export class MultiSourceFusionService {
         const sentimentStd = allSentiments.length > 1 ? this.std(allSentiments) : 0.1;
         const avgValue = allValues.length > 0 ? this.mean(allValues) : 0.5;
 
+        // Manipulation Resistance:
+        // 1. Data Density Penalty: If very few data points, noise/neutrality dominates
+        // 2. Volatility Injection: High standard deviation (conflicting sources) pushes curve to neutral/chaotic
+        const densityFactor = Math.min(1.0, totalPoints / 50); // Need at least 50 points across sources for full signal
+        
         // Signal vector: [bullish/home, neutral/draw, bearish/away]
-        // Use sentiment distribution to weight outcomes
-        const bullSignal = Math.tanh(avgSentiment * 2 + avgValue - 0.5);
-        const bearSignal = Math.tanh(-avgSentiment * 2 + (1 - avgValue) - 0.5);
-        const neutralSignal = Math.tanh(1 - sentimentStd * 5); // High std = less neutral
+        // Use density and standard deviation to damp manipulation
+        const bullSignal = Math.tanh((avgSentiment * 2 + avgValue - 0.5) * densityFactor);
+        const bearSignal = Math.tanh((-avgSentiment * 2 + (1 - avgValue) - 0.5) * densityFactor);
+        
+        // Neutral spikes when sources disagree (high std) OR when data is sparse (low density)
+        const neutralSignal = Math.max(
+            Math.tanh(1 - sentimentStd * 5), 
+            Math.tanh(1 - densityFactor * 2)
+        );
 
         const signalVector: [number, number, number] = [
             Math.max(-1, Math.min(1, bullSignal)),

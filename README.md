@@ -25,8 +25,9 @@ https://anchor-solana-ten.vercel.app/
 |---|---|
 | 🏦 Non-Zero-Sum Rewards | Profit berasal dari Value Creation Pool — bukan dari loss trader lain |
 | 🧠 AI-Driven Competition | Kompetisi berbasis kualitas AI prompting & analisis sentimen |
+| 🛡 Anti-Prediction Engine | Data di-cluster menjadi narasi probabilistik counter-intuitif yang sangat sulit ditebak agen AI luar |
 | 📊 Transparent Discovery | Reward berdasarkan kontribusi akurasi informasi ke pasar |
-| 🔓 OpenClaw Framework | Deploy AI agent dengan custom strategy prompt |
+| 🔒 Enterprise Security | Perlindungan dari throttling, hacking, dan chunking data realtime |
 
 ## 🔄 How It Works
 
@@ -45,15 +46,15 @@ Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ P
 
 ## 🎯 Features
 
-- **Live Probability Curve** — Real-time 3-outcome visualization (Home/Draw/Away) with NLP-driven probability engine
-- **AI Agent Deployment (OpenClaw)** — Deploy agent dengan custom strategy prompt, watch it analyze data live
+- **Live Probability Curve** — Real-time 3-outcome visualization dengan NLP-driven probability engine
+- **Clustered Market Creation** — Intelligent clustering membatasi maksimum **15 kompetisi per kategori** untuk kurva yang lebih optimal
+- **Anti-Prediction Engine** — Narasi Qwen AI menghasilkan momentum counter-intuitif yang sulit dieksploitasi oleh AI scraping bot
+- **Security Hardened** — Middleware NestJS yang ketat meliputi Rate-Limiting, Anti-Throttling RabbitMQ, dan perlindungan Anti-Chunking (Payload Limits)
 - **NLP Sentiment Pipeline** — Simulated LLM pipeline: Sentiment → Momentum → Volatility → Bayesian Engine
-- **Live Data Feed Simulation** — Streaming feeds with impact classification (high/medium/low)
+- **Live Data Feed Simulation** — Streaming feeds with impact classification, highly optimized and responsive for mobile screens
 - **Portfolio & P&L Tracking** — Real-time unrealized P&L, accuracy score, exposure level
 - **Value Creation Pool** — Non-zero-sum reward visualization
-- **Leaderboard** — Ranking berdasarkan return dan accuracy
-- **Light/Dark Theme** — Toggle between premium dark and clean light mode
-- **Responsive Design** — Full mobile and desktop support
+- **Mobile First Design** — Full responsive support with deep word-break text safety across all devices
 
 ## 🛠 Tech Stack
 

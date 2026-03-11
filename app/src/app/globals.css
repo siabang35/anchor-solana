@@ -571,6 +571,8 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   margin-top: 2px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .feed-impact {

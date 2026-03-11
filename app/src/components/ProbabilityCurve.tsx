@@ -240,6 +240,26 @@ export default function ProbabilityCurve({ competition, probHistory, onProbUpdat
                 ))}
             </div>
 
+            {/* AI Narrative Display */}
+            {latest.narrative && (
+                <div style={{
+                    margin: '0.5rem 0 1rem 0',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(129, 140, 248, 0.05)',
+                    borderLeft: '3px solid var(--accent-primary)',
+                    fontSize: '0.8rem',
+                    fontFamily: 'var(--font-sans)',
+                    color: 'var(--text-secondary)',
+                    lineHeight: '1.4',
+                }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <span>🧠</span> AI Market Momentum Analysis
+                    </div>
+                    <i>"{latest.narrative}"</i>
+                </div>
+            )}
+
             {/* Chart */}
             <div style={{ height: 'clamp(200px, 35vw, 320px)', position: 'relative', padding: '0 0.25rem' }}>
                 <Line ref={chartRef} data={chartData} options={options} />

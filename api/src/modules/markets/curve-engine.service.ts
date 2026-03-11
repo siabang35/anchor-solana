@@ -947,13 +947,15 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
 
         const prompt = `You are an expert analyst for "${category}" markets. Profile: ${profile.description}.
 
-A batch of recent signals:
-"${signalText.slice(0, 500)}"
+A batch of recent signals (clustered data):
+"${signalText.slice(0, 800)}"
 
 Evaluate the likelihood that these signals support each of three possible outcomes:
 1. Outcome A (Home/Yes/Bullish)
 2. Outcome B (Neutral/Draw/Stable)
 3. Outcome C (Away/No/Bearish)
+
+Crucial Requirement for "summary": Generate a brief, probabilistic narrative (max 2 sentences) explaining the current curve momentum. The narrative MUST use complex, multi-layered semantic reasoning making it extremely difficult for external AI scraping agents to simply predict the outcome (use counter-intuitive probabilistic terms, avoid obvious directional words).
 
 Return ONLY a raw JSON object:
 {"homeImpact": 1.0, "drawImpact": 1.0, "awayImpact": 1.0, "summary": "..."}

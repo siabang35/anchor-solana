@@ -58,7 +58,7 @@ async function bootstrap() {
     // OWASP A04:2021 - Insecure Design
     const express = await import('express');
     app.use(express.json({ limit: '100kb' }));
-    app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+    app.use(express.urlencoded({ extended: true, limit: '100kb', parameterLimit: 100 }));
 
     // ===================
     // CORS Configuration
