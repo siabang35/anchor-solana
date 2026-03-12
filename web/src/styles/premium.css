@@ -1,0 +1,76 @@
+@layer utilities {
+    .glass-panel {
+        @apply bg-neutral-950/70 border border-white/5 backdrop-blur-xl shadow-2xl;
+    }
+
+    .glass-card {
+        @apply bg-white/5 border border-white/10 backdrop-blur-md transition-all duration-300 hover:bg-white/10;
+    }
+
+    .glass-header {
+        @apply sticky top-0 z-50 bg-neutral-950/80 border-b border-white/5 backdrop-blur-xl;
+    }
+
+    .text-glow {
+        text-shadow: 0 0 20px currentColor;
+    }
+
+    .text-glow-sm {
+        text-shadow: 0 0 10px currentColor;
+    }
+
+    .border-glow {
+        box-shadow: 0 0 15px -3px currentColor;
+    }
+}
+
+@keyframes scanline {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+.animate-scanline {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to bottom, transparent, rgba(56, 189, 248, 0.1), transparent);
+    animation: scanline 4s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(2.5);
+        opacity: 0;
+    }
+}
+
+.animate-pulse-ring {
+    animation: pulse-ring 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+/* Custom Scrollbar for a cleaner look */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-neutral-800 rounded-full hover:bg-neutral-700 transition-colors;
+}

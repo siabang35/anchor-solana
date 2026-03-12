@@ -1,0 +1,21 @@
+[build]
+  command = "npx turbo build --filter=@exoduze/web"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_OPTIONS = "--max-old-space-size=4096"
+  GENERATE_SOURCEMAP = "false"
+
+# Proxy for Polymarket API to match vite.config.ts dev proxy
+# This prevents CORS issues and maintains the same API path structure in production
+[[redirects]]
+  from = "/api/polymarket/*"
+  to = "https://gamma-api.polymarket.com/:splat"
+  status = 200
+  force = true
+
+# SPA Fallback - Redirects all other traffic to index.html for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

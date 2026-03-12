@@ -1,0 +1,327 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Light Theme (Professional, Soft & Comfortable) */
+  --font-size: 16px;
+
+  /* Slate-50 background for reduced glare */
+  --background: #f8fafc;
+  /* Slate-900 text for high contrast but softer than pure black */
+  --foreground: #0f172a;
+
+  /* White cards to pop against the off-white background */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  /* Primary action color */
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+
+  /* Secondary backgrounds (Slate-100) */
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+
+  /* Muted elements */
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  /* Slate-500 for readable secondary text */
+
+  /* Interactive accents */
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  /* Subtle borders (Slate-200) */
+  --border: #e2e8f0;
+
+  --input: transparent;
+  --input-background: #f1f5f9;
+  --switch-background: #cbd5e1;
+
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #0ea5e9;
+  /* Sky-500 for focus rings */
+
+  /* Chart Colors (Professional Palette) */
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  --radius: 0.75rem;
+
+  /* Sidebar - White with subtle borders */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #0f172a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #0ea5e9;
+}
+
+.dark {
+  /* Modern Deep Blue Aesthetic (User Friendly & Trendy) */
+  --background: #0f172a;
+  /* Slate 900 - Deep, rich blue-black */
+  --foreground: #e2e8f0;
+  /* Slate 200 - Soft bright text, easy on eyes */
+  --card: #1e293b;
+  /* Slate 800 - Distinct card bg */
+  --card-foreground: #e2e8f0;
+  --popover: #0f172a;
+  --popover-foreground: #e2e8f0;
+  --primary: #38bdf8;
+  /* Sky 400 - Vibrant, glowing blue accent */
+  --primary-foreground: #0f172a;
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  /* Slate 400 */
+  --accent: #1e293b;
+  /* Slate 800 for hover states */
+  --accent-foreground: #38bdf8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  /* Slate 700 - Subtle blue-grey borders */
+  --input: #1e293b;
+  --input-background: #0f172a;
+  --switch-background: #334155;
+  --ring: #38bdf8;
+  /* Glowing ring effect */
+
+  /* Fonts */
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+
+  /* Chart Colors (Neon/Cyberpunk inspired for dark mode) */
+  --chart-1: oklch(0.60 0.25 245);
+  /* Electric Blue */
+  --chart-2: oklch(0.70 0.20 160);
+  /* Neon Teal */
+  --chart-3: oklch(0.65 0.25 310);
+  /* Cyber Purple */
+  --chart-4: oklch(0.75 0.18 50);
+  /* Warm Orange */
+  --chart-5: oklch(0.65 0.20 340);
+  /* Hot Pink */
+
+  /* Sidebar */
+  --sidebar: #0f172a;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #38bdf8;
+  --sidebar-primary-foreground: #0f172a;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #38bdf8;
+  --sidebar-border: #334155;
+  --sidebar-ring: #38bdf8;
+}
+
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+.dark.tokyo-night {
+  /* Tokyo Night Theme (Deep Ocean Blue) - Brightened for Better UX */
+  --background: #1a1b26;
+  /* Tokyo Night Main BG */
+  --foreground: #c0caf5;
+  /* Tokyo Night FG */
+
+  --card: #1f2335;
+  /* Tokyo Night Storm/Card */
+  --card-foreground: #c0caf5;
+
+  --popover: #1a1b26;
+  --popover-foreground: #c0caf5;
+
+  --primary: #7aa2f7;
+  /* Tokyo Night Blue */
+  --primary-foreground: #15161e;
+
+  --secondary: #2f334d;
+  /* Lighter Storm for better visibility */
+  --secondary-foreground: #c0caf5;
+
+  --muted: #2f334d;
+  --muted-foreground: #9aa5ce;
+  /* Brighter muted text (was #565f89) */
+
+  --accent: #3b4261;
+  /* Lighter selection color */
+  --accent-foreground: #c0caf5;
+
+  --destructive: #f7768e;
+  /* Tokyo Night Red */
+  --destructive-foreground: #ffffff;
+
+  --border: #292e42;
+  /* Tokyo Night Selection/Border */
+  --input: #414868;
+  /* Tokyo Night Terminal Black */
+  --input-background: #1a1b26;
+
+  --switch-background: #414868;
+  --ring: #7aa2f7;
+
+  /* Charts - Tokyo Night Palette */
+  --chart-1: oklch(0.64 0.15 250);
+  /* Blue */
+  --chart-2: oklch(0.70 0.15 180);
+  /* Cyan */
+  --chart-3: oklch(0.65 0.20 300);
+  /* Purple */
+  --chart-4: oklch(0.75 0.15 40);
+  /* Orange */
+  --chart-5: oklch(0.65 0.20 340);
+  /* Red/Pink */
+
+  /* Sidebar - Tokyo Night */
+  --sidebar: #1a1b26;
+  --sidebar-foreground: #c0caf5;
+  --sidebar-primary: #7aa2f7;
+  --sidebar-primary-foreground: #15161e;
+  --sidebar-accent: #24283b;
+  --sidebar-accent-foreground: #7aa2f7;
+  --sidebar-border: #292e42;
+  --sidebar-ring: #7aa2f7;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  /* Optimize transitions: Avoid universal selectors which kill performance */
+  /* Only transition background and color on major layout elements if needed */
+  /* Optimize transitions: Smart targeting for 60fps performance */
+  /* We target the most common containers and interactive elements */
+  body,
+  div,
+  section,
+  article,
+  header,
+  footer,
+  nav,
+  aside,
+  main,
+  button,
+  input,
+  textarea,
+  select,
+  details,
+  summary,
+  .card,
+  /* Shadcn/Custom Cards */
+  .popover,
+  .sheet,
+  .dialog {
+    /* Smooth theme transitions for colors only */
+    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      fill 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      stroke 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Exclude heavy optimizable elements or elements that shouldn't transition */
+  /* Exclude heavy optimizable elements or elements that shouldn't transition */
+  .no-transition,
+  .animate-spin {
+    transition: none !important;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}

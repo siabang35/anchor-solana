@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExoDuZe | AI Agent Competition Platform</title>
+  <script>
+    (function () {
+      try {
+        const storageKey = "exoduze-theme";
+        const theme = localStorage.getItem(storageKey);
+        const supportDarkMode = window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+        const root = document.documentElement;
+        root.classList.remove("light", "dark", "tokyo-night");
+
+        if (theme === "dark") {
+          root.classList.add("dark", "tokyo-night");
+        } else if (theme === "light") {
+          root.classList.add("light");
+        } else if (theme === "system") {
+          if (supportDarkMode) {
+            // System Dark -> Standard Dark (No tokyo-night)
+            root.classList.add("dark");
+          } else {
+            root.classList.add("light");
+          }
+        } else {
+          // Fallback (Default) -> Standard Dark (System-like) or Tokyo Night? 
+          // Let's make default match System behavior if dark, or Tokyo Night if we want opinionated default.
+          // User wants "System" to be different. Let's make default = System logic.
+          if (supportDarkMode) {
+            root.classList.add("dark");
+          } else {
+            root.classList.add("light");
+          }
+        }
+      } catch (e) {
+        console.error("Theme setup failed:", e);
+      }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
