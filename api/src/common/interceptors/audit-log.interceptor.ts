@@ -46,8 +46,9 @@ export class AuditLogInterceptor implements NestInterceptor {
         '/users',
     ];
 
-    constructor(private readonly configService: ConfigService) {
-        this.auditEnabled = this.configService.get('ENABLE_AUDIT_LOG') !== 'false';
+    constructor(private readonly configService?: ConfigService) {
+        // Handle undefined configService during isolated script execution
+        this.auditEnabled = this.configService ? this.configService.get('ENABLE_AUDIT_LOG') !== 'false' : false;
     }
 
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {

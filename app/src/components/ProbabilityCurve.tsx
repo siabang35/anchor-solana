@@ -32,12 +32,39 @@ export default function ProbabilityCurve({ competition, probHistory, onProbUpdat
     // Use provided history or empty
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
 
+    // Compute horizon label from competition
+    const getHorizon = () => {
+        if (!competition) return '';
+        const start = new Date(competition.competition_start).getTime();
+        const end = new Date(competition.competition_end).getTime();
+        const hours = (end - start) / (1000 * 60 * 60);
+        if (hours <= 2) return '2H';
+        if (hours <= 7) return '7H';
+        if (hours <= 12) return '12H';
+        if (hours <= 24) return '24H';
+        if (hours <= 72) return '3D';
+        return '7D';
+    };
+    const horizon = getHorizon();
+    const isLive = competition && competition.status === 'active';
+
     if (data.length === 0) {
         return (
             <div className="glass-card card-body animate-in">
                 <div className="section-header">
                     <h3 className="section-title"><span className="icon">📊</span> Live Probability Curve</h3>
+                    {competition && (
+                        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                            {horizon && <span style={{ fontSize: '0.5rem', fontWeight: 800, padding: '2px 6px', borderRadius: '9999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6' }}>{horizon}</span>}
+                            {isLive && <span style={{ fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: 'rgba(16,185,129,0.15)', color: '#10b981', animation: 'pulse 2s infinite' }}>● LIVE</span>}
+                        </div>
+                    )}
                 </div>
+                {competition && (
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                        {competition.title}
+                    </div>
+                )}
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                     Waiting for competition data...
                 </div>
@@ -199,9 +226,13 @@ export default function ProbabilityCurve({ competition, probHistory, onProbUpdat
         <div className="glass-card card-body animate-in">
             <div className="section-header">
                 <h3 className="section-title"><span className="icon">📊</span> Live Probability Curve</h3>
-                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                    {competition?.onchain_market_pubkey ? 'On-Chain Data' : 'Supabase Realtime'}
-                </span>
+                <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                    {horizon && <span style={{ fontSize: '0.5rem', fontWeight: 800, padding: '2px 6px', borderRadius: '9999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6' }}>{horizon}</span>}
+                    {isLive && <span style={{ fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px', background: 'rgba(16,185,129,0.15)', color: '#10b981', animation: 'pulse 2s infinite' }}>● LIVE</span>}
+                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        {competition?.onchain_market_pubkey ? 'On-Chain' : 'Realtime'}
+                    </span>
+                </div>
             </div>
 
             {/* Match Title */}
@@ -210,7 +241,7 @@ export default function ProbabilityCurve({ competition, probHistory, onProbUpdat
                     {teamHome && teamAway ? `${teamHome} vs ${teamAway}` : title}
                 </div>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    {sector.charAt(0).toUpperCase() + sector.slice(1)} · {competition?.status === 'active' ? '● Live' : 'Upcoming'} · Realtime Analysis
+                    {sector.charAt(0).toUpperCase() + sector.slice(1)} · {competition?.status === 'active' ? '● Live' : competition?.status === 'settled' ? '✓ Ended' : 'Upcoming'} · Realtime Analysis
                 </div>
             </div>
 

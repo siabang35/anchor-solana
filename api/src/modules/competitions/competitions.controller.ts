@@ -10,12 +10,16 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service.js';
-import { CreateCompetitionDto } from './dto/index.js';
+import { EtlIngestionService } from './services/etl-ingestion.service.js';
+import { CreateCompetitionDto, EtlWebhookDto } from './dto/index.js';
 
 @ApiTags('Competitions')
 @Controller('competitions')
 export class CompetitionsController {
-    constructor(private readonly competitionsService: CompetitionsService) {}
+    constructor(
+        private readonly competitionsService: CompetitionsService,
+        private readonly etlIngestionService: EtlIngestionService
+    ) {}
 
     /**
      * Create a new competition (admin/service only)
@@ -25,6 +29,23 @@ export class CompetitionsController {
     @ApiOperation({ summary: 'Create a new sector competition' })
     async create(@Body() dto: CreateCompetitionDto) {
         return this.competitionsService.create(dto);
+    }
+
+    /**
+     * Webhook to receive real-time clustered data from ETL pipeline
+     */
+    @Post('etl-webhook')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Process incoming ETL news cluster' })
+    async processEtlCluster(@Body() dto: EtlWebhookDto) {
+        const result = await this.etlIngestionService.processCluster(
+            dto.category,
+            dto.articles,
+            dto.title,
+            dto.signals,
+            dto.horizon
+        );
+        return { success: !!result };
     }
 
     /**

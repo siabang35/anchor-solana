@@ -1483,3 +1483,43 @@ body {
     font-size: 0.95rem;
   }
 }
+
+/* ===== MOBILE DEPLOY DRAWER ===== */
+.mobile-deploy-toggle {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .mobile-deploy-toggle {
+    display: flex !important;
+  }
+
+  .deploy-agent-wrapper {
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 85vw;
+    max-width: 360px;
+    height: 100dvh;
+    z-index: 1000;
+    transition: right 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    background: var(--bg-primary);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+    padding: 1rem 0.5rem;
+    overflow-y: auto;
+  }
+
+  .deploy-agent-wrapper.mobile-open {
+    right: 0;
+  }
+
+  /* When drawer is open, add a backdrop overlay (optional) or just blur behind */
+  body:has(.deploy-agent-wrapper.mobile-open) {
+    overflow: hidden;
+  }
+  
+  .deploy-agent-wrapper > div {
+    height: auto !important;
+    border-radius: var(--radius-sm);
+  }
+}

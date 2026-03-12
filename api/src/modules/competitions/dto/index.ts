@@ -117,3 +117,26 @@ export class SectorSummaryDto {
     active_count: number;
     upcoming_count: number;
 }
+
+export class EtlWebhookDto {
+    @ApiProperty()
+    @IsString()
+    category: string;
+
+    @ApiProperty()
+    @IsString()
+    title: string;
+
+    @ApiProperty()
+    @IsArray()
+    articles: any[];
+
+    @ApiProperty()
+    @IsArray()
+    signals: any[];
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    horizon?: string;
+}

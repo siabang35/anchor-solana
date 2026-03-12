@@ -93,7 +93,7 @@ export default function Home() {
         {/* Data Feeds + Deploy Agent */}
         <div className="grid-2">
           <DataFeeds category={activeSector} />
-          <DeployAgent />
+          <DeployAgent initialCategory={activeSector} />
         </div>
 
         {/* Value Pool + Performance + Leaderboard */}

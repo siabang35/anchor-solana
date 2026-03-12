@@ -14,7 +14,8 @@ export interface ProbabilitySnapshot {
 @Injectable()
 export class ProbabilityEngineService {
     private readonly logger = new Logger(ProbabilityEngineService.name);
-    private readonly qwenApiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'; // Default endpoint for Qwen
+    // HuggingFace Inference API endpoint for Qwen 3.5 9B
+    private readonly qwenApiUrl = 'https://api-inference.huggingface.co/models/Qwen/Qwen3.5-9B-Instruct';
     private qwenApiKey: string;
 
     constructor(
@@ -23,7 +24,8 @@ export class ProbabilityEngineService {
         @Inject(forwardRef(() => MarketDataGateway))
         private readonly marketDataGateway: MarketDataGateway,
     ) {
-        this.qwenApiKey = this.configService.get<string>('QWEN_API_KEY') || '';
+        // Fallback to the user provided key if not in env
+
     }
 
     /**
@@ -58,8 +60,8 @@ export class ProbabilityEngineService {
             let prevDraw = Math.max(0, 100 - prevHome - prevAway);
 
             if (prevHome + prevAway === 100 && prevDraw === 0) {
-                 prevHome = 40; prevDraw = 20; prevAway = 40; // Normalize if strictly 50/50
-             }
+                prevHome = 40; prevDraw = 20; prevAway = 40; // Normalize if strictly 50/50
+            }
 
             // 2. Call Qwen LLM for Bayesian Likelihood Evaluation
             const evaluation = await this.evaluateWithQwen(market.title, signalText);
@@ -74,7 +76,7 @@ export class ProbabilityEngineService {
 
             // 3. Apply Bayesian Update
             // P(Outcome | Signal) = [P(Signal | Outcome) * P(Outcome)] / P(Signal)
-            
+
             // Prior probabilities (normalized to 1.0)
             const priorHome = prevHome / 100;
             const priorDraw = prevDraw / 100;
@@ -161,28 +163,26 @@ export class ProbabilityEngineService {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: 'qwen-turbo',
-                    input: {
-                        messages: [
-                            { role: 'system', content: 'You are a precise data analysis AI that outputs strictly raw JSON.' },
-                            { role: 'user', content: prompt }
-                        ]
-                    },
+                    inputs: `<|im_start|>system\nYou are a precise data analysis AI that outputs strictly raw JSON.<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`,
                     parameters: {
-                        result_format: 'text',
-                        temperature: 0.1 // Low temperature for consistent output
+                        temperature: 0.1, // Low temperature for consistent output
+                        return_full_text: false,
+                        max_new_tokens: 150
                     }
                 })
             });
 
             if (!response.ok) {
                 const errText = await response.text();
-                throw new Error(`Qwen API Error: ${response.status} - ${errText}`);
+                throw new Error(`HuggingFace API Error: ${response.status} - ${errText}`);
             }
 
             const result: any = await response.json();
-            const textResponse = result.output?.text || '{}';
-            
+            // HF inference API returns an array of objects containing generated_text
+            const textResponse = (Array.isArray(result) && result.length > 0)
+                ? result[0].generated_text || '{}'
+                : '{}';
+
             // Clean markdown JSON formatting if Qwen accidentally adds it
             const jsonStr = textResponse.replace(/^```json\s*/, '').replace(/```$/, '').trim();
             const parsed = JSON.parse(jsonStr);
@@ -195,7 +195,7 @@ export class ProbabilityEngineService {
             };
         } catch (error: any) {
             this.logger.error(`Qwen LLM call failed, falling back to neutral likelihoods: ${error.message}`);
-            
+
             // Generate a fake but plausible random walk if API key is invalid or failing
             // Useful for testing UI without eating API credits
             return this.generateMockImpact();
@@ -203,15 +203,15 @@ export class ProbabilityEngineService {
     }
 
     private generateMockImpact() {
-         // Random walk for testing UI
-         const r1 = 0.5 + Math.random();
-         const r2 = 0.5 + Math.random();
-         const r3 = 0.5 + Math.random();
-         return {
-             homeImpact: r1,
-             drawImpact: r2,
-             awayImpact: r3,
-             summary: "Random simulated market impact due to LLM fallback."
-         };
+        // Random walk for testing UI
+        const r1 = 0.5 + Math.random();
+        const r2 = 0.5 + Math.random();
+        const r3 = 0.5 + Math.random();
+        return {
+            homeImpact: r1,
+            drawImpact: r2,
+            awayImpact: r3,
+            summary: "Random simulated market impact due to LLM fallback."
+        };
     }
 }

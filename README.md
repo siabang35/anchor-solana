@@ -13,7 +13,7 @@
 
 ---
 
-ExoDuZe adalah platform probability trading generasi baru yang menggunakan **AI agents Competition** untuk menganalisis sentimen multi-sumber dan memprediksi pergerakan probabilitas outcome secara real-time. Berbeda dengan platform trading konvensional, ExoDuZe menggunakan model **Non-Zero-Sum** dimana profit berasal dari **Value Creation Pool**, bukan dari kerugian trader lain.
+ExoDuZe is a next-generation probability trading platform that leverages **AI Agent Competition** to analyze multi-source sentiment and predict real-time probability movement outcomes. Unlike conventional trading platforms, ExoDuZe utilizes a **Non-Zero-Sum** model where profits are derived from a **Value Creation Pool**, rather than from the losses of other traders.
 
 ## Try it here
 
@@ -22,16 +22,16 @@ https://anchor-solana-ten.vercel.app/
 ## ✨ Highlights
 
 | Principle | Description |
-|---|---|
-| 🏦 Non-Zero-Sum Rewards | Profit berasal dari Value Creation Pool — bukan dari loss trader lain |
-| 🧠 AI-Driven Competition | Kompetisi berbasis kualitas AI prompting & analisis sentimen |
-| 🛡 Anti-Prediction Engine | Data di-cluster menjadi narasi probabilistik counter-intuitif yang sangat sulit ditebak agen AI luar |
-| 📊 Transparent Discovery | Reward berdasarkan kontribusi akurasi informasi ke pasar |
-| 🔒 Enterprise Security | Perlindungan dari throttling, hacking, dan chunking data realtime |
+|-----------|-------------|
+| 🏦 **Non-Zero-Sum Rewards** | Profits come from a Value Creation Pool — not from other traders' losses. |
+| 🧠 **AI-Driven Competition** | Competitions are purely based on the quality of AI prompting & sentiment analysis. |
+| 🛡 **Anti-Prediction Engine** | Data is clustered into counter-intuitive probabilistic narratives that are extremely difficult for external AI scraping bots to exploit. |
+| 📊 **Transparent Discovery** | Rewards are strictly based on the accuracy of information contributed to the market. |
+| 🔒 **Enterprise Security** | Bulletproof protection against throttling, hacking, and real-time data chunking. |
 
 ## 🔄 How It Works
 
-```
+```text
 Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ Probabilistic Engine
   (RSS/Yahoo/       (Sentiment,        (S(t), M(t), V(t))    (Bayesian Update +
    Social/API)       Entity,                                   Time-Decay +
@@ -46,26 +46,27 @@ Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ P
 
 ## 🎯 Features
 
-- **Live Probability Curve** — Real-time 3-outcome visualization dengan NLP-driven probability engine
-- **Clustered Market Creation** — Intelligent clustering membatasi maksimum **15 kompetisi per kategori** untuk kurva yang lebih optimal
-- **Anti-Prediction Engine** — Narasi Qwen AI menghasilkan momentum counter-intuitif yang sulit dieksploitasi oleh AI scraping bot
-- **Security Hardened** — Middleware NestJS yang ketat meliputi Rate-Limiting, Anti-Throttling RabbitMQ, dan perlindungan Anti-Chunking (Payload Limits)
-- **NLP Sentiment Pipeline** — Simulated LLM pipeline: Sentiment → Momentum → Volatility → Bayesian Engine
-- **Live Data Feed Simulation** — Streaming feeds with impact classification, highly optimized and responsive for mobile screens
-- **Portfolio & P&L Tracking** — Real-time unrealized P&L, accuracy score, exposure level
-- **Value Creation Pool** — Non-zero-sum reward visualization
-- **Mobile First Design** — Full responsive support with deep word-break text safety across all devices
+- **Live Probability Curve** — Real-time 3-outcome visualization powered by an NLP-driven probability engine.
+- **Dynamic AI Forecasters** — Deploy autonomous AI agents (powered by Qwen 3.5 9B) with custom system prompts to predict market directions seamlessly.
+- **Clustered Market Creation** — Intelligent clustering dynamically categorizes and creates real-time competitions based on live news feeds across domains like Finance, Crypto, and Tech.
+- **Anti-Prediction Engine** — Qwen AI generates counter-intuitive narratives yielding momentum shifts that prevent external AI bots from maliciously exploiting the curves.
+- **Security Hardened Infrastructure** — Strict NestJS middleware enforces JWT authentication, Rate-Limiting, Row-Level Security (RLS) on Supabase, and Anti-Chunking payload limits.
+- **NLP Sentiment Pipeline** — A sophisticated simulated LLM pipeline tracking: Sentiment → Momentum → Volatility → Bayesian Engine.
+- **Live Data Feed Stream** — Optimized, text-based real-time data feeds with impact classification, built to be highly responsive for mobile environments.
+- **Portfolio & P&L Tracking** — Track unrealized P&L, agent accuracy scores, and exposure levels in real-time.
+- **Mobile First Design** — Fully responsive UX featuring space-saving expandable side-drawers (e.g., Deploy AI Agent) and unbreakable deep word-break text safety across all devices.
 
 ## 🛠 Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Smart Contract | Anchor 0.32.1 (Rust) on Solana |
-| Frontend | Next.js 16 + TypeScript |
-| Charting | Chart.js + react-chartjs-2 |
-| Wallet | @solana/wallet-adapter (Phantom, Solflare) |
-| Styling | Vanilla CSS (glassmorphism + light theme) |
-| Deploy | Vercel (frontend) + Solana Devnet (contract) |
+| **Smart Contract** | Anchor 0.32.1 (Rust) on Solana Blockchain |
+| **Backend / API** | NestJS, PostgreSQL (Supabase) + Row Level Security (RLS) |
+| **Frontend** | Next.js 16 App Router + TypeScript |
+| **Charting** | Chart.js with `react-chartjs-2` |
+| **Wallet Integration**| `@solana/wallet-adapter` (Phantom, Solflare support) |
+| **Styling** | Vanilla CSS (glassmorphism UI + unified dark theme aesthetic) |
+| **Deployment** | Vercel (Frontend), Railway/Render (Backend), Solana Devnet (Contract) |
 
 ## 🚀 Quick Start
 
@@ -75,38 +76,66 @@ Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ P
 - Rust + Cargo
 - Solana CLI ≥ 2.0
 - Anchor CLI ≥ 0.32
+- Supabase CLI (Optional, for local DB management)
 
-### Setup
+### 1. Smart Contract Setup
 
 ```bash
-# Clone & install
+# Clone the repository
 git clone https://github.com/siabang35/anchor-solana.git
 cd anchor-solana
+
+# Install dependencies
 yarn install
 
-# Build smart contract
+# Build the smart contract
 anchor build
 anchor keys sync
 
-# Deploy to devnet
+# Deploy to Solana devnet
 solana config set --url devnet
 anchor deploy --provider.cluster devnet
-
-# Start frontend
-cd app
-npm install
-npm run dev
-# → http://localhost:3000
 ```
 
-### Deploy to Vercel
+### 2. Backend API Setup (NestJS)
+
+```bash
+# Navigate to the API directory
+cd api
+
+# Install dependencies
+npm install
+
+# Configure environments (.env)
+cp .env.example .env
+# Fill in your SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY
+
+# Run the backend locally
+npm run start:dev
+```
+
+### 3. Frontend Setup (Next.js)
+
+```bash
+# Navigate to the frontend directory
+cd app
+
+# Install dependencies
+npm install
+
+# Run the frontend locally
+npm run dev
+# The application will be running at http://localhost:3000
+```
+
+### Deploying Frontend to Vercel
 
 ```bash
 cd app
 npx vercel --prod
 ```
 
-Or connect the `app/` directory to Vercel dashboard with:
+Or connect the `app/` directory to the Vercel dashboard:
 - **Framework:** Next.js
 - **Root Directory:** `app`
 - **Build Command:** `npm run build`
@@ -114,7 +143,7 @@ Or connect the `app/` directory to Vercel dashboard with:
 
 ## 📁 Project Structure
 
-```
+```text
 my-project/
 ├── programs/my-project/src/     # Solana smart contract (Anchor/Rust)
 │   ├── lib.rs                   # Program entry points (7 instructions)
@@ -129,30 +158,34 @@ my-project/
 │       ├── update_probabilities.rs
 │       ├── settle_market.rs
 │       └── claim_reward.rs
-├── app/                         # Next.js frontend
+├── app/                         # Next.js 16 frontend
 │   └── src/
-│       ├── app/                 # Pages & layout
-│       ├── components/          # React components
-│       └── lib/                 # Utilities & dummy data
+│       ├── app/                 # Pages, Layouts, & Global CSS
+│       ├── components/          # React components (DeployAgent, DataFeeds, etc.)
+│       ├── hooks/               # Custom React hooks
+│       └── lib/                 # Utilities, Supabase client
+├── api/                         # NestJS Backend Service
+│   ├── src/                     # Controllers, Services, Auth Guards
+│   └── supabase/migrations/     # PostgreSQL Migrations & RLS policies
 ├── tests/                       # Anchor tests
-├── Anchor.toml                  # Anchor configuration
-└── README.md
+├── Anchor.toml                  # Anchor deployment configuration
+└── README.md                    # Project documentation
 ```
 
-## 📄 Smart Contract
+## 📄 Smart Contract Instructions
 
-**Program ID:** Your Program ID
+**Program ID:** `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` *(Devnet)*
 
 | Instruction | Description |
 |---|---|
-| `initialize_platform` | Initialize platform + Value Creation Pool vault |
-| `create_market` | Create 3-way probability market |
-| `take_position` | Take UP/DOWN position on outcome probability |
-| `deploy_agent` | Deploy AI agent with strategy prompt |
-| `update_probabilities` | Update market probabilities (admin) |
-| `settle_market` | Settle market with winning outcome |
-| `claim_reward` | Claim reward from Value Creation Pool |
+| `initialize_platform` | Initializes the core platform states and the Value Creation Pool vault. |
+| `create_market` | Creates a 3-way probability market based on an underlying asset or event. |
+| `take_position` | Allows users to take an UP/DOWN position on an outcome probability. |
+| `deploy_agent` | Registers an AI agent on-chain with its strategy prompt. |
+| `update_probabilities` | Updates market probabilities based on Oracle/Engine data (admin only). |
+| `settle_market` | Settles the market declaring the winning outcome. |
+| `claim_reward` | Processes reward claims from the Value Creation Pool. |
 
 ## 📜 License
 
-ISC
+[ISC License](LICENSE)

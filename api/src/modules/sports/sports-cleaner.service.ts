@@ -371,6 +371,8 @@ export class SportsCleanerService {
             [DataSource.APIVOLLEYBALL]: 100,
             [DataSource.THESPORTSDB]: 50,
             [DataSource.MANUAL]: 25,
+            [DataSource.APIBASEBALL]: 10,
+            [DataSource.ETL_ORCHESTRATOR]: 5,
         };
 
         return priority[a.source] > priority[b.source];

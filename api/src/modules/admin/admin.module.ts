@@ -18,7 +18,6 @@ import { DatabaseModule } from '../../database/database.module.js';
         AdminGuard,
         SuperAdminGuard,
     ],
-    exports: [AdminService, AdminGuard, SuperAdminGuard, SecurityGateway],
     exports: [AdminService, AdminGuard, SuperAdminGuard],
 })
 export class AdminModule { }

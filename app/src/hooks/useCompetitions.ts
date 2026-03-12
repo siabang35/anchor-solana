@@ -77,7 +77,7 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                     .select('*')
                     .in('status', ['active', 'upcoming'])
                     .order('competition_start', { ascending: true })
-                    .limit(20);
+                    .limit(50);
 
                 if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest') {
                     query = query.eq('sector', sector);

@@ -4,7 +4,7 @@ import React from 'react';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 
 export default function DataFeeds({ category }: { category?: string }) {
-    const { feeds, loading, connected } = useLiveFeed(20, category);
+    const { feeds, loading, connected, refetch } = useLiveFeed(20, category);
 
     return (
         <div className="glass-card card-body animate-in">
@@ -24,20 +24,39 @@ export default function DataFeeds({ category }: { category?: string }) {
                         </span>
                     )}
                 </h3>
-                <span style={{
-                    fontSize: '0.65rem',
-                    fontWeight: 700,
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-round)',
-                    background: connected
-                        ? 'rgba(16, 185, 129, 0.15)'
-                        : 'rgba(245, 158, 11, 0.15)',
-                    color: connected
-                        ? 'var(--accent-green)'
-                        : 'var(--accent-amber)',
-                }}>
-                    {connected ? '● Live' : '○ Connecting...'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button 
+                        onClick={() => refetch()} 
+                        disabled={loading}
+                        style={{
+                            background: 'transparent',
+                            border: '1px solid var(--border-glass)',
+                            color: 'var(--text-secondary)',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                            fontSize: '0.65rem',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.2s',
+                            opacity: loading ? 0.5 : 1
+                        }}
+                    >
+                        {loading ? '↻...' : '↻ Refresh'}
+                    </button>
+                    <span style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-round)',
+                        background: connected
+                            ? 'rgba(16, 185, 129, 0.15)'
+                            : 'rgba(245, 158, 11, 0.15)',
+                        color: connected
+                            ? 'var(--accent-green)'
+                            : 'var(--accent-amber)',
+                    }}>
+                        {connected ? '● Live' : '○ Connecting...'}
+                    </span>
+                </div>
             </div>
 
             {loading && feeds.length === 0 && (

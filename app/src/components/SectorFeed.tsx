@@ -8,48 +8,80 @@ interface Props {
     onSelectCompetition?: (id: string) => void;
 }
 
-function impactBadgeClass(impact: string) {
-    switch (impact) {
-        case 'critical': return 'feed-card__badge--critical';
-        case 'high': return 'feed-card__badge--high';
-        case 'medium': return 'feed-card__badge--medium';
-        default: return 'feed-card__badge--low';
+function getCompetitionStatus(comp: Competition): 'live' | 'upcoming' | 'ended' {
+    const now = Date.now();
+    const start = new Date(comp.competition_start).getTime();
+    const end = new Date(comp.competition_end).getTime();
+    if (now >= start && now <= end) return 'live';
+    if (now < start) return 'upcoming';
+    return 'ended';
+}
+
+function getStatusConfig(status: 'live' | 'upcoming' | 'ended') {
+    switch (status) {
+        case 'live':
+            return { label: '● LIVE', bg: 'rgba(16,185,129,0.15)', color: '#10b981', glow: '0 0 8px rgba(16,185,129,0.3)' };
+        case 'upcoming':
+            return { label: '⏳ UPCOMING', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', glow: 'none' };
+        case 'ended':
+            return { label: '✓ ENDED', bg: 'rgba(107,115,148,0.15)', color: '#6b7394', glow: 'none' };
     }
 }
 
-function sentimentIcon(sentiment: string) {
-    switch (sentiment) {
-        case 'bullish': return '📈';
-        case 'bearish': return '📉';
-        default: return '➖';
+function getTimeRemaining(comp: Competition): string {
+    const now = Date.now();
+    const status = getCompetitionStatus(comp);
+
+    if (status === 'ended') return 'Finished';
+
+    const targetTime = status === 'upcoming'
+        ? new Date(comp.competition_start).getTime()
+        : new Date(comp.competition_end).getTime();
+
+    const diff = targetTime - now;
+    if (diff <= 0) return status === 'upcoming' ? 'Starting...' : 'Settling...';
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours >= 24) {
+        const days = Math.floor(hours / 24);
+        return `${days}d ${hours % 24}h`;
     }
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
 }
 
-function sentimentColor(sentiment: string) {
-    switch (sentiment) {
-        case 'bullish': return 'var(--color-success, #22c55e)';
-        case 'bearish': return 'var(--color-danger, #ef4444)';
-        default: return 'var(--color-muted, #94a3b8)';
-    }
+function getHorizonLabel(comp: Competition): string {
+    const start = new Date(comp.competition_start).getTime();
+    const end = new Date(comp.competition_end).getTime();
+    const hours = (end - start) / (1000 * 60 * 60);
+
+    if (hours <= 2) return '2H';
+    if (hours <= 7) return '7H';
+    if (hours <= 12) return '12H';
+    if (hours <= 24) return '24H';
+    if (hours <= 72) return '3D';
+    return '7D';
 }
 
-function timeAgo(dateStr: string): string {
-    if (!dateStr) return '';
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+function getProgressPct(comp: Competition): number {
+    const now = Date.now();
+    const start = new Date(comp.competition_start).getTime();
+    const end = new Date(comp.competition_end).getTime();
+    if (now < start) return 0;
+    if (now > end) return 100;
+    return Math.round(((now - start) / (end - start)) * 100);
 }
-
-// FeedCard removed, use DataFeeds component instead
 
 function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selected?: boolean, onClick?: () => void }) {
     const probLabels = comp.outcomes || ['Home', 'Draw', 'Away'];
     const probs = comp.probabilities || [5000, 2500, 2500];
+    const status = getCompetitionStatus(comp);
+    const statusConfig = getStatusConfig(status);
+    const timeLeft = getTimeRemaining(comp);
+    const horizon = getHorizonLabel(comp);
+    const progress = getProgressPct(comp);
 
     return (
         <article 
@@ -59,33 +91,66 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                 cursor: 'pointer',
                 transform: selected ? 'scale(1.02)' : 'none',
                 transition: 'all 0.2s ease',
-                boxShadow: selected ? '0 0 20px rgba(99,102,241,0.15)' : 'none',
+                boxShadow: selected ? '0 0 20px rgba(99,102,241,0.15)' : statusConfig.glow,
+                opacity: status === 'ended' ? 0.7 : 1,
             }}
             onClick={onClick}
         >
             <div className="feed-card__content">
                 <div className="feed-card__header">
-                    <span className="feed-card__badge feed-card__badge--high" style={{
-                        background: 'rgba(99,102,241,0.15)',
-                        color: 'var(--accent-indigo)',
-                    }}>
-                        🏆 Competition
-                    </span>
+                    <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                        <span className="feed-card__badge" style={{
+                            background: 'rgba(99,102,241,0.15)',
+                            color: 'var(--accent-indigo)',
+                            fontSize: '0.5rem',
+                            padding: '2px 6px',
+                            borderRadius: 'var(--radius-round)',
+                            fontWeight: 700,
+                        }}>
+                            🏆 Competition
+                        </span>
+                        <span style={{
+                            fontSize: '0.5rem',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: 'var(--radius-round)',
+                            background: 'rgba(139,92,246,0.15)',
+                            color: '#8b5cf6',
+                            letterSpacing: '0.05em',
+                        }}>
+                            {horizon}
+                        </span>
+                    </div>
                     <span style={{
                         fontSize: '0.55rem',
                         fontWeight: 700,
-                        padding: '2px 6px',
+                        padding: '2px 8px',
                         borderRadius: 'var(--radius-round)',
-                        background: comp.status === 'active' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-                        color: comp.status === 'active' ? 'var(--accent-green)' : 'var(--accent-amber)',
+                        background: statusConfig.bg,
+                        color: statusConfig.color,
+                        animation: status === 'live' ? 'pulse 2s infinite' : 'none',
                     }}>
-                        {comp.status === 'active' ? '● LIVE' : '⏳ UPCOMING'}
+                        {statusConfig.label}
                     </span>
                 </div>
                 <h3 className="feed-card__title">{comp.title}</h3>
                 {comp.description && (
                     <p className="feed-card__desc">{comp.description}</p>
                 )}
+
+                {/* Progress bar for live competitions */}
+                {status === 'live' && (
+                    <div style={{ margin: '0.4rem 0', height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.1)', overflow: 'hidden' }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${progress}%`,
+                            borderRadius: '2px',
+                            background: 'linear-gradient(90deg, #818cf8, #6366f1)',
+                            transition: 'width 1s ease',
+                        }} />
+                    </div>
+                )}
+
                 {/* Probability bars */}
                 <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                     {probLabels.map((label, i) => (
@@ -114,8 +179,16 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                     <span className="feed-card__source">
                         💰 {comp.prize_pool} SOL Pool
                     </span>
-                    <span className="feed-card__time">
-                        {comp.entry_count}/{comp.max_entries} entries
+                    <span className="feed-card__time" style={{
+                        fontWeight: 700,
+                        color: status === 'live' ? '#10b981' : status === 'upcoming' ? '#f59e0b' : '#6b7394',
+                    }}>
+                        {status === 'live' ? `⏱ ${timeLeft} left` : status === 'upcoming' ? `Starts in ${timeLeft}` : `✓ ${timeLeft}`}
+                    </span>
+                </div>
+                <div className="feed-card__footer" style={{ marginTop: '0.2rem' }}>
+                    <span className="feed-card__source" style={{ fontSize: '0.5rem' }}>
+                        👥 {comp.entry_count}/{comp.max_entries} entries
                     </span>
                 </div>
                 {comp.tags && comp.tags.length > 0 && (
@@ -132,13 +205,36 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
 
 export default function SectorFeed({ sector, selectedCompId, onSelectCompetition }: Props) {
     const { competitions, loading, connected } = useCompetitions(sector);
-    const error = null;
+
+    // Sort: live first, then upcoming, then ended
+    const sorted = [...competitions].sort((a, b) => {
+        const statusOrder = { live: 0, upcoming: 1, ended: 2 };
+        const statusA = statusOrder[getCompetitionStatus(a)];
+        const statusB = statusOrder[getCompetitionStatus(b)];
+        if (statusA !== statusB) return statusA - statusB;
+        return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
+    });
+
+    const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
 
     return (
         <section className="sector-feed">
             <div className="sector-feed__status">
                 <span className={`sector-feed__indicator ${connected ? 'sector-feed__indicator--live' : ''}`} />
                 {connected ? 'Live' : 'Connecting...'}
+                {liveCount > 0 && (
+                    <span style={{
+                        marginLeft: '0.5rem',
+                        fontSize: '0.6rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-round)',
+                        background: 'rgba(16,185,129,0.15)',
+                        color: '#10b981',
+                    }}>
+                        {liveCount} LIVE NOW
+                    </span>
+                )}
             </div>
 
             {loading && competitions.length === 0 && (
@@ -153,22 +249,15 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
                 </div>
             )}
 
-            {error && (
-                <div className="sector-feed__error">
-                    <p>⚠️ {error}</p>
-                </div>
-            )}
-
-            {!loading && competitions.length === 0 && !error && (
+            {!loading && sorted.length === 0 && (
                 <div className="sector-feed__empty">
-                    <p>No data available for this sector yet.</p>
-                    <p className="sector-feed__empty-sub">Data will appear here as events are detected.</p>
+                    <p>No competitions available for this sector yet.</p>
+                    <p className="sector-feed__empty-sub">Competitions will be auto-created from live data feeds.</p>
                 </div>
             )}
 
             <div className="sector-feed__grid">
-                {/* Show competitions first */}
-                {competitions.map((comp) => (
+                {sorted.map((comp) => (
                     <CompetitionCard 
                         key={comp.id} 
                         comp={comp} 

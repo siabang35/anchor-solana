@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentsService } from './agents.service.js';
-import { DeployAgentDto } from './dto/index.js';
+import { DeployAgentDto, DeployForecastingAgentDto } from './dto/index.js';
 
 // Note: Using a simple guard placeholder — in production this should be your JwtAuthGuard
 // import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -29,10 +29,47 @@ export class AgentsController {
      */
     @Post('deploy')
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Deploy a new AI agent (checks quota, max 10 free)' })
+    @ApiOperation({ summary: 'Deploy a new AI agent (checks quota, max 7 free)' })
     async deploy(@Body() dto: DeployAgentDto, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.deploy(userId, dto);
+    }
+
+    /**
+     * Deploy an autonomous forecasting AI agent
+     */
+    @Post('deploy-forecaster')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiOperation({ summary: 'Deploy a forecasting agent (Qwen 9B, max 7 free prompts)' })
+    async deployForecaster(@Body() dto: DeployForecastingAgentDto, @Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.deployForecaster(userId, dto);
+    }
+
+    /**
+     * Create a wager on an agent-vs-agent competition
+     */
+    @Post('wager')
+    @HttpCode(HttpStatus.CREATED)
+    @ApiOperation({ summary: 'Create a wager on your agent (50% refund on loss)' })
+    async createWager(@Body() body: { agent_id: string; competition_id: string; wager_amount: number }, @Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.createWager(userId, body);
+    }
+
+    /**
+     * Get agent leaderboard
+     */
+    @Get('leaderboard')
+    @ApiOperation({ summary: 'Get agent competition leaderboard (ranked by Brier score)' })
+    async getLeaderboard(
+        @Query('competition_id') competitionId?: string,
+        @Query('limit') limit?: string,
+    ) {
+        return this.agentsService.getLeaderboard(
+            competitionId,
+            limit ? parseInt(limit, 10) : 20,
+        );
     }
 
     /**
@@ -68,7 +105,7 @@ export class AgentsController {
      * Get user's deploy quota
      */
     @Get('quota')
-    @ApiOperation({ summary: "Get user's remaining deploy quota (max 10 free)" })
+    @ApiOperation({ summary: "Get user's remaining deploy quota (max 7 free)" })
     async getQuota(@Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.getQuota(userId);
@@ -82,6 +119,20 @@ export class AgentsController {
     async findById(@Param('id') id: string, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.findById(id, userId);
+    }
+
+    /**
+     * Get agent predictions
+     */
+    @Get(':id/predictions')
+    @ApiOperation({ summary: 'Get agent prediction history' })
+    async getPredictions(
+        @Param('id') id: string,
+        @Req() req: any,
+        @Query('limit') limit?: string,
+    ) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.getAgentPredictions(id, userId, limit ? parseInt(limit, 10) : 20);
     }
 
     /**

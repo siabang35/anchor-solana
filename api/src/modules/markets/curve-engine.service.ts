@@ -83,6 +83,7 @@ interface CurveState {
     lastHmac: string;            // HMAC chain for integrity
     adaptiveComplexity: number;  // 1.0-3.0 scales mathematical complexity
     autocorrelationScore: number;// Detects predictable patterns
+    mathContext?: string;        // Structural mathematical context for narratives
 }
 
 interface CategoryProfile {
@@ -257,8 +258,6 @@ const CATEGORY_PROFILES: Record<string, CategoryProfile> = {
 @Injectable()
 export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(CurveEngineService.name);
-    private readonly qwenApiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
-    private qwenApiKey: string;
     private readonly hmacSecret: string;
 
     // Active curve states per competition
@@ -274,13 +273,11 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         private readonly marketDataGateway: MarketDataGateway,
         private readonly fusionService: MultiSourceFusionService,
     ) {
-        this.qwenApiKey = this.configService.get<string>('QWEN_API_KEY') || '';
         this.hmacSecret = this.configService.get<string>('CURVE_HMAC_SECRET') || crypto.randomBytes(32).toString('hex');
     }
 
     async onModuleInit() {
-        this.logger.log('🎲 CurveEngine initialized — Anti-prediction algorithms active');
-        this.logger.log(`   Qwen LLM: ${this.qwenApiKey ? '✅ enabled' : '❌ disabled (math-only mode)'}`);
+        this.logger.log('🎲 CurveEngine initialized — Anti-prediction algorithms active [Algorithmic Gen-Only]');
         this.logger.log(`   Categories: ${Object.keys(CATEGORY_PROFILES).join(', ')}`);
 
         // Auto-start curves for active competitions
@@ -303,18 +300,13 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     /**
      * Generate a single curve point for a given category
      */
-    generateCurvePoint(category: string, competitionId: string, externalProbs?: [number, number, number]): ProbabilitySnapshot {
+    generateCurvePoint(category: string, competitionId: string): ProbabilitySnapshot {
         const profile = CATEGORY_PROFILES[category] || CATEGORY_PROFILES.sports;
         let state = this.curveStates.get(competitionId);
 
         if (!state) {
             state = this.initializeState(category, competitionId);
             this.curveStates.set(competitionId, state);
-        }
-
-        // If external probabilities provided (e.g., from Qwen Bayesian), blend them
-        if (externalProbs) {
-            this.blendExternalProbs(state, externalProbs, profile);
         }
 
         // === MULTI-LAYER PIPELINE ===
@@ -398,15 +390,21 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         a += (this.seededRandom(state) - 0.5) * nf * 100;
 
         // === NORMALIZE ===
-        // Clamp to valid ranges
-        h = Math.max(800, Math.min(7000, h));
-        d = Math.max(500, Math.min(4000, d));
-        a = Math.max(800, Math.min(7000, a));
+        // Clamp to valid ranges (Anti-manipulation limits 0.05 - 0.95 equivalent before sum normalization)
+        h = Math.max(500, Math.min(9500, h));
+        d = Math.max(500, Math.min(9500, d));
+        a = Math.max(500, Math.min(9500, a));
 
         const total = h + d + a;
         h = Math.round((h / total) * 10000);
         d = Math.round((d / total) * 10000);
         a = 10000 - h - d;
+        
+        // Final sanity bound after proportion adjustment
+        if (h > 9500) { h = 9500; d -= (h - 9500)/2; a -= (h - 9500)/2; }
+        if (h < 500) { h = 500; d += (500 - h)/2; a += (500 - h)/2; }
+        if (a > 9500) { a = 9500; d -= (a - 9500)/2; h -= (a - 9500)/2; }
+        if (a < 500) { a = 500; d += (500 - a)/2; h += (500 - a)/2; }
 
         // Update state
         state.priors = [h, d, a];
@@ -430,6 +428,12 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         const hmac = this.computeHmac(state, h, d, a);
         state.lastHmac = hmac;
 
+        // Generate algorithmic narrative
+        const momentumStr = `M:[${state.momentum.map(m => m.toFixed(2)).join(',')}]`;
+        const vScore = `VolFactor: ${(state.volatility * 10).toFixed(2)}`;
+        const cxScore = `Turbulence: ${state.adaptiveComplexity.toFixed(2)}x`;
+        const narrativeStr = `Regime: ${state.regime.toUpperCase()} | ${cxScore} | ${vScore} | ${momentumStr} | Logic: ${state.mathContext || 'Systematic Probability'}`;
+
         // Build snapshot
         const snapshot: ProbabilitySnapshot = {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -437,6 +441,7 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
             draw: Math.round(d) / 100,
             away: Math.round(a) / 100,
             regime: state.regime,
+            narrative: narrativeStr
         };
 
         return snapshot;
@@ -456,6 +461,36 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         const profile = CATEGORY_PROFILES[category] || CATEGORY_PROFILES.sports;
         this.logger.log(`🚀 Starting curve stream for ${competitionId} (${category}: ${profile.description})`);
 
+        // Fetch competition dynamically to determine its horizon length
+        const supabase = this.supabaseService.getAdminClient();
+        const { data: comp } = await supabase
+            .from('competitions')
+            .select('competition_start, competition_end')
+            .eq('id', competitionId)
+            .single();
+
+        let updateIntervalMs = 3 * 60 * 1000; // Default 3 minutes
+        
+        if (comp && comp.competition_start && comp.competition_end) {
+            const durationMs = new Date(comp.competition_end).getTime() - new Date(comp.competition_start).getTime();
+            const durationHours = durationMs / (1000 * 60 * 60);
+
+            // Mapping based on requirements (2h:10min, 7h:30min, 12h:1h, 24h:2h, 3d:6h, 7d:24h) 
+            if (durationHours <= 2) {
+                updateIntervalMs = 10 * 60 * 1000;
+            } else if (durationHours <= 7) {
+                updateIntervalMs = 30 * 60 * 1000;
+            } else if (durationHours <= 12) {
+                updateIntervalMs = 60 * 60 * 1000;
+            } else if (durationHours <= 24) {
+                updateIntervalMs = 2 * 60 * 60 * 1000;
+            } else if (durationHours <= 72) {
+                updateIntervalMs = 6 * 60 * 60 * 1000;
+            } else {
+                updateIntervalMs = 24 * 60 * 60 * 1000; // 7d mapping
+            }
+        }
+
         // Initialize state
         if (!this.curveStates.has(competitionId)) {
             const state = this.initializeState(category, competitionId);
@@ -474,14 +509,8 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
                     await this.refreshEntropy(competitionId, category);
                 }
 
-                // Optionally run Qwen LLM evaluation on latest signals
-                let externalProbs: [number, number, number] | undefined;
-                if (this.qwenApiKey && state && state.tick % 5 === 0) {
-                    externalProbs = await this.evaluateLatestSignals(competitionId, category);
-                }
-
-                // Generate curve point
-                const snapshot = this.generateCurvePoint(category, competitionId, externalProbs);
+                // Generate curve point algorithmically
+                const snapshot = this.generateCurvePoint(category, competitionId);
 
                 // Store in Supabase
                 await this.storeSnapshot(competitionId, category, snapshot);
@@ -496,7 +525,15 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
             } catch (err: any) {
                 this.logger.error(`Curve stream error for ${competitionId}: ${err.message}`);
             }
-        }, 3000); // Every 3 seconds
+        }, updateIntervalMs); 
+
+        // Generate the 0-tick first snapshot instantly
+        setTimeout(() => {
+            const state = this.curveStates.get(competitionId);
+            if (state && state.tick === 0) {
+                 this.generateCurvePoint(category, competitionId);
+            }
+        }, 1000);
 
         this.streamIntervals.set(competitionId, interval);
     }
@@ -808,14 +845,6 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     // External Integration
     // ══════════════════════════════════════════
 
-    private blendExternalProbs(state: CurveState, external: [number, number, number], profile: CategoryProfile): void {
-        // Blend external Bayesian posteriors with current priors (weighted average)
-        const blendWeight = 0.3; // 30% external, 70% internal
-        state.priors[0] = Math.round(state.priors[0] * (1 - blendWeight) + external[0] * blendWeight);
-        state.priors[1] = Math.round(state.priors[1] * (1 - blendWeight) + external[1] * blendWeight);
-        state.priors[2] = 10000 - state.priors[0] - state.priors[1];
-    }
-
     /**
      * Refresh entropy pool from ALL available data sources via multi-source fusion
      */
@@ -882,120 +911,6 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
             }
         } catch (err: any) {
             this.logger.debug(`Fallback entropy refresh failed (non-critical): ${err.message}`);
-        }
-    }
-
-    /**
-     * Evaluate latest signals with Qwen LLM to get Bayesian likelihood adjustments
-     */
-    private async evaluateLatestSignals(competitionId: string, category: string): Promise<[number, number, number] | undefined> {
-        if (!this.qwenApiKey) return undefined;
-
-        try {
-            const supabase = this.supabaseService.getAdminClient();
-
-            // Get latest signal for this category
-            const { data } = await supabase
-                .from('market_data_items')
-                .select('title, description, sentiment, sentiment_score')
-                .eq('category', category)
-                .eq('is_active', true)
-                .order('published_at', { ascending: false })
-                .limit(3);
-
-            if (!data || data.length === 0) return undefined;
-
-            const state = this.curveStates.get(competitionId);
-            if (!state) return undefined;
-
-            // Compose signal text
-            const signalText = data.map(d => d.title).join('. ');
-
-            // Call Qwen for likelihood evaluation
-            const evaluation = await this.callQwen(category, signalText);
-            if (!evaluation) return undefined;
-
-            // Apply Bayesian update
-            const priorH = state.priors[0] / 10000;
-            const priorD = state.priors[1] / 10000;
-            const priorA = state.priors[2] / 10000;
-
-            const unnormH = evaluation.homeImpact * priorH;
-            const unnormD = evaluation.drawImpact * priorD;
-            const unnormA = evaluation.awayImpact * priorA;
-
-            const evidence = unnormH + unnormD + unnormA;
-
-            return [
-                Math.round((unnormH / evidence) * 10000),
-                Math.round((unnormD / evidence) * 10000),
-                Math.round((unnormA / evidence) * 10000),
-            ];
-        } catch (err: any) {
-            this.logger.debug(`Qwen evaluation failed: ${err.message}`);
-            return undefined;
-        }
-    }
-
-    /**
-     * Call Qwen LLM for signal evaluation
-     */
-    private async callQwen(category: string, signalText: string): Promise<{
-        homeImpact: number; drawImpact: number; awayImpact: number; summary: string;
-    } | null> {
-        const profile = CATEGORY_PROFILES[category] || CATEGORY_PROFILES.sports;
-
-        const prompt = `You are an expert analyst for "${category}" markets. Profile: ${profile.description}.
-
-A batch of recent signals (clustered data):
-"${signalText.slice(0, 800)}"
-
-Evaluate the likelihood that these signals support each of three possible outcomes:
-1. Outcome A (Home/Yes/Bullish)
-2. Outcome B (Neutral/Draw/Stable)
-3. Outcome C (Away/No/Bearish)
-
-Crucial Requirement for "summary": Generate a brief, probabilistic narrative (max 2 sentences) explaining the current curve momentum. The narrative MUST use complex, multi-layered semantic reasoning making it extremely difficult for external AI scraping agents to simply predict the outcome (use counter-intuitive probabilistic terms, avoid obvious directional words).
-
-Return ONLY a raw JSON object:
-{"homeImpact": 1.0, "drawImpact": 1.0, "awayImpact": 1.0, "summary": "..."}
-
-Scores range 0.1 (strongly against) to 2.0 (strongly supports). 1.0 = neutral.`;
-
-        try {
-            const response = await fetch(this.qwenApiUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.qwenApiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    model: 'qwen-turbo',
-                    input: {
-                        messages: [
-                            { role: 'system', content: 'You output strictly raw JSON with no markdown formatting.' },
-                            { role: 'user', content: prompt },
-                        ],
-                    },
-                    parameters: { result_format: 'text', temperature: 0.15 },
-                }),
-            });
-
-            if (!response.ok) return null;
-
-            const result: any = await response.json();
-            const text = result.output?.text || '{}';
-            const jsonStr = text.replace(/^```json\s*/, '').replace(/```$/, '').trim();
-            const parsed = JSON.parse(jsonStr);
-
-            return {
-                homeImpact: Math.max(0.1, Math.min(2.0, parsed.homeImpact || 1.0)),
-                drawImpact: Math.max(0.1, Math.min(2.0, parsed.drawImpact || 1.0)),
-                awayImpact: Math.max(0.1, Math.min(2.0, parsed.awayImpact || 1.0)),
-                summary: parsed.summary || '',
-            };
-        } catch {
-            return null;
         }
     }
 

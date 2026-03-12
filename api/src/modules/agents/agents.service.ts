@@ -3,12 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../database/supabase.service.js';
 import {
     DeployAgentDto,
+    DeployForecastingAgentDto,
     AgentResponseDto,
     AgentTypeResponseDto,
     AgentQuotaResponseDto,
 } from './dto/index.js';
 
-const MAX_FREE_DEPLOYS = 10;
+const MAX_FREE_DEPLOYS = 7;
 
 // Anchor program constants (must match programs/my-project/src/constants.rs)
 const PROGRAM_ID = '56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7';
@@ -52,13 +53,27 @@ export class AgentsService {
             throw new NotFoundException('Agent type not found or disabled');
         }
 
+        // 2. Format configuration array
+        const marketIds = dto.market_ids && dto.market_ids.length > 0 ? dto.market_ids : [];
+        if (marketIds.length > 3) {
+            throw new BadRequestException('Cannot deploy agent to more than 3 markets at once.');
+        }
+
+        const configuration = {
+            risk_level: dto.risk_level,
+            target_outcome: dto.target_outcome,
+            direction: dto.direction,
+            market_ids: marketIds,
+        };
+
         // 3. Insert agent
         const { data: agent, error: insertError } = await supabase
             .from('ai_agents')
             .insert({
                 user_id: userId,
                 agent_type_id: dto.agent_type_id,
-                market_id: dto.market_id || null,
+                market_id: marketIds.length > 0 ? marketIds[0] : null,
+                configuration: configuration,
                 name: dto.name,
                 strategy_prompt: dto.strategy_prompt,
                 target_outcome: dto.target_outcome || 'home',
@@ -100,6 +115,62 @@ export class AgentsService {
         });
 
         return this.toResponseDto(agent, agentType);
+    }
+
+    /**
+     * Deploy an autonomous forecasting AI agent
+     */
+    async deployForecaster(userId: string, dto: DeployForecastingAgentDto): Promise<any> {
+        // Use admin client to bypass RLS since the backend already authenticated the user
+        const supabase = this.supabaseService.getAdminClient();
+
+        // 1. Check quota
+        const quota = await this.getQuota(userId);
+        if (quota.deploys_remaining <= 0) {
+            throw new BadRequestException(
+                `Agent deploy limit reached (${MAX_FREE_DEPLOYS}/${MAX_FREE_DEPLOYS}). ` +
+                `Terminate an existing agent to free a slot.`
+            );
+        }
+
+        // 2. Insert forecaster agent into the new agents table
+        const { data: agent, error: insertError } = await supabase
+            .from('agents')
+            .insert({
+                user_id: userId,
+                name: dto.name,
+                system_prompt: dto.system_prompt,
+                model: 'Qwen/Qwen3.5-9B',
+                status: 'active',
+            })
+            .select('*')
+            .single();
+
+        if (insertError) {
+            this.logger.error(`Failed to deploy forecaster agent: ${insertError.message}`);
+            throw new BadRequestException(`Failed to deploy forecaster agent: ${insertError.message}`);
+        }
+
+        // 3. Link agent to competition if competition_ids provided
+        const competitionIds = dto.competition_ids || [];
+        if (competitionIds.length > 3) {
+            throw new BadRequestException('Cannot deploy forecaster agent to more than 3 competitions at once.');
+        }
+
+        if (competitionIds.length > 0) {
+            const entries = competitionIds.map(compId => ({
+                agent_id: agent.id,
+                competition_id: compId,
+                user_id: userId,
+                status: 'active',
+            }));
+            
+            await supabase.from('agent_competition_entries').insert(entries);
+        }
+
+        this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
+
+        return { ...agent, max_free_prompts: MAX_FREE_DEPLOYS, prompts_used: 0 };
     }
 
     /**
@@ -269,6 +340,123 @@ export class AgentsService {
         this.logger.log(`Agent ${agentId} terminated by user ${userId}`);
     }
 
+    // ========================
+    // Wagering & Leaderboard
+    // ========================
+
+    /**
+     * Create a wager between two agents on a competition
+     */
+    async createWager(userId: string, data: {
+        agent_id: string;
+        competition_id: string;
+        wager_amount: number;
+    }): Promise<any> {
+        const supabase = this.supabaseService.getClient();
+
+        // Verify agent belongs to user
+        const { data: agent } = await supabase
+            .from('agents')
+            .select('id')
+            .eq('id', data.agent_id)
+            .eq('user_id', userId)
+            .single();
+
+        if (!agent) {
+            throw new NotFoundException('Agent not found');
+        }
+
+        // Create wager record
+        const { data: wager, error } = await supabase
+            .from('agent_wagers')
+            .insert({
+                agent_id: data.agent_id,
+                user_id: userId,
+                competition_id: data.competition_id,
+                wager_amount: data.wager_amount,
+                refund_rate: 0.5, // 50% refund on loss
+                status: 'active',
+            })
+            .select('*')
+            .single();
+
+        if (error) {
+            this.logger.error(`Failed to create wager: ${error.message}`);
+            throw new BadRequestException(`Failed to create wager: ${error.message}`);
+        }
+
+        this.logger.log(`Wager created: ${wager.id} — ${data.wager_amount} SOL on agent ${data.agent_id}`);
+        return wager;
+    }
+
+    /**
+     * Get agent leaderboard for a competition
+     */
+    async getLeaderboard(competitionId?: string, limit: number = 20): Promise<any[]> {
+        const supabase = this.supabaseService.getClient();
+
+        let query = supabase
+            .from('agent_competition_entries')
+            .select('*, agents(id, name, user_id, model, system_prompt)')
+            .not('brier_score', 'is', null)
+            .order('brier_score', { ascending: true })
+            .limit(limit);
+
+        if (competitionId) {
+            query = query.eq('competition_id', competitionId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            this.logger.error(`Failed to get leaderboard: ${error.message}`);
+            return [];
+        }
+
+        return (data || []).map((entry: any, index: number) => ({
+            rank: index + 1,
+            agent_id: entry.agent_id,
+            agent_name: entry.agents?.name || 'Unknown',
+            user_id: entry.agents?.user_id,
+            brier_score: entry.brier_score,
+            competition_id: entry.competition_id,
+            status: entry.status,
+        }));
+    }
+
+    /**
+     * Get predictions for an agent
+     */
+    async getAgentPredictions(agentId: string, userId: string, limit: number = 20): Promise<any[]> {
+        const supabase = this.supabaseService.getClient();
+
+        // Verify ownership
+        const { data: agent } = await supabase
+            .from('agents')
+            .select('id')
+            .eq('id', agentId)
+            .eq('user_id', userId)
+            .single();
+
+        if (!agent) {
+            throw new NotFoundException('Agent not found');
+        }
+
+        const { data, error } = await supabase
+            .from('agent_predictions')
+            .select('*')
+            .eq('agent_id', agentId)
+            .order('timestamp', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            this.logger.error(`Failed to get predictions: ${error.message}`);
+            return [];
+        }
+
+        return data || [];
+    }
+
     /**
      * Get agent execution logs
      */
@@ -401,7 +589,8 @@ export class AgentsService {
             id: agent.id,
             user_id: agent.user_id,
             agent_type_id: agent.agent_type_id,
-            market_id: agent.market_id,
+            market_ids: agent.configuration?.market_ids || (agent.market_id ? [agent.market_id] : []),
+            market_id: agent.configuration?.market_ids?.[0] || agent.market_id,
             name: agent.name,
             strategy_prompt: agent.strategy_prompt,
             target_outcome: agent.target_outcome,

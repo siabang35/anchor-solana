@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCompetitions, SectorSummary } from '@/hooks/useCompetitions';
 
 export interface Sector {
@@ -23,6 +24,8 @@ export const SECTORS: Sector[] = [
     { id: 'science', label: 'Science', icon: '🔬' },
 ];
 
+const CATEGORY_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'];
+
 interface Props {
     activeSector: string;
     onSectorChange: (sector: string) => void;
@@ -31,6 +34,7 @@ interface Props {
 export default function SectorNav({ activeSector, onSectorChange }: Props) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const activeRef = useRef<HTMLButtonElement>(null);
+    const router = useRouter();
     const { sectorSummary } = useCompetitions();
 
     // Build a lookup map for sector counts
@@ -49,6 +53,16 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
         }
     }, [activeSector]);
 
+    const handleClick = (sectorId: string) => {
+        if (CATEGORY_SECTORS.includes(sectorId)) {
+            // Navigate to the dedicated category page
+            router.push(`/category/${sectorId}`);
+        } else {
+            // Meta-tab: stay on homepage and filter
+            onSectorChange(sectorId);
+        }
+    };
+
     return (
         <nav className="sector-nav" aria-label="Market sectors">
             <div className="sector-nav__scroll" ref={scrollRef}>
@@ -59,7 +73,7 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
                             key={sector.id}
                             ref={sector.id === activeSector ? activeRef : undefined}
                             className={`sector-nav__tab ${sector.id === activeSector ? 'sector-nav__tab--active' : ''}`}
-                            onClick={() => onSectorChange(sector.id)}
+                            onClick={() => handleClick(sector.id)}
                             aria-pressed={sector.id === activeSector}
                         >
                             <span className="sector-nav__icon">{sector.icon}</span>
@@ -89,3 +103,4 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
         </nav>
     );
 }
+

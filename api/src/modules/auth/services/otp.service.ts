@@ -5,6 +5,7 @@ import {
     UnauthorizedException,
     Logger,
     ConflictException,
+    Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -68,15 +69,15 @@ export class OtpService {
     private readonly VERIFICATION_SECRET_KEY: string;
 
     constructor(
-        private readonly configService: ConfigService,
+        @Optional() private readonly configService: ConfigService | undefined,
         private readonly supabaseService: SupabaseService,
         private readonly usersService: UsersService,
         private readonly passwordValidator: PasswordValidator,
         private readonly emailService: EmailService,
     ) {
         // OWASP A02:2021 - Use dedicated secret for token signing
-        this.VERIFICATION_SECRET_KEY = this.configService.get('VERIFICATION_TOKEN_SECRET')
-            || this.configService.get('JWT_SECRET')
+        this.VERIFICATION_SECRET_KEY = this.configService?.get('VERIFICATION_TOKEN_SECRET')
+            || this.configService?.get('JWT_SECRET')
             || 'fallback-secret-change-in-production';
     }
 
@@ -124,7 +125,7 @@ export class OtpService {
         // 4. Create user via Supabase Auth with email_confirm: false
         const supabase = this.supabaseService.getAdminClient();
 
-        const frontendUrl = this.configService.get('CORS_ORIGINS', 'http://localhost:5173').split(',')[0];
+        const frontendUrl = this.configService?.get('CORS_ORIGINS', 'http://localhost:5173').split(',')[0] || 'http://localhost:5173';
 
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email: normalizedEmail,
@@ -513,7 +514,7 @@ export class OtpService {
         const normalizedEmail = email.toLowerCase().trim();
         await this.checkRateLimitAndLockout(normalizedEmail, ipAddress);
 
-        const frontendUrl = this.configService.get('CORS_ORIGINS', 'http://localhost:5173').split(',')[0];
+        const frontendUrl = this.configService?.get('CORS_ORIGINS', 'http://localhost:5173').split(',')[0] || 'http://localhost:5173';
 
         // Find user by email to get user_id
         const user = await this.usersService.findByEmail(normalizedEmail);

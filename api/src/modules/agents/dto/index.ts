@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, Max, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max, IsEnum, IsUUID, IsArray } from 'class-validator';
 
 export enum AgentDirection {
     LONG = 'long',
@@ -22,8 +22,9 @@ export class DeployAgentDto {
     strategy_prompt: string;
 
     @IsOptional()
-    @IsUUID()
-    market_id?: string;
+    @IsArray()
+    @IsUUID('4', { each: true })
+    market_ids?: string[];
 
     @IsOptional()
     @IsEnum(AgentTargetOutcome)
@@ -38,6 +39,19 @@ export class DeployAgentDto {
     @Min(1)
     @Max(5)
     risk_level?: number = 3;
+}
+
+export class DeployForecastingAgentDto {
+    @IsString()
+    name: string;
+
+    @IsString()
+    system_prompt: string;
+
+    @IsOptional()
+    @IsArray()
+    @IsUUID('4', { each: true })
+    competition_ids?: string[];
 }
 
 export class ToggleAgentDto {
@@ -71,6 +85,7 @@ export class AgentResponseDto {
     user_id: string;
     agent_type_id: string;
     market_id: string | null;
+    market_ids?: string[] | null;
     name: string;
     strategy_prompt: string;
     target_outcome: string;

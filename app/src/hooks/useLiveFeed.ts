@@ -22,6 +22,7 @@ export interface UseLiveFeedResult {
     loading: boolean;
     error: string | null;
     connected: boolean;
+    refetch: () => Promise<void>;
 }
 
 // Source icon mapping (matches live-feed.controller.ts)
@@ -70,8 +71,8 @@ function mapToFeedItem(item: any): LiveFeedItem {
         icon: SOURCE_ICONS[item.source_name || item.source] || '📰',
         text: item.title || item.description || '',
         impact: normalizeImpact(item.impact),
-        timestamp: new Date(item.published_at || Date.now()).getTime(),
-        sentiment: sentimentToScore(item.sentiment, item.sentiment_score),
+        timestamp: new Date(item.published_at || item.publishedAt || Date.now()).getTime(),
+        sentiment: sentimentToScore(item.sentiment, item.sentiment_score ?? item.sentimentScore),
         entity: item.category || 'General',
         category: item.category,
         tags: item.tags || [],
@@ -101,16 +102,19 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
             // Try backend API first
             const isCategoryValid = category && category !== 'top' && category !== 'foryou';
             const url = isCategoryValid
-                ? `${API_BASE_URL}/live-feed/${category}?limit=${limit}`
-                : `${API_BASE_URL}/live-feed?limit=${limit}`;
+                ? `${API_BASE_URL}/markets/feed?category=${category}&limit=${limit}`
+                : `${API_BASE_URL}/markets/feed?limit=${limit}`;
 
             const res = await fetch(url, {
                 headers: { 'Content-Type': 'application/json' },
             });
 
             if (res.ok) {
-                const data = await res.json();
-                setFeeds(Array.isArray(data) ? data : []);
+                const responseData = await res.json();
+                const itemsList = Array.isArray(responseData) ? responseData : (responseData?.data || []);
+                const items = itemsList.map(mapToFeedItem);
+                
+                setFeeds(items);
                 setLoading(false);
                 return;
             }
@@ -144,7 +148,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
         } finally {
             setLoading(false);
         }
-    }, [limit]);
+    }, [limit, category]);
 
     // Subscribe to realtime inserts
     useEffect(() => {
@@ -184,5 +188,5 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
         };
     }, [limit, category, fetchFeeds]);
 
-    return { feeds, loading, error, connected };
+    return { feeds, loading, error, connected, refetch: fetchFeeds };
 }

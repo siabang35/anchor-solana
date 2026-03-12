@@ -7,7 +7,7 @@
  * OWASP A09:2021 - Security Logging and Monitoring Failures
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export type SecurityEventSeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -31,8 +31,8 @@ export class SecurityEventService {
     private readonly logger = new Logger('SecurityEvent');
     private readonly enabled: boolean;
 
-    constructor(private readonly configService: ConfigService) {
-        this.enabled = this.configService.get('ENABLE_SECURITY_LOGGING') !== 'false';
+    constructor(@Optional() private readonly configService?: ConfigService) {
+        this.enabled = this.configService?.get('ENABLE_SECURITY_LOGGING') !== 'false';
     }
 
     /**
