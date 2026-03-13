@@ -130,12 +130,14 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 if (types) setAgentTypes(types);
             } catch { /* Backend may not be running */ }
             try {
-                const q = await apiFetch<QuotaInfo>('/agents/quota');
+                const q = await apiFetch<QuotaInfo>('/agents/quota', {
+                    headers: publicKey ? { 'x-user-id': publicKey.toString() } : {}
+                });
                 if (q) setQuota(q);
             } catch { /* Backend may not be running */ }
         };
         fetchMeta();
-    }, [deployedAgent]); // Refresh quota after deploy
+    }, [deployedAgent, publicKey]); // Refresh quota after deploy or wallet change
 
     const canDeploy = connected && agentName.trim() && categoryId && marketIds.length > 0 && strategy.trim()
         && (!quota || quota.deploys_remaining > 0);
@@ -187,7 +189,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             // Call backend API
             const result = await apiFetch<DeployedAgentResponse>(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                },
                 body: JSON.stringify(body),
             });
 
@@ -233,7 +238,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
             try {
-                await apiFetch(`/agents/${deployedAgent.id}/toggle`, { method: 'PATCH' });
+                await apiFetch(`/agents/${deployedAgent.id}/toggle`, { 
+                    method: 'PATCH',
+                    headers: publicKey ? { 'x-user-id': publicKey.toString() } : {}
+                });
             } catch { /* Best-effort */ }
         }
         setDeployedAgent(null);

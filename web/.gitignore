@@ -1,0 +1,32 @@
+# Anchor / Solana
+.anchor
+target
+test-ledger
+.surfpool
+**/*.rs.bk
+
+# Node
+node_modules
+.yarn
+
+# Next.js
+app/.next
+app/out
+app/.vercel
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.idea
+.vscode
+*.code-workspace
+
+# Env
+.env
+.env.local
+.env.template
+.env.*.local

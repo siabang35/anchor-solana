@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../../../services/supabase';
+import { useWallet } from '../../hooks/useWallet';
 
 interface Props {
     initialCategory?: string;
@@ -27,8 +28,15 @@ export function DeployAgentPanel({ initialCategory = 'finance' }: Props) {
     const [isDeploying, setIsDeploying] = useState(false);
     const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [statusMsg, setStatusMsg] = useState('');
+    const { address, isConnected } = useWallet();
 
     const handleDeploy = async () => {
+        if (!isConnected) {
+            setStatus('error');
+            setStatusMsg('Please connect your wallet first');
+            return;
+        }
+
         setIsDeploying(true);
         setStatus('idle');
         setStatusMsg('');
@@ -38,10 +46,29 @@ export function DeployAgentPanel({ initialCategory = 'finance' }: Props) {
                 ? `${API_BASE_URL}/agents/deploy-forecaster`
                 : `${API_BASE_URL}/agents/deploy`;
 
+            const payload = mode === 'forecaster' ? {
+                name: `Qwen-${category.charAt(0).toUpperCase() + category.slice(1)}-Agent`,
+                system_prompt: `Analyze the ${category} market and generate probability updates.`,
+                competition_ids: []
+            } : {
+                // Warning: Deploying a trader agent needs a valid agent_type_id (UUID), this may fail
+                // We're stubbing it here for the UI to attempt
+                agent_type_id: '00000000-0000-0000-0000-000000000000',
+                name: `Trader-${category}`,
+                strategy_prompt: `Trade in the ${category} market`,
+                market_ids: [],
+                target_outcome: 'home',
+                direction: 'long',
+                risk_level: 3
+            };
+
             const res = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category, mode }),
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(address ? { 'x-user-id': address } : {})
+                },
+                body: JSON.stringify(payload),
             });
 
             if (res.ok) {
