@@ -448,14 +448,21 @@ export default function CategoryPage() {
 
                         <div className="feed-scroll" style={{ maxHeight: '300px' }}>
                             {feeds.map((item: LiveFeedItem) => (
-                                <div key={item.id} className={`feed-item ${item.impact}`}>
+                                <a 
+                                    key={item.id} 
+                                    href={item.url || '#'} 
+                                    target={item.url ? "_blank" : "_self"} 
+                                    rel="noopener noreferrer"
+                                    className={`feed-item ${item.impact}`}
+                                    style={{ textDecoration: 'none', color: 'inherit', display: 'flex', cursor: item.url ? 'pointer' : 'default' }}
+                                >
                                     <span className="feed-icon">{item.icon}</span>
                                     <div style={{ flex: 1 }}>
-                                        <div className="feed-source">{item.source}</div>
+                                        <div className="feed-source">{item.source} {item.url && <span style={{fontSize: '0.5rem', opacity: 0.5}}>🔗</span>}</div>
                                         <div className="feed-text">{item.text}</div>
                                     </div>
                                     <span className={`feed-impact ${item.impact}`}>{item.impact.toUpperCase()}</span>
-                                </div>
+                                </a>
                             ))}
                         </div>
                     </div>

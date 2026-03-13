@@ -83,36 +83,59 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
 
             setMarket(onChainMarket);
 
-            // Initialize probability history
-            const initialProbs: ProbabilitySnapshot = {
-                time: '0',
-                home: probs[0] / 100,
-                draw: probs[1] / 100,
-                away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
-            };
+            // Fetch historical snapshots to populate curve
+            const { data: snapshots } = await supabase
+                .from('curve_snapshots')
+                .select('probability, timestamp, reasoning')
+                .eq('competition_id', competitionId)
+                .order('timestamp', { ascending: true })
+                .limit(50);
 
-            setProbHistory((prev) => {
-                if (prev.length === 0) {
-                    // Generate initial history with slight variations
-                    const history: ProbabilitySnapshot[] = [];
-                    let h = initialProbs.home, d = initialProbs.draw, a = initialProbs.away;
-                    for (let i = 0; i < 20; i++) {
-                        const noise = () => (Math.random() - 0.5) * 1.5;
-                        h = Math.max(10, Math.min(70, h + noise()));
-                        d = Math.max(8, Math.min(40, d + noise()));
-                        a = Math.max(8, Math.min(70, a + noise()));
-                        const total = h + d + a;
-                        history.push({
-                            time: `${i * 5}'`,
-                            home: Math.round(h / total * 100 * 100) / 100,
-                            draw: Math.round(d / total * 100 * 100) / 100,
-                            away: Math.round(a / total * 100 * 100) / 100,
-                        });
-                    }
-                    return history;
+            let history: ProbabilitySnapshot[] = [];
+            
+            if (snapshots && snapshots.length > 0) {
+                history = snapshots.map(snap => ({
+                    time: new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    home: snap.probability * 100,
+                    draw: 0,
+                    away: (1 - snap.probability) * 100,
+                    narrative: snap.reasoning
+                }));
+            }
+
+            // Always ensure we have at least 2 points so Chart.js can draw a visible line on mount
+            const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            if (history.length === 0) {
+                // Generate a short flat history leading up to the current probability
+                const now = Date.now();
+                for (let i = 4; i >= 0; i--) {
+                    const t = new Date(now - i * 60000); // 1 minute intervals
+                    history.push({
+                        time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        home: probs[0] / 100,
+                        draw: probs[1] / 100,
+                        away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
+                    });
                 }
-                return prev;
-            });
+            } else if (history.length === 1) {
+                // Duplicate single point so there's a segment
+                const snap = history[0];
+                const pseudoTime = new Date(Date.now() - 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                history.unshift({ ...snap, time: pseudoTime });
+            }
+
+            // Append current point if time is different from the last history point
+            if (history[history.length - 1].time !== nowTime) {
+                history.push({
+                    time: nowTime,
+                    home: probs[0] / 100,
+                    draw: probs[1] / 100,
+                    away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
+                });
+            }
+
+            setProbHistory(history);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -149,11 +172,15 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                         status: updated.status === 'active' ? 'active' : updated.status === 'settled' ? 'settled' : 'paused',
                     } : prev);
 
-                    // Append to probability history
+                    // Append to probability history with real time
                     setProbHistory((prev) => {
-                        const timeNum = prev.length > 0 ? parseInt(prev[prev.length - 1].time) + 5 : 0;
+                        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        // dedupe by time
+                        if (prev.length > 0 && prev[prev.length - 1].time === nowTime) {
+                            return prev;
+                        }
                         const newPoint: ProbabilitySnapshot = {
-                            time: `${timeNum}'`,
+                            time: nowTime,
                             home: probs[0] / 100,
                             draw: probs[1] / 100,
                             away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,

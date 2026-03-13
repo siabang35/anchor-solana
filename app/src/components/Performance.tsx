@@ -1,10 +1,77 @@
 'use client';
 
-import React from 'react';
-import { getPerformanceData } from '@/lib/dummy-data';
+import React, { useEffect, useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { apiFetch } from '@/lib/supabase';
+
+// Map to what the backend will eventually provide
+interface PerformanceStats {
+    totalPnl: number;
+    winRate: number;
+    avgReturn: number;
+    totalTrades: number;
+    activePositions: number;
+    accuracyScore: number;
+    bestTrade: number;
+    exposureLevel: number;
+}
 
 export default function Performance() {
-    const perf = getPerformanceData();
+    const { publicKey } = useWallet();
+    const [perf, setPerf] = useState<PerformanceStats | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            if (!publicKey) {
+                setPerf(null);
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // Fetch from the backend
+                const data = await apiFetch<any>('/dashboard/stats', {
+                    headers: { 'x-user-id': publicKey.toString() }
+                });
+                
+                // Map backend to component format (backend currently returns 0s for some)
+                setPerf({
+                    totalPnl: data?.totalWinnings || data?.totalPnl || 0,
+                    winRate: data?.winRate || 0,
+                    avgReturn: data?.avgReturn || 0,
+                    totalTrades: data?.totalPredictions || data?.totalTrades || 0,
+                    activePositions: data?.activePredictions || data?.activePositions || 0,
+                    accuracyScore: data?.accuracyScore || 0,
+                    bestTrade: data?.bestTrade || 0,
+                    exposureLevel: data?.exposureLevel || 0,
+                });
+            } catch (err) {
+                console.error('Failed to load performance stats', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, [publicKey]);
+
+    if (!publicKey) {
+        return (
+            <div className="glass-card card-body animate-in" style={{ textAlign: 'center', padding: '2rem' }}>
+                <span className="icon" style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🔒</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Connect wallet to view performance</span>
+            </div>
+        );
+    }
+
+    if (loading || !perf) {
+        return (
+            <div className="glass-card card-body animate-in" style={{ textAlign: 'center', padding: '2rem' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Loading performance...</span>
+            </div>
+        );
+    }
 
     return (
         <div className="glass-card card-body animate-in">

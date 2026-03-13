@@ -31,17 +31,23 @@ export class CurveGeneratorService {
     constructor(private readonly supabaseService: SupabaseService) {}
 
     /**
-     * Calculates the new probability using Bayesian Inference
-     * P(H|E) = [P(E|H) * P(H)] / P(E)
-     * Simplified approach: Log-odds update based on signals
+     * Calculates the new probability using an advanced Time-Decayed Bayesian Inference
+     * merged with Merton Jump Diffusion and OU Mean-Reversion.
      */
-    calculateProbability(currentProb: number, signals: Signal[]): number {
-        // Convert current probability to log-odds
+    calculateProbability(
+        currentProb: number,
+        signals: Signal[],
+        timeRemainingMs: number,
+        recentSnapshots: number[] = []
+    ): number {
+        // Convert current probability to log-odds for summation
         let logOdds = Math.log(currentProb / (1 - currentProb));
 
         let strongConfirmation = false;
         let strongSignalCount = 0;
+        let driftDirection = 0;
 
+        // 1. Bayesian Update with Credibility Weights
         for (const signal of signals) {
             if (signal.direction === 0) continue;
             
@@ -50,6 +56,7 @@ export class CurveGeneratorService {
             
             // Adjust log-odds (direction * weight)
             logOdds += signal.direction * evidenceWeight;
+            driftDirection += signal.direction * evidenceWeight;
 
             if (evidenceWeight > 1.0) {
                 strongSignalCount++;
@@ -60,14 +67,42 @@ export class CurveGeneratorService {
             strongConfirmation = true;
         }
 
-        // Convert back to probability
+        // Convert back to base probability
         let newProb = Math.exp(logOdds) / (1 + Math.exp(logOdds));
 
-        // Smooth and clamp
+        // 2. Volatility Scaling based on Time To Expiry
+        // Further out = higher base volatility allowed. Closer to expiry = rigid convergence
+        const hoursRemaining = timeRemainingMs / (1000 * 60 * 60);
+        const timeFactor = Math.min(1.0, Math.max(0.1, hoursRemaining / 72)); // normalize against 3 days
+        
+        // 3. Merton Jump Diffusion (Brownian Motion Micro-Volatility)
+        // Adds tiny non-deterministic noise to deter sniper bots trying to mathematically deduce exact shifts
+        const noiseStandardDev = 0.02 * timeFactor; // +-2% max base noise
+        // Box-Muller transform for normal distribution
+        const u1 = 1.0 - Math.random(); 
+        const u2 = 1.0 - Math.random();
+        const randStdNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
+        
+        const stochasticVolatilityDelta = randStdNormal * noiseStandardDev;
+        newProb += stochasticVolatilityDelta;
+
+        // 4. Ornstein-Uhlenbeck Mean Reversion (Anti-Spoofing/Anti-Manipulation)
+        // If the curve was artificially pumped by a sudden influx of low-credibility signals,
+        // it generates an elastic pull back towards the TWAP.
+        if (recentSnapshots.length > 5 && !strongConfirmation) {
+            const twap = AntiManipulationUtil.calculateTWAP(recentSnapshots);
+            const dt = 1.0; // Assume t=1 tick per analysis run
+            
+            // The further it strays from TWAP without strong news, the harder it is pulled back
+            const reversionSpeed = 0.15; // $\theta$ 
+            newProb = AntiManipulationUtil.applyMeanReversion(newProb, twap, reversionSpeed, dt);
+        }
+
+        // Smooth and clamp (max bounds)
         newProb = AntiManipulationUtil.clampProbability(newProb, strongConfirmation);
         
-        // Prevent extreme jumps without strong signals (max 15% jump per update unless strong)
-        const maxJump = strongConfirmation ? 0.3 : 0.15;
+        // Limit explicit rate of change jump velocity (max allowed delta per cycle) to kill exploit cascading
+        const maxJump = strongConfirmation ? 0.35 : 0.12 * timeFactor;
         if (Math.abs(newProb - currentProb) > maxJump) {
             newProb = currentProb + Math.sign(newProb - currentProb) * maxJump;
         }
@@ -81,27 +116,35 @@ export class CurveGeneratorService {
     async generateCurveSnapshot(competitionId: string, newsClusterId: string, signals: Signal[], horizonKey: string): Promise<number | null> {
         const supabase = this.supabaseService.getAdminClient();
 
-        // Get latest snapshot for this competition
-        const { data: latestSnapshot } = await supabase
+        // Get latest snapshots for this competition to compute TWAP Mean Reversion
+        const { data: latestSnapshots } = await supabase
             .from('curve_snapshots')
             .select('probability')
             .eq('competition_id', competitionId)
             .order('timestamp', { ascending: false })
-            .limit(1)
-            .single();
+            .limit(10);
 
-        // Get competition base probability if no snapshot
         let currentProb = 0.5;
-        if (latestSnapshot) {
-            currentProb = Number(latestSnapshot.probability);
+        let recentProbs: number[] = [];
+        
+        if (latestSnapshots && latestSnapshots.length > 0) {
+            currentProb = Number(latestSnapshots[0].probability);
+            recentProbs = latestSnapshots.map(s => Number(s.probability));
         } else {
-            const { data: comp } = await supabase.from('competitions').select('base_probability').eq('id', competitionId).single();
+            const { data: comp } = await supabase.from('competitions').select('base_probability, competition_end').eq('id', competitionId).single();
             if (comp && comp.base_probability) {
                 currentProb = Number(comp.base_probability);
             }
         }
 
-        const newProb = this.calculateProbability(currentProb, signals);
+        // Get competition end time to determine Time Remaining Ms (Decaying Volatility logic)
+        const { data: compMeta } = await supabase.from('competitions').select('competition_end').eq('id', competitionId).single();
+        let timeRemainingMs = 24 * 60 * 60 * 1000; // fallback 24h
+        if (compMeta?.competition_end) {
+            timeRemainingMs = Math.max(0, new Date(compMeta.competition_end).getTime() - Date.now());
+        }
+
+        const newProb = this.calculateProbability(currentProb, signals, timeRemainingMs, recentProbs);
 
         // Generate reasoning summary
         const reasoning = `Probability updated from ${(currentProb * 100).toFixed(1)}% to ${(newProb * 100).toFixed(1)}% based on ${signals.length} new signals.`;

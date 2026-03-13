@@ -15,6 +15,7 @@ export interface LiveFeedItem {
     entity: string;
     category?: string;
     tags?: string[];
+    url?: string;
 }
 
 export interface UseLiveFeedResult {
@@ -76,6 +77,7 @@ function mapToFeedItem(item: any): LiveFeedItem {
         entity: item.category || 'General',
         category: item.category,
         tags: item.tags || [],
+        url: item.url || item.link || '',
     };
 }
 
@@ -127,7 +129,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
             const isCategoryValid = category && category !== 'top' && category !== 'foryou';
             let query = supabase
                 .from('market_data_items')
-                .select('id, title, description, source_name, source, published_at, impact, sentiment, sentiment_score, category, tags')
+                .select('id, title, description, source_name, source, url, link, published_at, impact, sentiment, sentiment_score, category, tags')
                 .eq('is_active', true)
                 .eq('is_duplicate', false);
 

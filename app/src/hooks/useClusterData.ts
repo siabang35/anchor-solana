@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, apiFetch } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface ClusterItem {
@@ -23,8 +23,9 @@ export interface ClusterDataResult {
 }
 
 /**
- * Hook to fetch real-time news cluster data for a competition
+ * Hook to fetch real-time news cluster data
  * Subscribes to Supabase Realtime for live updates
+ * Pass 'all' or undefined as competitionId to fetch globally
  */
 export function useClusterData(competitionId?: string | null): ClusterDataResult {
     const [clusters, setClusters] = useState<ClusterItem[]>([]);
@@ -33,23 +34,24 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
     const [connected, setConnected] = useState(false);
     const channelRef = useRef<RealtimeChannel | null>(null);
 
-    const fetchClusters = useCallback(async () => {
-        if (!competitionId) {
-            setClusters([]);
-            setLoading(false);
-            return;
-        }
+    const isGlobal = !competitionId || competitionId === 'all';
 
+    const fetchClusters = useCallback(async () => {
         setLoading(true);
         setError(null);
 
         try {
-            const { data, error: sbError } = await supabase
+            let query = supabase
                 .from('news_clusters')
                 .select('*')
-                .eq('competition_id', competitionId)
                 .order('created_at', { ascending: false })
                 .limit(20);
+
+            if (!isGlobal) {
+                query = query.eq('competition_id', competitionId);
+            }
+
+            const { data, error: sbError } = await query;
 
             if (sbError) throw sbError;
             setClusters((data as ClusterItem[]) || []);
@@ -58,22 +60,23 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
         } finally {
             setLoading(false);
         }
-    }, [competitionId]);
+    }, [competitionId, isGlobal]);
 
     useEffect(() => {
         fetchClusters();
 
-        if (!competitionId) return;
+        const channelName = isGlobal ? 'clusters-global' : `clusters-${competitionId}`;
+        const filter = isGlobal ? undefined : `competition_id=eq.${competitionId}`;
 
         const channel = supabase
-            .channel(`clusters-${competitionId}`)
+            .channel(channelName)
             .on(
                 'postgres_changes',
                 {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'news_clusters',
-                    filter: `competition_id=eq.${competitionId}`,
+                    ...(filter ? { filter } : {}),
                 },
                 (payload) => {
                     const newCluster = payload.new as unknown as ClusterItem;
@@ -91,7 +94,7 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
                 supabase.removeChannel(channelRef.current);
             }
         };
-    }, [competitionId, fetchClusters]);
+    }, [competitionId, fetchClusters, isGlobal]);
 
     return { clusters, loading, error, connected, refresh: fetchClusters };
 }

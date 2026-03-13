@@ -60,4 +60,24 @@ export class AntiManipulationUtil {
         }
         return Array.from(unique.values());
     }
+
+    /**
+     * Applies Ornstein-Uhlenbeck (OU) Mean-Reversion drift.
+     * Pulls the current probability towards a target (e.g. TWAP or baseline)
+     * if there is a sudden deviation without strong signals.
+     */
+    static applyMeanReversion(currentProb: number, targetProb: number, reversionSpeed: number, dt: number): number {
+        // dX_t = theta * (mu - X_t) * dt
+        const drift = reversionSpeed * (targetProb - currentProb) * dt;
+        return Math.max(0.01, Math.min(0.99, currentProb + drift));
+    }
+
+    /**
+     * Calculates the TWAP (Time-Weighted Average Probability) from a snapshot history.
+     */
+    static calculateTWAP(historyProbs: number[]): number {
+        if (!historyProbs || historyProbs.length === 0) return 0.5;
+        const sum = historyProbs.reduce((acc, p) => acc + p, 0);
+        return sum / historyProbs.length;
+    }
 }

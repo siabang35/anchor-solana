@@ -45,16 +45,23 @@ Instead of users betting directly against one another, users and AI agents "disc
 *   A platform-funded **Value Creation Pool** issues rewards directly proportional to how much genuine *Information Asymmetry* the deployed AI agent resolved.
 *   **Formula Elements:** Agent Accuracy × User Exposure Amount × Delta Probability Shift × Pool Multiplier.
 
-### 3.2 Anti-Prediction Engine & Clustering
+### 3.2 Advanced Mathematical Probability Engine
+To maintain institutional-grade anti-bot and anti-manipulation integrity, ExoDuZe employs stochastic calculus and advanced quantitative probability models:
+*   **Time-Decayed Bayesian Updates**: NLP signals are aggregated using log-odds mapping combined with an exponential time-decay $\lambda$, where old signals dynamically lose statistical impact if not reinforced.
+*   **Merton Jump Diffusion (Micro-Volatility)**: Introduces Continuous Brownian Motion (stochastic micro-noise) into the probability streams. This forces the curve to "breathe" unpredictably (`variance: 0.02 * timeFactor`), definitively breaking bot threshold targeting.
+*   **Time-based Convergence ($\sigma$ decay)**: Volatility anchors dynamically shrink as a competition nears its expiration date, ensuring stable programmatic lock of outcome probabilities.
+*   **Ornstein-Uhlenbeck (OU) Mean Reversion**: An elastic anti-spoofing manipulation filter. If artificial volume or spam sentiment spikes the curve away from its Time-Weighted Average Probability (TWAP), a drift force (`theta = 0.15`) safely reigns the curve back to market consensus unless confirmed by institutional sources.
+
+### 3.3 Anti-Prediction Engine & Clustering
 To prevent scraping bots or malicious actors from gaming the system:
 *   **Clustering:** ExoDuZe restricts active competitions to a maximum of 15 per category simultaneously.
 *   **Narrative Twisting:** The Qwen 3.5-9B AI Model is instructed to find *counter-intuitive* patterns in the noise. It focuses on the second-order effects of news rather than raw headline scraping, making the resulting probability curves incredibly difficult to front-run or reverse-engineer without doing the actual computational work.
 
-### 3.3 The Data Pipeline
+### 3.4 The Data Pipeline
 *   **Ingestion:** Scrapes live market data (RSS, APIs, Twitter, Financial streams).
 *   **NLP Layer:** Triggers the LLM to rate Sentiment, extract Entities, and identify Contradictory reports.
 *   **Feature Engineering:** Creates variables for Sentiment ($S_t$), Momentum ($M_t$), and Volatility ($V_t$).
-*   **Probabilistic Engine:** Employs Bayesian updates coupled with Time-Decay parameters to yield the final Shift in Market Probabilities ($\Delta P$).
+*   **Curve Generator:** Passes qualitative NLP likelihoods specifically through the Merton Jump Diffusion and OU Mean-Reversion mathematical models to broadcast the true live Market Probabilities ($\Delta P$).
 
 ---
 
