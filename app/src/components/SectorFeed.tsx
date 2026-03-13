@@ -206,14 +206,57 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
 export default function SectorFeed({ sector, selectedCompId, onSelectCompetition }: Props) {
     const { competitions, loading, connected } = useCompetitions(sector);
 
-    // Sort: live first, then upcoming, then ended
-    const sorted = [...competitions].sort((a, b) => {
-        const statusOrder = { live: 0, upcoming: 1, ended: 2 };
-        const statusA = statusOrder[getCompetitionStatus(a)];
-        const statusB = statusOrder[getCompetitionStatus(b)];
-        if (statusA !== statusB) return statusA - statusB;
-        return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
-    });
+    let sorted = [...competitions];
+
+    if (sector === 'top') {
+        // Top Markets: sort primarily by prize_pool descending, then active status
+        sorted.sort((a, b) => {
+            const statusOrder = { live: 0, upcoming: 1, ended: 2 };
+            const statusA = statusOrder[getCompetitionStatus(a)];
+            const statusB = statusOrder[getCompetitionStatus(b)];
+            if (statusA !== statusB) return statusA - statusB;
+            // secondary sort by prize pool inside the same status
+            return (b.prize_pool || 0) - (a.prize_pool || 0);
+        });
+    } else if (sector === 'foryou') {
+        // For You: recommendation algorithm (collaborative filtering placeholder / hotness)
+        // Composite score: prize_pool + (status) + pseudo-randomness
+        const userSeed = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('foryou_seed') || Math.random().toString()) : 'default';
+        if (typeof window !== 'undefined' && !localStorage.getItem('foryou_seed')) localStorage.setItem('foryou_seed', userSeed);
+        
+        sorted.sort((a, b) => {
+            const getScore = (comp: Competition) => {
+               let s = 0;
+               if (getCompetitionStatus(comp) === 'live') s += 1000;
+               if (getCompetitionStatus(comp) === 'upcoming') s += 500;
+               s += (comp.prize_pool || 0) * 10;
+               s += (comp.entry_count || 0) * 5;
+               // Add a deterministic pseudo-random factor per competition
+               const hash = comp.id.charCodeAt(0) + comp.id.charCodeAt(comp.id.length - 1);
+               if (hash % 3 === 0) s += 200; // personalized boost
+               return s;
+            };
+            return getScore(b) - getScore(a);
+        });
+    } else if (sector === 'signals') {
+        // Signals: display competitions with the most recent updates
+        sorted.sort((a, b) => {
+            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
+    } else {
+        // Default sorting (latest, category specific)
+        sorted.sort((a, b) => {
+            const statusOrder = { live: 0, upcoming: 1, ended: 2 };
+            const statusA = statusOrder[getCompetitionStatus(a)];
+            const statusB = statusOrder[getCompetitionStatus(b)];
+            if (statusA !== statusB) return statusA - statusB;
+            
+            if (sector === 'latest') {
+                 return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }
+            return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
+        });
+    }
 
     const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
 

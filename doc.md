@@ -1,95 +1,86 @@
-# ExoDuZe: Comprehensive System Documentation
+# ExoDuZe: Comprehensive System Architecture & Documentation
 
-## 1. Overview
-ExoDuZe is a decentralized, AI-driven probability trading platform built on the Solana blockchain. It redefines traditional trading platforms by eliminating Zero-Sum mechanics and shifting to a Value Creation model. 
+## 1. Executive Overview
+ExoDuZe is a decentralized, skill-based AI probability competition platform built on the **Solana** blockchain. It disrupts traditional zero-sum trading mechanics by introducing a **Value Creation Pool** model. 
 
-Participants in ExoDuZe build or deploy autonomous **AI Forecaster Agents** that use Natural Language Processing (NLP) over live data streams to predict the probabilities of clustered market outcomes. Rewards are generated transparently based on the accuracy of these market shifts.
-
----
-
-## 2. Platform Architecture
-
-### 2.1 Technical Layers
-ExoDuZe uses a modern tiered architecture emphasizing real-time processing and blockchain transparency.
-
-1.  **Frontend (Next.js 16 + React)**
-    *   **Purpose:** Delivers a highly responsive, mobile-first Trading interface.
-    *   **Key Modules:** 
-        *   `DeployAgent`: An expandable mobile-drawer for AI setup.
-        *   `DataFeeds`: Text-based, optimized real-time sentiment streaming.
-        *   `Category Layouts`: Market lists split into Crypto, Finance, Tech, etc.
-    *   **State Management:** Real-time subscriptions via Supabase client, Wallet connection via `@solana/wallet-adapter`.
-
-2.  **Backend (NestJS + Supabase)**
-    *   **Purpose:** Serves as the high-security middleware handling rate-timing, REST endpoints, and WebSockets.
-    *   **Key Modules:** 
-        *   `AgentsService`: Deploys Forecasters, handles RLS bypassing via Admin Client internally, tracks usage quotas.
-        *   `ProbabilityEngine`: Aggregates sentiment data, fires Bayesian updates, clusters markets dynamically.
-    *   **Security:** Enforces Anti-Throttling, Payload Analysis, Chunking protections, and JWT Guards.
-
-3.  **Database Layer (PostgreSQL / Supabase)**
-    *   **Purpose:** The central data source of truth.
-    *   **Security:** Strict Row-Level Security (RLS) ensuring users can only manipulate their personal deployed agents and entries. Service Roles manage background aggregation tasks.
-
-4.  **Smart Contract Layer (Anchor + Solana Devnet)**
-    *   **Purpose:** Immutable state of truth, escrow for the Value Creation Pool.
-    *   **Key Programs:** Initializes markets, takes positions, registers agent PDAs, and settles rewards based on Oracle inputs.
+Participants in ExoDuZe build, prompt, and deploy autonomous **AI Forecaster Agents** that utilize Natural Language Processing (NLP) over live, real-time data streams to dynamically predict probabilities of clustered market outcomes. Rewards are transparently distributed based on the accuracy of these market shifts and the agent's predictive contribution to the platform's consensus.
 
 ---
 
-## 3. Core Mechanisms
+## 2. Platform Architecture & Tech Stack
+
+ExoDuZe employs a modern tiered architecture emphasizing real-time data synchronization, dynamic algorithmic sorting, and blockchain transparency.
+
+### 2.1 Frontend (Next.js 16 + React)
+*   **Purpose:** Delivers a highly responsive, glassmorphism-styled, mobile-first interface.
+*   **Key Interface Modules:** 
+    *   **Sector Navigation & Meta-Tabs:** Advanced real-time views segmented into `Top Markets` (sorted by Prize Pool), `For You` (Custom Recommendation Algorithm), and `Signals` (Pure Real-Time Data Stream feeds).
+    *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
+    *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
+    *   **Dashboard & Portfolio Component:** Visualizes active Agent Positions, Unrealized P&L, Leaderboards, and Value Creation Metrics.
+*   **State Management:** Real-time array unshifting via `@supabase/supabase-js` subscriptions, global caching via custom hooks, and decentralized wallet state via `@solana/wallet-adapter-react`.
+
+### 2.2 Backend (NestJS + Supabase REST)
+*   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
+*   **Key Modules:** 
+    *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets to internal Supabase UUIDs seamlessly.
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`).
+    *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
+*   **Security & Guarding:** Enforces Anti-Throttling, payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
+
+### 2.3 Database Layer (PostgreSQL / Supabase)
+*   **Purpose:** High-performance persistence layer with Real-Time pub/sub enabled.
+*   **Security:** Rigid Row-Level Security (RLS) ensuring users interact strictly with their authorized agents. Internal Service Roles (`SupabaseService.getAdminClient`) are strictly siloed for system-wide aggregation tasks like wallet auto-provisioning.
+*   **Core Tables:** `competitions`, `agents`, `market_data_items`, `profiles`, `wallet_addresses`.
+
+### 2.4 Smart Contract Layer (Anchor + Solana Devnet)
+*   **Purpose:** Immutable settlement engine and decentralized escrow for the Value Creation Pool.
+*   **Key Programs:** Initializes markets, registers Agent PDAs (Program Derived Addresses), locks staking SOL natively via frontend RPCs, and settles competitive rewards.
+
+---
+
+## 3. Core Analytical Mechanisms
 
 ### 3.1 Non-Zero-Sum Value Creation Pool
-Instead of users betting directly against one another, users and AI agents "discover" accurate information. 
+Instead of players betting directly against localized liquidity pools, users deploy agents to "discover" accurate information. 
+*   A platform-funded **Value Creation Pool** issues rewards proportionally to the *Information Asymmetry* the deployed AI agent successfully resolved.
+*   **Staking Metric:** Users can inject an optional SOL entry stake when deploying an agent. A base safety net ensures a 50% refund natively on loss, promoting skill-based forecasting over pure gambling.
 
-*   A platform-funded **Value Creation Pool** issues rewards directly proportional to how much genuine *Information Asymmetry* the deployed AI agent resolved.
-*   **Formula Elements:** Agent Accuracy × User Exposure Amount × Delta Probability Shift × Pool Multiplier.
+### 3.2 Advanced Stochastic Probability Engine
+To maintain institutional-grade anti-bot and anti-manipulation integrity, the backend employs stochastic calculus:
+*   **Time-Decayed Bayesian Updates**: NLP signals are aggregated using log-odds mapping combined with an exponential time-decay $\lambda$. Older signals dynamically lose statistical impact unless reinforced.
+*   **Merton Jump Diffusion (Micro-Volatility)**: Introduces Continuous Brownian Motion into probability streams. This ensures the curve fluctuates unpredictably (`variance: 0.02 * timeFactor`), definitively breaking static bot threshold targeting.
+*   **Time-based Convergence ($\sigma$ decay)**: Volatility anchors shrink as a competition nears expiration, stabilizing the programmatic lock of resulting outcome probabilities.
+*   **Ornstein-Uhlenbeck (OU) Mean Reversion**: An elastic anti-spoofing filter. If anomalous signals spike the curve away from its Time-Weighted Average Probability (TWAP), a drift force safely retracts the computation back to market consensus.
 
-### 3.2 Advanced Mathematical Probability Engine
-To maintain institutional-grade anti-bot and anti-manipulation integrity, ExoDuZe employs stochastic calculus and advanced quantitative probability models:
-*   **Time-Decayed Bayesian Updates**: NLP signals are aggregated using log-odds mapping combined with an exponential time-decay $\lambda$, where old signals dynamically lose statistical impact if not reinforced.
-*   **Merton Jump Diffusion (Micro-Volatility)**: Introduces Continuous Brownian Motion (stochastic micro-noise) into the probability streams. This forces the curve to "breathe" unpredictably (`variance: 0.02 * timeFactor`), definitively breaking bot threshold targeting.
-*   **Time-based Convergence ($\sigma$ decay)**: Volatility anchors dynamically shrink as a competition nears its expiration date, ensuring stable programmatic lock of outcome probabilities.
-*   **Ornstein-Uhlenbeck (OU) Mean Reversion**: An elastic anti-spoofing manipulation filter. If artificial volume or spam sentiment spikes the curve away from its Time-Weighted Average Probability (TWAP), a drift force (`theta = 0.15`) safely reigns the curve back to market consensus unless confirmed by institutional sources.
-
-### 3.3 Anti-Prediction Engine & Clustering
-To prevent scraping bots or malicious actors from gaming the system:
-*   **Clustering:** ExoDuZe restricts active competitions to a maximum of 15 per category simultaneously.
-*   **Narrative Twisting:** The Qwen 3.5-9B AI Model is instructed to find *counter-intuitive* patterns in the noise. It focuses on the second-order effects of news rather than raw headline scraping, making the resulting probability curves incredibly difficult to front-run or reverse-engineer without doing the actual computational work.
-
-### 3.4 The Data Pipeline
-*   **Ingestion:** Scrapes live market data (RSS, APIs, Twitter, Financial streams).
-*   **NLP Layer:** Triggers the LLM to rate Sentiment, extract Entities, and identify Contradictory reports.
-*   **Feature Engineering:** Creates variables for Sentiment ($S_t$), Momentum ($M_t$), and Volatility ($V_t$).
-*   **Curve Generator:** Passes qualitative NLP likelihoods specifically through the Merton Jump Diffusion and OU Mean-Reversion mathematical models to broadcast the true live Market Probabilities ($\Delta P$).
+### 3.3 Dynamic Interface Algorithms
+*   **Top Markets Sorting:** Ranks active platform competitions globally based strictly on cumulative `prize_pool` and live volume.
+*   **For You Recommendations:** A localized scoring composite algorithm combining active status weighting, entry counts, and a personalized pseudo-random user-seed to provide tailored, diverse market feeds per user.
+*   **Signals Live Feed:** Exclusively routes pure, system-wide real-time news insertion events without category blockage.
 
 ---
 
-## 4. AI Agent Deployment Lifecycle
+## 4. Workflows & User Lifecycles
 
-### 4.1 Deployment Flow
-1.  **Selection:** A user selects an underlying category (e.g., Finance) and a specific competition market.
-2.  **Prompting:** The user injects a custom `System Prompt` (Knowledge Base) alongside the Qwen 9B base model instruction.
-3.  **Validation:** The Backend checks the user's quota (Max 7 free deploys) and passes the model parameters.
-4.  **Database Storage:** The `deployForecaster` service inserts the agent into Supabase. (Backend handles this securely via `Service Role` bypassing complex user-session RLS hurdles).
-5.  **Active Simulation:** The Agent runs passively, polling data streams against its system prompt to issue `brier_scores` and predictive insights.
+### 4.1 Wallet Onboarding (Auto-Provisioning)
+1.  **Connection:** User links a Solana Phantom/Backpack wallet.
+2.  **Resolution interception:** When the UI hits a secure backend endpoint (like Quota checking or Agent Deployment), the strict `AgentsService.resolveUserId()` middleware runs.
+3.  **Silent Provisioning:** If the Solana Public Key is unrecognized, the backend securely bypasses RLS utilizing Admin Clients to automatically register a new Supabase Auth User, mint a `profiles` entry, and link the `wallet_addresses` row immutably.
+4.  **Instant Delivery:** The user is immediately granted the Base Free Deployment Quota and logged in without manual sign-up friction.
 
----
-
-## 5. Security Protocols
-
-*   **Row-Level Security (RLS):** Policies are rigorously set on Supabase tables (`agents`, `agent_wagers`, `agent_predictions`). A user can strictly SELECT, UPDATE, or INSERT their own data. Service Roles execute system-wide operations safely.
-*   **Input Validation:** NestJS class-validators sanitize all AI deployment prompts to prevent prompt-injection hacks designed to output malicious SQL or scripts.
-*   **Rate Limits:** Strict endpoints preventing mass-deployment spamming inside the AI Competition modules.
+### 4.2 AI Agent Deployment Lifecycle
+1.  **Selection:** The user chooses a dynamic Market from Sector Feeds.
+2.  **Prompt Engineering:** The user dictates a `System Prompt` driving the analytical lens of the Qwen 9B base model.
+3.  **Stake Allocation:** The user optionally designates a native Devnet Solana Stake Amount for competitive entry.
+4.  **Deployment:** The frontend constructs the payload, securely queries `/agents/wager` and the on-chain instructions, logging real-time transaction feedback in the UI.
+5.  **Simulation:** The Agent passively ingests scraped `market_data_items`, adjusts probabilities, and competes for Leaderboard rankings.
 
 ---
 
-## 6. Smart Contract Reference (Solana Anchor)
-*   **`initialize_platform`**: Prepares the vault for Value Pool issuance.
-*   **`create_market`** & **`settle_market`**: Opens and closes the bounds for probability shifts.
-*   **`deploy_agent`**: Creates a PDA (Program Derived Address) binding the User Wallet to their deployed Agent profile for on-chain verifiable track records. 
-*   **`take_position`** & **`claim_reward`**: Standard interactions against the pool based on resolved probabilities.
+## 5. Security & Fallback Adjustments
+*   **Graceful 401 Interception:** If a user accesses Dashboard metrics with a localized wallet but lacks a synchronized server JWT session, UI components (like `AgentPosition`) elegantly default to null/empty states instead of crashing React Hydration bounds.
+*   **Input Validation:** `@nestjs/class-validator` routines prevent malicious prompt-injection payloads during API ingestion.
+*   **Realtime Integrity:** Frontend real-time hooks explicitly fall back to standard REST fetching if WebSocket connections drop.
 
 ---
-
-*(End of ExoDuZe System Documentation)*
+*(End of System Documentation)*

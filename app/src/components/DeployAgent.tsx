@@ -75,6 +75,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const [direction, setDirection] = useState<'UP' | 'DOWN'>('UP');
     const [strategy, setStrategy] = useState('');
     const [riskLevel, setRiskLevel] = useState(3);
+    const [wagerAmount, setWagerAmount] = useState<string>('');
     const [modelTierId, setModelTierId] = useState('free');
     const [step, setStep] = useState<BuilderStep>('config');
 
@@ -196,6 +197,28 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 body: JSON.stringify(body),
             });
 
+            // Submits Wager
+            if (parseFloat(wagerAmount) > 0 && marketIds.length > 0) {
+                try {
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Staking ${wagerAmount} SOL for competition entry... (50% refund on loss)` }]);
+                    await apiFetch('/agents/wager', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                        },
+                        body: JSON.stringify({
+                            agent_id: result.id,
+                            competition_id: marketIds[0],
+                            wager_amount: parseFloat(wagerAmount)
+                        }),
+                    });
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `✅ Stake confirmed on devnet!` }]);
+                } catch (wagerErr: any) {
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ Staking failed: ${wagerErr.message}` }]);
+                }
+            }
+
             setDeployedAgent(result);
             setLogs(prev => [
                 ...prev,
@@ -206,6 +229,11 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 { timestamp: Date.now() + 500, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
             ]);
             setStep('active');
+
+            // Fire event so ProbabilityCurve can draw the annotation line
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: result.name } }));
+            }
         } catch (err: any) {
             setError(err.message || 'Deployment failed');
             setLogs(prev => [
@@ -228,12 +256,17 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 total_pnl: 0,
                 win_rate: 0,
                 deployed_at: new Date().toISOString(),
-            });
+            } as DeployedAgentResponse);
             setStep('active');
+
+            // Fire event so ProbabilityCurve can draw the annotation line (Simulated)
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: agentName.trim() } }));
+            }
         } finally {
             setDeploying(false);
         }
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, selectedMarket, agentTypes, categoryId, marketIds, quota]);
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, wagerAmount, selectedMarket, agentTypes, categoryId, marketIds, quota]);
 
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
@@ -631,6 +664,26 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     </div>
                 )}
 
+                {/* Wager Amount UI */}
+                {marketIds.length > 0 && (
+                    <div className="form-group">
+                        <label className="form-label">Competition Entry Stake (SOL) — Optional</label>
+                        <input
+                            type="number"
+                            className="form-select"
+                            placeholder="e.g. 0.5 (You get 50% back if agent loses)"
+                            value={wagerAmount}
+                            onChange={(e) => setWagerAmount(e.target.value)}
+                            min={0}
+                            step={0.1}
+                            style={{ fontFamily: 'var(--font-sans)', padding: '0.6rem' }}
+                        />
+                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                            Stake SOL on your agent's performance. The prize pool is distributed to the top predictors!
+                        </div>
+                    </div>
+                )}
+
                 {/* Model Tier */}
                 <div className="form-group">
                     <label className="form-label">Model Tier</label>
@@ -787,10 +840,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             {deployedAgent && (
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                     {[
-                        { label: 'Trades', value: `${deployedAgent.total_trades}`, color: 'var(--text-primary)' },
-                        { label: 'P&L', value: `${deployedAgent.total_pnl >= 0 ? '+' : ''}${deployedAgent.total_pnl.toFixed(3)}`, color: deployedAgent.total_pnl >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' },
-                        { label: 'Accuracy', value: `${deployedAgent.accuracy_score.toFixed(0)}%`, color: 'var(--accent-cyan)' },
-                        { label: 'Deploy #', value: `${deployedAgent.deploy_number}`, color: 'var(--accent-amber)' },
+                        { label: 'Trades', value: `${deployedAgent.total_trades || 0}`, color: 'var(--text-primary)' },
+                        { label: 'P&L', value: `${(deployedAgent.total_pnl || 0) >= 0 ? '+' : ''}${(deployedAgent.total_pnl || 0).toFixed(3)}`, color: (deployedAgent.total_pnl || 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' },
+                        { label: 'Accuracy', value: `${(deployedAgent.accuracy_score || 0).toFixed(0)}%`, color: 'var(--accent-cyan)' },
+                        { label: 'Deploy #', value: `${deployedAgent.deploy_number || 1}`, color: 'var(--accent-amber)' },
                     ].map(s => (
                         <div key={s.label} style={{
                             flex: 1, minWidth: 70, textAlign: 'center', padding: '0.45rem',

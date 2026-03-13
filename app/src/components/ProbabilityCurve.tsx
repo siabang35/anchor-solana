@@ -15,10 +15,11 @@ import {
     ChartOptions,
     ScriptableContext,
 } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import type { ProbabilitySnapshot } from '@/hooks/useOnChainMarket';
 import type { Competition } from '@/hooks/useCompetitions';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, annotationPlugin);
 
 interface Props {
     competition?: Competition | null;
@@ -28,6 +29,19 @@ interface Props {
 
 export default function ProbabilityCurve({ competition, probHistory, onProbUpdate }: Props) {
     const chartRef = useRef<any>(null);
+    const [deployments, setDeployments] = React.useState<{ name: string; timeLabel: string }[]>([]);
+
+    React.useEffect(() => {
+        const handleAgentDeploy = (e: any) => {
+            if (e.detail && e.detail.name) {
+                // Determine the latest X-axis label available on the chart
+                const latestLabel = chartRef.current?.data?.labels?.slice(-1)[0] || new Date().toLocaleTimeString();
+                setDeployments(prev => [...prev, { name: e.detail.name, timeLabel: latestLabel }]);
+            }
+        };
+        window.addEventListener('agentDeployed', handleAgentDeploy);
+        return () => window.removeEventListener('agentDeployed', handleAgentDeploy);
+    }, []);
 
     // Use provided history or empty
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
@@ -167,6 +181,25 @@ export default function ProbabilityCurve({ competition, probHistory, onProbUpdat
             intersect: false,
         },
         plugins: {
+            annotation: {
+                annotations: deployments.map((dep, i) => ({
+                    type: 'line',
+                    scaleID: 'x',
+                    value: dep.timeLabel,
+                    borderColor: 'var(--accent-cyan)',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    label: {
+                        content: `🤖 ${dep.name}`,
+                        display: true,
+                        position: 'start',
+                        backgroundColor: 'rgba(6, 182, 212, 0.9)',
+                        color: 'white',
+                        font: { family: 'Inter', size: 10, weight: 'bold' },
+                        yAdjust: i * 20, // offset multiple deploys slightly
+                    }
+                }))
+            },
             legend: { display: false },
             tooltip: {
                 backgroundColor: 'rgba(7, 8, 15, 0.96)',

@@ -102,7 +102,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
 
         try {
             // Try backend API first
-            const isCategoryValid = category && category !== 'top' && category !== 'foryou';
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             const url = isCategoryValid
                 ? `${API_BASE_URL}/markets/feed?category=${category}&limit=${limit}`
                 : `${API_BASE_URL}/markets/feed?limit=${limit}`;
@@ -126,7 +126,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
 
         // Fallback: fetch directly from Supabase
         try {
-            const isCategoryValid = category && category !== 'top' && category !== 'foryou';
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('market_data_items')
                 .select('id, title, description, source_name, source, url, link, published_at, impact, sentiment, sentiment_score, category, tags')
@@ -168,7 +168,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 },
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     const newRow = payload.new as any;
-                    const isCategoryValid = category && category !== 'top' && category !== 'foryou';
+                    const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
                     const matchesCategory = !isCategoryValid || newRow.category === category;
 
                     if (newRow.is_active !== false && newRow.is_duplicate !== true && matchesCategory) {

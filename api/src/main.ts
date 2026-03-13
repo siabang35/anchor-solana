@@ -73,6 +73,7 @@ async function bootstrap() {
             'Authorization',
             'X-Requested-With',
             'X-Request-ID',
+            'X-User-ID',
             'Cache-Control',  // Required for frontend cache bypass
             'Pragma',         // Required for frontend cache bypass
         ],

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../database/supabase.service.js';
 import {
@@ -26,10 +26,70 @@ export class AgentsService {
         private readonly configService: ConfigService,
     ) {}
 
+    private async resolveUserId(identifier: string): Promise<string | null> {
+        if (!identifier) return null;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+        if (isUuid) return identifier;
+
+        const supabase = this.supabaseService.getAdminClient();
+        const { data: wData } = await supabase.from('wallet_addresses').select('user_id').eq('address', identifier.toLowerCase()).single();
+        if (wData?.user_id) return wData.user_id;
+
+        const { data: profiles } = await supabase.from('profiles').select('id, wallet_addresses');
+        if (profiles) {
+            const found = profiles.find((p) => p.wallet_addresses?.some((w: any) => w.address?.toLowerCase() === identifier.toLowerCase()));
+            if (found) return found.id;
+        }
+
+        // Auto-provision a user if it's a valid Base58 Solana address structure (roughly 32-44 characters)
+        if (identifier.length >= 32 && identifier.length <= 44 && !identifier.includes('@')) {
+            try {
+                this.logger.log(`Auto-provisioning wallet user for: ${identifier}`);
+                const randomPassword = Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+                    email: `${identifier.slice(0, 8)}_${Date.now()}@wallet.exoduze.app`,
+                    password: randomPassword,
+                    email_confirm: true,
+                    user_metadata: {
+                        wallet_address: identifier,
+                        chain: 'solana',
+                    },
+                });
+
+                if (authData?.user) {
+                    const newUserId = authData.user.id;
+                    // Create Profile
+                    await supabase.from('profiles').insert({
+                        id: newUserId,
+                        wallet_addresses: [{ address: identifier.toLowerCase(), chain: 'solana', isPrimary: true }]
+                    });
+                    // Insert Wallet Address Record
+                    await supabase.from('wallet_addresses').insert({
+                        user_id: newUserId,
+                        address: identifier.toLowerCase(),
+                        chain: 'solana',
+                        is_primary: true
+                    });
+                    this.logger.log(`Successfully provisioned dynamic user UUID [${newUserId}] for wallet [${identifier}]`);
+                    return newUserId;
+                } else if (authError) {
+                    this.logger.warn(`Auth Error resolving user auto-provision: ${authError.message}`);
+                }
+            } catch (e) {
+                this.logger.error(`Auto-provision failed for ${identifier}`, e);
+            }
+        }
+        
+        return null;
+    }
+
     /**
      * Deploy a new AI agent (checks quota + optional on-chain)
      */
-    async deploy(userId: string, dto: DeployAgentDto): Promise<AgentResponseDto> {
+    async deploy(rawUserId: string, dto: DeployAgentDto): Promise<AgentResponseDto> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Wallet not connected or missing User ID');
+
         const supabase = this.supabaseService.getClient();
 
         // 1. Check quota
@@ -120,7 +180,10 @@ export class AgentsService {
     /**
      * Deploy an autonomous forecasting AI agent
      */
-    async deployForecaster(userId: string, dto: DeployForecastingAgentDto): Promise<any> {
+    async deployForecaster(rawUserId: string, dto: DeployForecastingAgentDto): Promise<any> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Wallet not connected or missing User ID');
+        
         // Use admin client to bypass RLS since the backend already authenticated the user
         const supabase = this.supabaseService.getAdminClient();
 
@@ -177,11 +240,13 @@ export class AgentsService {
      * List user's agents
      */
     async listByUser(
-        userId: string,
+        rawUserId: string,
         status?: string,
         limit: number = 20,
         offset: number = 0,
     ): Promise<{ data: AgentResponseDto[]; total: number }> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) return { data: [], total: 0 };
         const supabase = this.supabaseService.getClient();
 
         let query = supabase
@@ -211,7 +276,9 @@ export class AgentsService {
     /**
      * Get agent by ID
      */
-    async findById(agentId: string, userId: string): Promise<AgentResponseDto> {
+    async findById(agentId: string, rawUserId: string): Promise<AgentResponseDto> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getClient();
 
         const { data, error } = await supabase
@@ -257,7 +324,16 @@ export class AgentsService {
     /**
      * Get user's deploy quota
      */
-    async getQuota(userId: string): Promise<AgentQuotaResponseDto> {
+    async getQuota(rawUserId: string): Promise<AgentQuotaResponseDto> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) {
+            return {
+                deploys_used: 0,
+                max_deploys: MAX_FREE_DEPLOYS,
+                deploys_remaining: 0,
+            };
+        }
+
         const supabase = this.supabaseService.getClient();
 
         const { count, error } = await supabase
@@ -283,9 +359,11 @@ export class AgentsService {
      */
     async toggleStatus(
         agentId: string,
-        userId: string,
+        rawUserId: string,
         newStatus: 'active' | 'paused',
     ): Promise<AgentResponseDto> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getClient();
 
         const { data, error } = await supabase
@@ -313,7 +391,9 @@ export class AgentsService {
     /**
      * Terminate (soft-delete) an agent — frees quota slot
      */
-    async terminate(agentId: string, userId: string): Promise<void> {
+    async terminate(agentId: string, rawUserId: string): Promise<void> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getClient();
 
         const { data, error } = await supabase
@@ -347,11 +427,13 @@ export class AgentsService {
     /**
      * Create a wager between two agents on a competition
      */
-    async createWager(userId: string, data: {
+    async createWager(rawUserId: string, data: {
         agent_id: string;
         competition_id: string;
         wager_amount: number;
     }): Promise<any> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getClient();
 
         // Verify agent belongs to user
@@ -427,7 +509,9 @@ export class AgentsService {
     /**
      * Get predictions for an agent
      */
-    async getAgentPredictions(agentId: string, userId: string, limit: number = 20): Promise<any[]> {
+    async getAgentPredictions(agentId: string, rawUserId: string, limit: number = 20): Promise<any[]> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) return [];
         const supabase = this.supabaseService.getClient();
 
         // Verify ownership
@@ -462,9 +546,11 @@ export class AgentsService {
      */
     async getLogs(
         agentId: string,
-        userId: string,
+        rawUserId: string,
         limit: number = 50,
     ): Promise<any[]> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) return [];
         const supabase = this.supabaseService.getClient();
 
         // Verify ownership

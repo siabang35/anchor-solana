@@ -34,8 +34,15 @@ export default function AgentPosition() {
                 
                 // Set positions if available
                 setPositions(data?.positions || []);
-            } catch (err) {
-                console.error('Failed to load portfolio positions', err);
+            } catch (err: any) {
+                // If the user hasn't fully registered/authenticated with a JWT
+                // the dashboard endpoints will return 401 Unauthorized.
+                // We gracefully fallback to an empty portfolio here without crashing.
+                if (err.message && err.message.includes('401')) {
+                    setPositions([]);
+                } else {
+                    console.error('Failed to load portfolio positions', err);
+                }
             } finally {
                 setLoading(false);
             }

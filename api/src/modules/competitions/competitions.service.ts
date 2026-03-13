@@ -59,7 +59,7 @@ export class CompetitionsService {
             .order('competition_start', { ascending: true })
             .limit(limit);
 
-        if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest') {
+        if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest' && sector !== 'signals') {
             query = query.eq('sector', sector);
         }
 

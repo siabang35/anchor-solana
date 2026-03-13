@@ -57,11 +57,9 @@ export default function Home() {
       <main className="main-container">
         {/* Anti-Zero-Sum Banner */}
         <div className="principle-banner animate-in">
-          <h2>🏦 Platform Prinsip: Anti-Zero-Sum</h2>
+          <h2>🏦 Anti-Zero-Sum Ecosystem</h2>
           <p>
-            Profit berasal dari <strong>Value Creation Pool</strong> — bukan dari loss trader lain.
-            Kompetisi berbasis kualitas AI prompting &amp; analisis sentimen.
-            Reward berdasarkan kontribusi akurasi informasi ke pasar.
+            Rewards originate from a <strong>Value Creation Pool</strong>. This is a skill-based competition driven by AI prompting and sentiment analysis quality, rewarding the most accurate predictive contributions to the market.
           </p>
         </div>
 
