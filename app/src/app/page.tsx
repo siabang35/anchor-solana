@@ -4,6 +4,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useCompetitions } from '@/hooks/useCompetitions';
 import { useOnChainMarket } from '@/hooks/useOnChainMarket';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
@@ -19,10 +21,19 @@ const Performance = dynamic(() => import('@/components/Performance'), { ssr: fal
 const Leaderboard = dynamic(() => import('@/components/Leaderboard'), { ssr: false });
 const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), { ssr: false });
 
-export default function Home() {
+function HomeInner() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeSector, setActiveSector] = useState('top');
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
+
+  // Agent data for neural lines on curve
+  const { publicKey } = useWallet();
+  const {
+    forecasters,
+    pauseForecaster,
+    resumeForecaster,
+    stopForecaster,
+  } = useRealtimeAgents(publicKey?.toString() || null);
 
   // Real competition data from backend + Supabase realtime
   const { competitions, activeCompetition: defaultActiveComp, loading: compLoading } = useCompetitions(activeSector);
@@ -51,8 +62,18 @@ export default function Home() {
     ? Math.floor(new Date(activeCompetition.competition_end).getTime() / 1000)
     : Math.floor(Date.now() / 1000) + 7200;
 
+  // Filter forecasters: show only agents enrolled in the active competition
+  // OR enrolled in any competition within the currently viewed sector
+  const filteredForecasters = forecasters.filter(f => {
+    if (!f.competitions || f.competitions.length === 0) return false;
+    return f.competitions.some((entry: any) =>
+      entry.competition_id === activeCompetition?.id ||
+      (entry.sector && activeSector !== 'top' && entry.sector.toLowerCase() === activeSector.toLowerCase())
+    );
+  });
+
   return (
-    <WalletProvider>
+    <>
       <Header theme={theme} onToggleTheme={toggleTheme} />
       <main className="main-container">
         {/* Anti-Zero-Sum Banner */}
@@ -70,6 +91,11 @@ export default function Home() {
         <ProbabilityCurve
           competition={activeCompetition}
           probHistory={probHistory}
+          forecasters={filteredForecasters}
+          onPauseAgent={pauseForecaster}
+          onResumeAgent={resumeForecaster}
+          onStopAgent={stopForecaster}
+          onDeleteAgent={stopForecaster}
         />
 
         {/* Competition Timer — real data from backend */}
@@ -101,6 +127,14 @@ export default function Home() {
           <Leaderboard />
         </div>
       </main>
+    </>
+  );
+}
+
+export default function Home() {
+  return (
+    <WalletProvider>
+      <HomeInner />
     </WalletProvider>
   );
 }

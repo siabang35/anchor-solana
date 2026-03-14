@@ -121,11 +121,19 @@ export class AgentRunnerService {
             // Fetch competition details
             const { data: comp } = await supabase
                 .from('competitions')
-                .select('id, title, description, sector, competition_end')
+                .select('id, title, description, sector, competition_end, status')
                 .eq('id', entry.competition_id)
                 .single();
 
             if (comp) {
+                // Auto-terminate if competition has ended
+                if (comp.status === 'settled' || comp.status === 'resolving') {
+                    this.logger.log(`🏁 Competition ${comp.id} ended. Terminating agent ${agent.id}`);
+                    await supabase.from('agents').update({ status: 'terminated' }).eq('id', agent.id);
+                    await supabase.from('agent_competition_entries').update({ status: 'completed' }).eq('agent_id', agent.id).eq('competition_id', comp.id);
+                    return;
+                }
+
                 await this.generatePrediction(agent, comp);
             }
         }

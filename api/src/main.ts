@@ -136,6 +136,31 @@ async function bootstrap() {
         },
     }));
 
+    // Rate limiting for public agent endpoints (anti-scraping)
+    const publicAgentLimiter = rateLimit({
+        windowMs: 60_000, // 1 minute
+        max: 30,          // 30 req/min — enough for UI polling, blocks scrapers
+        message: {
+            statusCode: 429,
+            message: 'Too many requests to public endpoint. Please slow down.',
+            error: 'Too Many Requests',
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (req) => {
+            const forwardedFor = req.headers['x-forwarded-for'];
+            if (forwardedFor) {
+                const ips = Array.isArray(forwardedFor)
+                    ? forwardedFor[0]
+                    : forwardedFor.split(',')[0];
+                return ips.trim();
+            }
+            return req.ip || 'unknown';
+        },
+    });
+    app.use('/api/v1/agents/competitors', publicAgentLimiter);
+    app.use('/api/v1/agents/leaderboard', publicAgentLimiter);
+
     // ===================
     // Global Pipes
     // ===================

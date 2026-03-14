@@ -237,6 +237,154 @@ export class AgentsService {
     }
 
     /**
+     * List user's forecaster agents (from `agents` table)
+     */
+    async listForecasters(
+        rawUserId: string,
+        status?: string,
+        limit: number = 20,
+        offset: number = 0,
+    ): Promise<{ data: any[]; total: number }> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) return { data: [], total: 0 };
+        const supabase = this.supabaseService.getAdminClient();
+
+        let query = supabase
+            .from('agents')
+            .select('*, agent_competition_entries(competition_id, brier_score, status, competitions(title, sector))', { count: 'exact' })
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+        if (status) {
+            query = query.eq('status', status);
+        }
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            this.logger.error(`Failed to list forecaster agents: ${error.message}`);
+            return { data: [], total: 0 };
+        }
+
+        // Enrich with prompt usage count
+        const enriched = await Promise.all(
+            (data || []).map(async (agent: any) => {
+                const { count: promptCount } = await supabase
+                    .from('agent_predictions')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('agent_id', agent.id);
+
+                return {
+                    ...agent,
+                    prompts_used: promptCount || 0,
+                    max_free_prompts: MAX_FREE_DEPLOYS,
+                    competitions: (agent.agent_competition_entries || []).map((e: any) => ({
+                        competition_id: e.competition_id,
+                        brier_score: e.brier_score,
+                        status: e.status,
+                        title: e.competitions?.title,
+                        sector: e.competitions?.sector,
+                    })),
+                };
+            }),
+        );
+
+        return { data: enriched, total: count || 0 };
+    }
+
+    /**
+     * Toggle forecaster agent status (active/paused)
+     */
+    async toggleForecasterStatus(
+        agentId: string,
+        rawUserId: string,
+        newStatus: 'active' | 'paused',
+    ): Promise<any> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('agents')
+            .update({ status: newStatus })
+            .eq('id', agentId)
+            .eq('user_id', userId)
+            .select('*')
+            .single();
+
+        if (error || !data) {
+            throw new NotFoundException('Forecaster agent not found');
+        }
+
+        this.logger.log(`Forecaster ${agentId} status changed to ${newStatus} by user ${userId}`);
+        return data;
+    }
+
+    /**
+     * Terminate a forecaster agent (frees quota slot)
+     */
+    async terminateForecaster(agentId: string, rawUserId: string): Promise<void> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('agents')
+            .update({ status: 'terminated' })
+            .eq('id', agentId)
+            .eq('user_id', userId)
+            .select('id')
+            .single();
+
+        if (error || !data) {
+            throw new NotFoundException('Forecaster agent not found');
+        }
+
+        // Also deactivate competition entries
+        await supabase
+            .from('agent_competition_entries')
+            .update({ status: 'terminated' })
+            .eq('agent_id', agentId);
+
+        this.logger.log(`Forecaster ${agentId} terminated by user ${userId}`);
+    }
+
+    /**
+     * Delete a forecaster agent permanently
+     */
+    async deleteForecaster(agentId: string, rawUserId: string): Promise<void> {
+        const userId = await this.resolveUserId(rawUserId);
+        if (!userId) throw new UnauthorizedException('Missing User ID');
+        const supabase = this.supabaseService.getAdminClient();
+
+        // 1. Delete associated competition entries first (FK constraint)
+        await supabase
+            .from('agent_competition_entries')
+            .delete()
+            .eq('agent_id', agentId);
+
+        // 2. Delete predictions (FK constraint)
+        await supabase
+            .from('agent_predictions')
+            .delete()
+            .eq('agent_id', agentId);
+
+        // 3. Delete the agent itself
+        const { error } = await supabase
+            .from('agents')
+            .delete()
+            .eq('id', agentId)
+            .eq('user_id', userId);
+
+        if (error) {
+            throw new BadRequestException(`Failed to delete agent: ${error.message}`);
+        }
+
+        this.logger.log(`Forecaster ${agentId} permanently deleted by user ${userId}`);
+    }
+
+    /**
      * List user's agents
      */
     async listByUser(
@@ -503,6 +651,54 @@ export class AgentsService {
             brier_score: entry.brier_score,
             competition_id: entry.competition_id,
             status: entry.status,
+        }));
+    }
+
+    /**
+     * Get all active competitors for a competition (public, sanitized)
+     * Returns only safe-to-display fields — no system_prompt, no user secrets
+     */
+    async getCompetitors(
+        competitionId: string,
+        limit: number = 50,
+    ): Promise<any[]> {
+        if (!competitionId) return [];
+
+        // Input validation: must be UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(competitionId)) {
+            this.logger.warn(`Invalid competition_id format: ${competitionId}`);
+            return [];
+        }
+
+        // Clamp limit to prevent abuse
+        const safeLimit = Math.min(Math.max(1, limit), 100);
+
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('agent_competition_entries')
+            .select('agent_id, brier_score, status, agents(id, name, model, status, created_at)')
+            .eq('competition_id', competitionId)
+            .in('status', ['active', 'paused'])
+            .order('brier_score', { ascending: true, nullsFirst: false })
+            .limit(safeLimit);
+
+        if (error) {
+            this.logger.error(`Failed to get competitors: ${error.message}`);
+            return [];
+        }
+
+        // Sanitize: only return public-safe fields, no system_prompt or user_id
+        return (data || []).map((entry: any, index: number) => ({
+            rank: index + 1,
+            agent_id: entry.agent_id,
+            agent_name: entry.agents?.name || 'Unknown Agent',
+            model: entry.agents?.model || 'Unknown',
+            agent_status: entry.agents?.status || entry.status,
+            brier_score: entry.brier_score,
+            competition_id: competitionId,
+            deployed_at: entry.agents?.created_at,
         }));
     }
 

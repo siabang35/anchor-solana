@@ -5,6 +5,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { apiFetch } from '@/lib/supabase';
+import AgentManager from './AgentManager';
 import {
     CATEGORIES,
     MODEL_TIERS,
@@ -55,10 +56,22 @@ interface QuotaInfo {
 }
 
 type BuilderStep = 'config' | 'deploying' | 'active';
+type ViewTab = 'build' | 'manage';
 
 export default function DeployAgent({ initialCategory }: { initialCategory?: string }) {
     const { connected, publicKey } = useWallet();
-    const { agents: realtimeAgents } = useRealtimeAgents(publicKey?.toString() || null);
+    const {
+        agents: realtimeAgents,
+        forecasters,
+        loading: agentsLoading,
+        pauseForecaster,
+        resumeForecaster,
+        stopForecaster,
+        terminateForecaster,
+        deleteForecaster,
+        refresh: refreshAgents,
+    } = useRealtimeAgents(publicKey?.toString() || null);
+    const [viewTab, setViewTab] = useState<ViewTab>('build');
 
     // Builder state
     const [categoryId, setCategoryId] = useState(initialCategory || '');
@@ -229,6 +242,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 { timestamp: Date.now() + 500, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
             ]);
             setStep('active');
+            setViewTab('manage');
+            refreshAgents();
 
             // Fire event so ProbabilityCurve can draw the annotation line
             if (typeof window !== 'undefined') {
@@ -258,6 +273,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 deployed_at: new Date().toISOString(),
             } as DeployedAgentResponse);
             setStep('active');
+            setViewTab('manage');
 
             // Fire event so ProbabilityCurve can draw the annotation line (Simulated)
             if (typeof window !== 'undefined') {
@@ -283,6 +299,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         setLogs([]);
         setError(null);
         setStep('config');
+        setViewTab('build');
+        refreshAgents();
     };
 
     const statusLabels: Record<string, string> = {
@@ -296,9 +314,128 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
     // ===== RENDER CONTENT HELPER =====
     const renderContent = () => {
+        // ===== MY AGENTS TAB =====
+        if (viewTab === 'manage') {
+            return (
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    {/* Tab Toggle + Close Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', flexShrink: 0 }}>
+                        <div style={{
+                            display: 'flex',
+                            flex: 1,
+                            background: 'var(--bg-input)',
+                            borderRadius: 'var(--radius-round)',
+                            padding: '0.2rem',
+                        }}>
+                            <button
+                                onClick={() => setViewTab('build')}
+                                style={{
+                                    flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
+                                    background: 'transparent',
+                                    color: 'var(--text-secondary)',
+                                    fontSize: '0.7rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                                }}
+                            >
+                                🔧 Build Agent
+                            </button>
+                            <button
+                                onClick={() => setViewTab('manage')}
+                                style={{
+                                    flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
+                                    background: 'var(--accent-primary)',
+                                    color: '#fff',
+                                    fontSize: '0.7rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                                }}
+                            >
+                                📡 My Agents {forecasters.length > 0 && `(${forecasters.filter(f => f.status === 'active').length})`}
+                            </button>
+                        </div>
+                        {isMobileDrawerOpen && (
+                            <button 
+                                onClick={() => setIsMobileDrawerOpen(false)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid var(--border-glass)',
+                                    color: 'var(--text-secondary)',
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    padding: 0,
+                                    flexShrink: 0
+                                }}
+                                aria-label="Close Agent Drawer"
+                            >
+                                &times;
+                            </button>
+                        )}
+                    </div>
+                    <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                        <AgentManager
+                            forecasters={forecasters}
+                            loading={agentsLoading}
+                            onPause={pauseForecaster}
+                            onResume={resumeForecaster}
+                            onStop={terminateForecaster}
+                            onDelete={deleteForecaster}
+                        />
+                    </div>
+                </div>
+            );
+        }
+
         if (step === 'config') {
             return (
                 <div className="glass-card card-body animate-in" style={{ height: '100%', overflowY: 'auto' }}>
+                {/* Tab Toggle */}
+                <div style={{
+                    display: 'flex',
+                    background: 'var(--bg-input)',
+                    borderRadius: 'var(--radius-round)',
+                    padding: '0.2rem',
+                    marginBottom: '0.75rem',
+                }}>
+                    <button
+                        onClick={() => setViewTab('build')}
+                        style={{
+                            flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
+                            background: 'var(--accent-primary)',
+                            color: '#fff',
+                            fontSize: '0.7rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                        }}
+                    >
+                        🔧 Build Agent
+                    </button>
+                    <button
+                        onClick={() => setViewTab('manage')}
+                        style={{
+                            flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
+                            background: 'transparent',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.7rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                            position: 'relative',
+                        }}
+                    >
+                        📡 My Agents {forecasters.filter(f => f.status === 'active').length > 0 && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '3px',
+                                right: '8px',
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: '#10b981',
+                                boxShadow: '0 0 6px #10b981',
+                                animation: 'pulse 2s ease-in-out infinite',
+                            }} />
+                        )}
+                    </button>
+                </div>
+
                 <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                         <h3 className="section-title"><span className="icon">🔓</span> Build AI Agent</h3>

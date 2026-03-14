@@ -47,6 +47,62 @@ export class AgentsController {
     }
 
     /**
+     * List user's forecaster agents
+     */
+    @Get('forecasters')
+    @ApiOperation({ summary: "List user's forecaster agents with status filter" })
+    async listForecasters(
+        @Req() req: any,
+        @Query('status') status?: string,
+        @Query('limit') limit?: string,
+        @Query('offset') offset?: string,
+    ) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.listForecasters(
+            userId,
+            status,
+            limit ? parseInt(limit, 10) : 20,
+            offset ? parseInt(offset, 10) : 0,
+        );
+    }
+
+    /**
+     * Toggle forecaster agent status (active/paused)
+     */
+    @Patch('forecasters/:id/status')
+    @ApiOperation({ summary: 'Pause or resume a forecaster agent' })
+    async toggleForecasterStatus(
+        @Param('id') id: string,
+        @Body('status') status: 'active' | 'paused',
+        @Req() req: any,
+    ) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.toggleForecasterStatus(id, userId, status);
+    }
+
+    /**
+     * Terminate a forecaster agent
+     */
+    @Delete('forecasters/:id')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Terminate a forecaster agent (frees quota slot)' })
+    async terminateForecaster(@Param('id') id: string, @Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.terminateForecaster(id, userId);
+    }
+
+    /**
+     * Delete a forecaster agent permanently
+     */
+    @Delete('forecasters/:id/hard')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Permanently delete a forecaster agent and its history' })
+    async deleteForecaster(@Param('id') id: string, @Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.agentsService.deleteForecaster(id, userId);
+    }
+
+    /**
      * Create a wager on an agent-vs-agent competition
      */
     @Post('wager')
@@ -69,6 +125,21 @@ export class AgentsController {
         return this.agentsService.getLeaderboard(
             competitionId,
             limit ? parseInt(limit, 10) : 20,
+        );
+    }
+
+    /**
+     * Get all competitors for a competition (public, sanitized)
+     */
+    @Get('competitors')
+    @ApiOperation({ summary: 'List all active agents competing in a competition (public, safe)' })
+    async getCompetitors(
+        @Query('competition_id') competitionId: string,
+        @Query('limit') limit?: string,
+    ) {
+        return this.agentsService.getCompetitors(
+            competitionId,
+            limit ? parseInt(limit, 10) : 50,
         );
     }
 

@@ -7,11 +7,15 @@ import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { useOnChainMarket } from '@/hooks/useOnChainMarket';
 import { useClusterData } from '@/hooks/useClusterData';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
+import { apiFetch } from '@/lib/supabase';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
 const ProbabilityCurve = dynamic(() => import('@/components/ProbabilityCurve'), { ssr: false });
 const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), { ssr: false });
+const CompetitionLeaderboard = dynamic(() => import('@/components/CompetitionLeaderboard'), { ssr: false });
 const DataFeeds = dynamic(() => import('@/components/DataFeeds'), { ssr: false });
 const DeployAgent = dynamic(() => import('@/components/DeployAgent'), { ssr: false });
 const SentimentAnalysis = dynamic(() => import('@/components/SentimentAnalysis'), { ssr: false });
@@ -80,14 +84,20 @@ function getStatusConfig(status: 'live' | 'upcoming' | 'ended') {
     }
 }
 
-export default function CategoryPage() {
-    const params = useParams();
+function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const router = useRouter();
-    const sector = (params.sector as string) || 'finance';
-    const meta = SECTOR_META[sector] || SECTOR_META.finance;
-
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
+    const [competitors, setCompetitors] = useState<any[]>([]);
+
+    // Agent data for neural lines on curve
+    const { publicKey } = useWallet();
+    const {
+        forecasters,
+        pauseForecaster,
+        resumeForecaster,
+        stopForecaster,
+    } = useRealtimeAgents(publicKey?.toString() || null);
 
     // Fetch competitions for this sector
     const { competitions, loading: compLoading, connected } = useCompetitions(sector);
@@ -102,8 +112,29 @@ export default function CategoryPage() {
 
     // Active competition for curve
     const activeComp = selectedCompId
-        ? sorted.find(c => c.id === selectedCompId) || sorted[0]
-        : sorted.find(c => getCompetitionStatus(c) === 'live') || sorted[0] || null;
+        ? competitions.find((c) => c.id === selectedCompId) || sorted[0]
+        : sorted[0];
+
+    // Fetch competitors for the active competition to render on the curve
+    useEffect(() => {
+        if (!activeComp?.id) return;
+        let cancelled = false;
+
+        const fetchCompetitors = async () => {
+            try {
+                const res = await apiFetch<any[]>(`/agents/competitors?competition_id=${activeComp.id}&limit=50`);
+                if (!cancelled && res) setCompetitors(res);
+            } catch (err) {
+                console.error('Failed to fetch competitors:', err);
+            }
+        };
+
+        fetchCompetitors();
+        // Auto-refresh every 30s so users see new agents joining in near-real-time
+        const interval = setInterval(fetchCompetitors, 30_000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [activeComp?.id]);
+
 
     // Real-time data for selected competition
     const { probHistory } = useOnChainMarket(activeComp?.id);
@@ -126,7 +157,7 @@ export default function CategoryPage() {
         ? Math.floor(new Date(activeComp.competition_end).getTime() / 1000) : Math.floor(Date.now() / 1000) + 7200;
 
     return (
-        <WalletProvider>
+        <>
             <Header theme={theme} onToggleTheme={toggleTheme} />
             <main className="main-container">
                 {/* Category Hero Header */}
@@ -203,6 +234,38 @@ export default function CategoryPage() {
                 <ProbabilityCurve
                     competition={activeComp}
                     probHistory={probHistory}
+                    forecasters={[
+                        ...forecasters.filter(f => {
+                            if (!f.competitions || f.competitions.length === 0) return false;
+                            // Show agent if it's enrolled in the selected competition
+                            // OR if it's enrolled in any competition within the same sector
+                            return f.competitions.some((entry: any) =>
+                                entry.competition_id === activeComp?.id ||
+                                (entry.sector && entry.sector.toLowerCase() === sector.toLowerCase())
+                            );
+                        }),
+                        // Map competitors to match ForecasterAgent shape, excluding user's own agents
+                        ...competitors
+                            .filter(c => !forecasters.find(f => f.id === c.agent_id))
+                            .map(c => ({
+                                id: c.agent_id,
+                                name: c.agent_name,
+                                user_id: '',
+                                system_prompt: '',
+                                status: c.agent_status || 'active',
+                                model: c.model || 'Competitor',
+                                prompts_used: 0,
+                                max_free_prompts: 7,
+                                created_at: c.deployed_at || new Date().toISOString(),
+                                updated_at: c.deployed_at || new Date().toISOString(),
+                                competitions: [],
+                                isExternal: true,
+                            }))
+                    ] as any[]}
+                    onPauseAgent={pauseForecaster}
+                    onResumeAgent={resumeForecaster}
+                    onStopAgent={stopForecaster}
+                    onDeleteAgent={stopForecaster}
                 />
 
                 {/* Competition Timer */}
@@ -213,6 +276,13 @@ export default function CategoryPage() {
                         label={activeComp.title}
                     />
                 )}
+
+                {/* Competition Leaderboard — realtime */}
+                <CompetitionLeaderboard
+                    competitionId={activeComp?.id}
+                    competitionTitle={activeComp?.title}
+                    sector={sector}
+                />
 
                 {/* Competitions Grid */}
                 <section className="glass-card card-body animate-in">
@@ -474,6 +544,18 @@ export default function CategoryPage() {
                     <DeployAgent initialCategory={sector} />
                 </div>
             </main>
+        </>
+    );
+}
+
+export default function CategoryPage() {
+    const params = useParams();
+    const sector = (params.sector as string) || 'finance';
+    const meta = SECTOR_META[sector] || SECTOR_META.finance;
+
+    return (
+        <WalletProvider>
+            <CategoryPageInner sector={sector} meta={meta} />
         </WalletProvider>
     );
 }
