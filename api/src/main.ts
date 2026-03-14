@@ -91,7 +91,7 @@ async function bootstrap() {
     // General rate limiter
     app.use(rateLimit({
         windowMs: rateLimitWindowMs,
-        max: rateLimitMax,
+        max: 300,
         message: {
             statusCode: 429,
             message: 'Too many requests. Please try again later.',
@@ -139,7 +139,7 @@ async function bootstrap() {
     // Rate limiting for public agent endpoints (anti-scraping)
     const publicAgentLimiter = rateLimit({
         windowMs: 60_000, // 1 minute
-        max: 30,          // 30 req/min — enough for UI polling, blocks scrapers
+        max: 200,         // 200 req/min to handle multiple concurrent UI polls
         message: {
             statusCode: 429,
             message: 'Too many requests to public endpoint. Please slow down.',

@@ -18,17 +18,44 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
 // Helper: fetch from backend API
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options?.headers || {}),
-        },
-        ...options,
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(err.message || `API Error: ${res.status}`);
+export async function apiFetch<T>(path: string, options?: RequestInit, maxRetries = 3): Promise<T> {
+    let retries = 0;
+    
+    while (true) {
+        try {
+            const res = await fetch(`${API_BASE_URL}${path}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(options?.headers || {}),
+                },
+                ...options,
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ message: res.statusText }));
+                
+                // If 429 Too Many Requests and we have retries left, wait and retry
+                if (res.status === 429 && retries < maxRetries) {
+                    retries++;
+                    const backoff = Math.min(1000 * Math.pow(2, retries) + Math.random() * 500, 5000);
+                    console.warn(`[apiFetch] 429 Rate Limited. Retrying in ${Math.round(backoff)}ms... (${retries}/${maxRetries})`);
+                    await new Promise(r => setTimeout(r, backoff));
+                    continue;
+                }
+                
+                throw new Error(err.message || `API Error: ${res.status}`);
+            }
+            
+            return res.json();
+        } catch (error: any) {
+            // Only retry on network errors or 429s (handled above), throw everything else
+            if (retries >= maxRetries || (error.message && !error.message.includes('fetch'))) {
+                throw error;
+            }
+            retries++;
+            const backoff = 1000 * Math.pow(2, retries);
+            console.warn(`[apiFetch] Network error. Retrying in ${backoff}ms... (${retries}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, backoff));
+        }
     }
-    return res.json();
 }

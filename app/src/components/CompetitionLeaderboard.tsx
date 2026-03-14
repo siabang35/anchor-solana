@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch } from '@/lib/supabase';
+import React, { useState } from 'react';
 
 interface CompetitorEntry {
     rank: number;
@@ -18,48 +17,20 @@ interface Props {
     competitionId?: string;
     competitionTitle?: string;
     sector?: string;
+    competitors: CompetitorEntry[];
+    loading: boolean;
+    lastUpdated: Date | null;
 }
 
-export default function CompetitionLeaderboard({ competitionId, competitionTitle, sector }: Props) {
-    const [competitors, setCompetitors] = useState<CompetitorEntry[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+export default function CompetitionLeaderboard({
+    competitionId,
+    competitionTitle,
+    sector,
+    competitors,
+    loading,
+    lastUpdated,
+}: Props) {
     const [isOpen, setIsOpen] = useState(false);
-
-    const fetchCompetitors = useCallback(async () => {
-        if (!competitionId) return;
-        try {
-            const res = await apiFetch<CompetitorEntry[]>(
-                `/agents/competitors?competition_id=${competitionId}&limit=50`
-            );
-            if (res) {
-                setCompetitors(res);
-                setLastUpdated(new Date());
-            }
-        } catch (err) {
-            console.error('Failed to fetch competitors:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [competitionId]);
-
-    useEffect(() => {
-        if (!competitionId) return;
-        let cancelled = false;
-        setLoading(true);
-
-        const doFetch = async () => {
-            await fetchCompetitors();
-        };
-        doFetch();
-
-        // Auto-refresh every 30 seconds
-        const interval = setInterval(() => {
-            if (!cancelled) fetchCompetitors();
-        }, 30_000);
-
-        return () => { cancelled = true; clearInterval(interval); };
-    }, [competitionId, fetchCompetitors]);
 
     const statusBadge = (status: string) => {
         switch (status) {

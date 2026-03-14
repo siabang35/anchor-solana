@@ -89,6 +89,8 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [competitors, setCompetitors] = useState<any[]>([]);
+    const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+    const [leaderboardLastUpdated, setLeaderboardLastUpdated] = useState<Date | null>(null);
 
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
@@ -119,13 +121,19 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     useEffect(() => {
         if (!activeComp?.id) return;
         let cancelled = false;
+        setLeaderboardLoading(true);
 
         const fetchCompetitors = async () => {
             try {
                 const res = await apiFetch<any[]>(`/agents/competitors?competition_id=${activeComp.id}&limit=50`);
-                if (!cancelled && res) setCompetitors(res);
+                if (!cancelled && res) {
+                    setCompetitors(res);
+                    setLeaderboardLastUpdated(new Date());
+                }
             } catch (err) {
                 console.error('Failed to fetch competitors:', err);
+            } finally {
+                if (!cancelled) setLeaderboardLoading(false);
             }
         };
 
@@ -282,6 +290,9 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     competitionId={activeComp?.id}
                     competitionTitle={activeComp?.title}
                     sector={sector}
+                    competitors={competitors}
+                    loading={leaderboardLoading}
+                    lastUpdated={leaderboardLastUpdated}
                 />
 
                 {/* Competitions Grid */}
