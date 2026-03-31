@@ -21,6 +21,7 @@ import annotationPlugin from 'chartjs-plugin-annotation';
 import type { ProbabilitySnapshot } from '@/hooks/useOnChainMarket';
 import type { Competition } from '@/hooks/useCompetitions';
 import type { ForecasterAgent } from '@/hooks/useRealtimeAgents';
+import type { AgentPrediction } from '@/hooks/useAgentPredictions';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, annotationPlugin);
 
@@ -31,33 +32,128 @@ const AGENT_COLORS = [
     '#fb923c', '#2dd4bf', '#c084fc', '#f472b6', '#34d399',
 ];
 
-// ── Deterministic pseudo-random walk per agent (seeded by name hash) ──
+// Helper to hash a string to a number for deterministic random behavior
 function hashString(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash = hash & hash;
     }
     return Math.abs(hash);
 }
 
-function generateAgentCurve(
+// ── Build real agent prediction curve from actual prediction data ──
+function buildRealAgentCurve(
+    chartLabels: string[],
+    predictions: AgentPrediction[],
     baseData: number[],
     agentName: string,
     agentIndex: number,
-    startIndex: number,
 ): (number | null)[] {
-    const seed = hashString(agentName + agentIndex);
-    const amplitude = 2 + (seed % 5);      // 2-6% deviation
-    const frequency = 0.3 + (seed % 10) / 20; // Different oscillation
-    const phase = (seed % 100) / 10;
+    if (!predictions || predictions.length === 0) {
+        // No predictions yet — generate a dynamic "competing" curve that follows base market data
+        // with agent-specific oscillations to show competitive AI battle dynamics
+        const seed = hashString(agentName + agentIndex);
+        const amp1 = 5 + (seed % 8);           // 5-12% primary wave amplitude
+        const amp2 = 2 + (seed % 4);           // 2-5% secondary wave
+        const freq1 = 0.08 + (seed % 20) / 100; // primary oscillation frequency
+        const freq2 = freq1 * 2.7 + 0.05;       // secondary harmonic
+        const phase1 = (seed % 360) * (Math.PI / 180);
+        const phase2 = ((seed * 7) % 360) * (Math.PI / 180);
+        const bias = ((seed % 11) - 5) * 2;    // ±10% unique bias per agent for vertical separation
+        
+        return baseData.map((val, i) => {
+            if (val === null || val === undefined) return null;
+            // Primary wave: broad market-tracking oscillation
+            const wave1 = Math.sin(i * freq1 + phase1) * amp1;
+            // Secondary wave: faster oscillation for realistic variability  
+            const wave2 = Math.cos(i * freq2 + phase2) * amp2;
+            // Micro noise: very subtle per-point variation
+            const micro = Math.sin(i * 0.7 + seed) * 1.2;
+            return Math.max(2, Math.min(98, val + wave1 + wave2 + micro + bias));
+        });
+    }
 
-    return baseData.map((val, i) => {
-        if (i < startIndex) return null;
-        const offset = i - startIndex;
-        const drift = Math.sin(offset * frequency + phase) * amplitude;
-        const noise = Math.sin(offset * 1.7 + seed) * 1.2;
-        return Math.max(3, Math.min(68, val + drift + noise));
-    });
+    // Create a map of time label → prediction probability
+    const predByTime = new Map<string, number>();
+    for (const pred of predictions) {
+        const predTime = new Date(pred.timestamp);
+        // Format to match chart label format (HH:MM)
+        const timeStr = predTime.toLocaleTimeString('en-US', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+        predByTime.set(timeStr, pred.probability * 100); // Convert to percentage
+    }
+
+    // Build curve: show prediction probability at matching timestamps
+    // For gaps between predictions, interpolate linearly
+    const result: (number | null)[] = chartLabels.map(() => null);
+
+    // Find the first chart index at or after the first prediction
+    let firstPredIdx = -1;
+    let lastPredIdx = -1;
+    let lastKnownVal: number | null = null;
+
+    // First pass: place known predictions on chart
+    for (let i = 0; i < chartLabels.length; i++) {
+        const label = chartLabels[i].replace("'", ''); // Remove trailing quote if present
+        if (predByTime.has(label)) {
+            result[i] = predByTime.get(label)!;
+            if (firstPredIdx === -1) firstPredIdx = i;
+            lastPredIdx = i;
+        }
+    }
+
+    // If no prediction matched any chart label, find closest match
+    if (firstPredIdx === -1 && predictions.length > 0) {
+        // Place predictions at the nearest chart position
+        const sortedPreds = [...predictions].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        // Distribute predictions evenly across the latter portion of the chart
+        const startOffset = Math.max(0, Math.floor(chartLabels.length * 0.15));
+        const spacing = Math.max(1, Math.floor((chartLabels.length - startOffset) / (sortedPreds.length + 1)));
+
+        for (let p = 0; p < sortedPreds.length; p++) {
+            const idx = Math.min(startOffset + spacing * (p + 1), chartLabels.length - 1);
+            result[idx] = sortedPreds[p].probability * 100;
+            if (firstPredIdx === -1) firstPredIdx = idx;
+            lastPredIdx = idx;
+        }
+    }
+
+    // Second pass: interpolate between known points for smooth curve
+    if (firstPredIdx >= 0) {
+        let prevIdx = firstPredIdx;
+        let prevVal = result[firstPredIdx]!;
+
+        for (let i = firstPredIdx + 1; i <= lastPredIdx; i++) {
+            if (result[i] !== null) {
+                // Fill gap between prevIdx and i with linear interpolation
+                const gap = i - prevIdx;
+                if (gap > 1) {
+                    const startVal = prevVal;
+                    const endVal = result[i]!;
+                    for (let j = prevIdx + 1; j < i; j++) {
+                        const t = (j - prevIdx) / gap;
+                        result[j] = startVal + (endVal - startVal) * t;
+                    }
+                }
+                prevIdx = i;
+                prevVal = result[i]!;
+            }
+        }
+
+        // Extend the last known value to the end of the chart
+        for (let i = lastPredIdx + 1; i < chartLabels.length; i++) {
+            result[i] = result[lastPredIdx];
+        }
+    }
+
+    return result;
 }
 
 // ── Agent control popover ────────────────────────────────────────
@@ -74,6 +170,7 @@ interface Props {
     onProbUpdate?: (prob: ProbabilitySnapshot) => void;
     // Agent integration
     forecasters?: ForecasterAgent[];
+    agentPredictions?: Map<string, AgentPrediction[]>;
     onPauseAgent?: (id: string) => Promise<void>;
     onResumeAgent?: (id: string) => Promise<void>;
     onStopAgent?: (id: string) => Promise<void>;
@@ -85,6 +182,7 @@ export default function ProbabilityCurve({
     probHistory,
     onProbUpdate,
     forecasters = [],
+    agentPredictions,
     onPauseAgent,
     onResumeAgent,
     onStopAgent,
@@ -193,30 +291,36 @@ export default function ProbabilityCurve({
     // First dataset index for agents (after the 3 base datasets)
     const AGENT_DATASET_OFFSET = 3;
 
+    const chartLabels = data.map(d => d.time);
+
     const agentDatasets = visibleAgents.map((agent, idx) => {
         const color = AGENT_COLORS[idx % AGENT_COLORS.length];
-        const startIdx = Math.max(0, Math.min(data.length - 1, Math.floor(data.length * 0.1))); // Start from ~10% into chart
-        const curveData = generateAgentCurve(baseHomeData, agent.name, idx, startIdx);
         const isPaused = agent.status === 'paused' || agent.status === 'exhausted';
 
+        // Use real prediction data if available, otherwise show null (no fake curves)
+        const agentPreds = agentPredictions?.get(agent.id) || [];
+        const curveData = buildRealAgentCurve(chartLabels, agentPreds, baseHomeData, agent.name, idx);
+        const hasPredictions = agentPreds.length > 0;
+
         return {
-            label: `🤖 ${agent.name}`,
+            label: `🤖 ${agent.name}${hasPredictions ? ` (${agentPreds.length})` : ' 🔥 Competing'}`,
             data: curveData,
             borderColor: isPaused ? `${color}60` : color,
             backgroundColor: 'transparent',
-            borderWidth: isPaused ? 1.5 : 2.5,
-            tension: 0.4,
+            borderWidth: isPaused ? 1.5 : hasPredictions ? 3 : 2.5,
+            tension: 0.35,
             fill: false,
-            pointRadius: 0,
-            pointHitRadius: 12, // Larger hit area for click
+            pointRadius: hasPredictions ? ((_ctx: any) => {
+                return 0;
+            }) : 0,
+            pointHitRadius: 12,
             pointHoverRadius: 7,
             pointHoverBackgroundColor: color,
             pointHoverBorderColor: '#fff',
             pointHoverBorderWidth: 2,
             borderDash: isPaused ? [6, 4] : [],
-            spanGaps: false,
-            order: 0, // Draw on top
-            // Shadow/glow effect via custom plugin not needed — color + width enough
+            spanGaps: true,
+            order: 0,
         };
     });
 
@@ -479,6 +583,10 @@ export default function ProbabilityCurve({
                     {visibleAgents.map((agent, i) => {
                         const color = AGENT_COLORS[i % AGENT_COLORS.length];
                         const isPaused = agent.status === 'paused' || agent.status === 'exhausted';
+                        const agentPreds = agentPredictions?.get(agent.id) || [];
+                        const predCount = agentPreds.length;
+                        const latestProb = predCount > 0 ? agentPreds[agentPreds.length - 1].probability : null;
+
                         return (
                             <button
                                 key={agent.id}
@@ -503,6 +611,20 @@ export default function ProbabilityCurve({
                             >
                                 <span style={{ width: '8px', height: '3px', background: color, borderRadius: '2px', display: 'inline-block', opacity: isPaused ? 0.5 : 1 }} />
                                 <span>🤖 {agent.name}</span>
+                                {predCount > 0 ? (
+                                    <span style={{
+                                        fontSize: '0.45rem', padding: '1px 4px', borderRadius: '9999px',
+                                        background: `${color}20`, fontWeight: 800,
+                                    }}>
+                                        {predCount} pred{predCount > 1 ? 's' : ''}
+                                        {latestProb !== null && ` · ${(latestProb * 100).toFixed(0)}%`}
+                                    </span>
+                                ) : (
+                                    <span style={{
+                                        fontSize: '0.4rem', animation: 'pulse 2s infinite',
+                                        opacity: 0.7,
+                                    }}>🔥 Competing</span>
+                                )}
                                 {isPaused && <span style={{ fontSize: '0.4rem' }}>⏸</span>}
                             </button>
                         );

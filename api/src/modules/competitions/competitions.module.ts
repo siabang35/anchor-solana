@@ -5,6 +5,7 @@ import { CurveGeneratorService } from './services/curve-generator.service.js';
 import { CompetitionManagerService } from './services/competition-manager.service.js';
 import { EtlIngestionService } from './services/etl-ingestion.service.js';
 import { RealtimeCompetitionSeederService } from './services/realtime-competition-seeder.service.js';
+import { LeaderboardScoringService } from './services/leaderboard-scoring.service.js';
 
 @Module({
     controllers: [CompetitionsController],
@@ -14,6 +15,7 @@ import { RealtimeCompetitionSeederService } from './services/realtime-competitio
         CompetitionManagerService,
         EtlIngestionService,
         RealtimeCompetitionSeederService,
+        LeaderboardScoringService,
     ],
     exports: [
         CompetitionsService,
@@ -21,6 +23,7 @@ import { RealtimeCompetitionSeederService } from './services/realtime-competitio
         CompetitionManagerService,
         EtlIngestionService,
         RealtimeCompetitionSeederService,
+        LeaderboardScoringService,
     ],
 })
 export class CompetitionsModule {}

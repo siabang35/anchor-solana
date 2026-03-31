@@ -1539,8 +1539,8 @@ body {
   body:has(.deploy-agent-wrapper.mobile-open) {
     overflow: hidden;
   }
-  
-  .deploy-agent-wrapper > div {
+
+  .deploy-agent-wrapper>div {
     height: auto !important;
     border-radius: var(--radius-sm);
   }

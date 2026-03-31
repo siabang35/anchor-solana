@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../database/supabase.service.js';
+import { AgentRunnerService } from './services/agent-runner.service.js';
 import {
     DeployAgentDto,
     DeployForecastingAgentDto,
@@ -24,6 +25,7 @@ export class AgentsService {
     constructor(
         private readonly supabaseService: SupabaseService,
         private readonly configService: ConfigService,
+        private readonly agentRunnerService: AgentRunnerService,
     ) {}
 
     private async resolveUserId(identifier: string): Promise<string | null> {
@@ -232,6 +234,11 @@ export class AgentsService {
         }
 
         this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
+
+        // Trigger immediate first prediction so the frontend updates instantly
+        this.agentRunnerService.runSingleAgentId(agent.id).catch(err => {
+            this.logger.warn(`Failed to trigger immediate run for agent ${agent.id}: ${err.message}`);
+        });
 
         return { ...agent, max_free_prompts: MAX_FREE_DEPLOYS, prompts_used: 0 };
     }
@@ -620,16 +627,42 @@ export class AgentsService {
     }
 
     /**
-     * Get agent leaderboard for a competition
+     * Get agent leaderboard for a competition — ranked by weighted_score (lower = better).
+     * Falls back to raw brier_score for agents without weighted scores.
      */
     async getLeaderboard(competitionId?: string, limit: number = 20): Promise<any[]> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
+        // If competition_id provided, use the DB function for weighted ranking
+        if (competitionId) {
+            const { data, error } = await supabase.rpc('get_weighted_leaderboard', {
+                p_competition_id: competitionId,
+                p_limit: Math.min(Math.max(1, limit), 100),
+            });
+
+            if (!error && data && data.length > 0) {
+                return data.map((row: any) => ({
+                    rank: row.rank_position,
+                    agent_id: row.agent_id,
+                    agent_name: row.agent_name,
+                    user_id: null, // sanitized
+                    brier_score: row.raw_brier_avg ? Number(row.raw_brier_avg) : null,
+                    weighted_score: row.weighted_score ? Number(row.weighted_score) : null,
+                    prediction_count: row.prediction_count || 0,
+                    last_scored_at: row.last_scored_at,
+                    rank_trend: row.rank_trend || 0,
+                    has_min_predictions: row.has_min_predictions,
+                    competition_id: competitionId,
+                    status: row.agent_status,
+                }));
+            }
+        }
+
+        // Fallback: global leaderboard or no weighted scores yet
         let query = supabase
             .from('agent_competition_entries')
-            .select('*, agents(id, name, user_id, model, system_prompt)')
-            .not('brier_score', 'is', null)
-            .order('brier_score', { ascending: true })
+            .select('*, agents(id, name, user_id, model)')
+            .order('weighted_score', { ascending: true, nullsFirst: false })
             .limit(limit);
 
         if (competitionId) {
@@ -647,8 +680,13 @@ export class AgentsService {
             rank: index + 1,
             agent_id: entry.agent_id,
             agent_name: entry.agents?.name || 'Unknown',
-            user_id: entry.agents?.user_id,
+            user_id: null,
             brier_score: entry.brier_score,
+            weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
+            prediction_count: entry.prediction_count || 0,
+            last_scored_at: entry.last_scored_at,
+            rank_trend: entry.rank_trend || 0,
+            has_min_predictions: (entry.prediction_count || 0) >= 3,
             competition_id: entry.competition_id,
             status: entry.status,
         }));
@@ -657,6 +695,7 @@ export class AgentsService {
     /**
      * Get all active competitors for a competition (public, sanitized)
      * Returns only safe-to-display fields — no system_prompt, no user secrets
+     * Now includes weighted_score, prediction_count, rank_trend for live leaderboard
      */
     async getCompetitors(
         competitionId: string,
@@ -678,10 +717,10 @@ export class AgentsService {
 
         const { data, error } = await supabase
             .from('agent_competition_entries')
-            .select('agent_id, brier_score, status, agents(id, name, model, status, created_at)')
+            .select('agent_id, brier_score, weighted_score, prediction_count, last_scored_at, rank_trend, status, agents(id, name, model, status, created_at)')
             .eq('competition_id', competitionId)
             .in('status', ['active', 'paused'])
-            .order('brier_score', { ascending: true, nullsFirst: false })
+            .order('weighted_score', { ascending: true, nullsFirst: false })
             .limit(safeLimit);
 
         if (error) {
@@ -697,9 +736,72 @@ export class AgentsService {
             model: entry.agents?.model || 'Unknown',
             agent_status: entry.agents?.status || entry.status,
             brier_score: entry.brier_score,
+            weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
+            prediction_count: entry.prediction_count || 0,
+            last_scored_at: entry.last_scored_at,
+            rank_trend: entry.rank_trend || 0,
+            has_min_predictions: (entry.prediction_count || 0) >= 3,
             competition_id: competitionId,
             deployed_at: entry.agents?.created_at,
         }));
+    }
+
+    /**
+     * Get weighted live leaderboard with competition metadata and time remaining.
+     * Used by the /agents/leaderboard/live endpoint for real-time UI.
+     */
+    async getWeightedLeaderboardLive(
+        competitionId: string,
+        limit: number = 50,
+    ): Promise<{ entries: any[]; competition: any; time_remaining_ms: number }> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        // UUID validation
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(competitionId)) {
+            return { entries: [], competition: null, time_remaining_ms: 0 };
+        }
+
+        // Get competition metadata
+        const { data: comp } = await supabase
+            .from('competitions')
+            .select('id, title, sector, competition_start, competition_end, status, probabilities, base_probability')
+            .eq('id', competitionId)
+            .single();
+
+        const timeRemainingMs = comp
+            ? Math.max(0, new Date(comp.competition_end).getTime() - Date.now())
+            : 0;
+
+        // Use the DB function for ranked results
+        const safeLimit = Math.min(Math.max(1, limit), 100);
+        const { data, error } = await supabase.rpc('get_weighted_leaderboard', {
+            p_competition_id: competitionId,
+            p_limit: safeLimit,
+        });
+
+        if (error) {
+            this.logger.error(`Failed to get weighted leaderboard live: ${error.message}`);
+            return { entries: [], competition: comp, time_remaining_ms: timeRemainingMs };
+        }
+
+        const entries = (data || []).map((row: any) => ({
+            rank: row.rank_position,
+            agent_id: row.agent_id,
+            agent_name: row.agent_name,
+            model: row.model,
+            agent_status: row.agent_status,
+            weighted_score: row.weighted_score ? Number(row.weighted_score) : null,
+            raw_brier_avg: row.raw_brier_avg ? Number(row.raw_brier_avg) : null,
+            prediction_count: row.prediction_count || 0,
+            last_scored_at: row.last_scored_at,
+            rank_trend: row.rank_trend || 0,
+            deployed_at: row.deployed_at,
+            has_min_predictions: row.has_min_predictions,
+            competition_id: competitionId,
+        }));
+
+        return { entries, competition: comp, time_remaining_ms: timeRemainingMs };
     }
 
     /**

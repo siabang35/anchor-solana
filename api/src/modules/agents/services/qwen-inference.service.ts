@@ -28,7 +28,7 @@ export class QwenInferenceService {
     private readonly logger = new Logger(QwenInferenceService.name);
     // Hardcoded HF key as requested by prompt
     private readonly HF_API_KEY = process.env.HUGGINGFACE_TOKEN;
-    private readonly MODEL_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen3.5-9B-Instruct';
+    private readonly MODEL_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen3.5-9B-Instruct';
 
     constructor(private readonly configService: ConfigService) { }
 

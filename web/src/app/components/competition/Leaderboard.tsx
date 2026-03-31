@@ -65,9 +65,8 @@ export function Leaderboard() {
                         initial={{ opacity: 0, x: -5 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: player.rank * 0.05 }}
-                        className={`grid grid-cols-4 gap-2 items-center py-2 px-2 rounded-lg transition-colors ${
-                            player.rank <= 3 ? `border ${rankGlow(player.rank)}` : 'hover:bg-muted/20'
-                        }`}
+                        className={`grid grid-cols-4 gap-2 items-center py-2 px-2 rounded-lg transition-colors ${player.rank <= 3 ? `border ${rankGlow(player.rank)}` : 'hover:bg-muted/20'
+                            }`}
                     >
                         <span className="text-sm font-bold">{rankEmoji(player.rank)}</span>
                         <span className="text-xs font-mono text-foreground/80 truncate">{player.address}</span>

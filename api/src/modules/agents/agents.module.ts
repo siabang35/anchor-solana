@@ -4,8 +4,10 @@ import { AgentsService } from './agents.service.js';
 import { QwenInferenceService } from './services/qwen-inference.service.js';
 import { AgentEvaluationService } from './services/agent-evaluation.service.js';
 import { AgentRunnerService } from './services/agent-runner.service.js';
+import { CompetitionsModule } from '../competitions/competitions.module.js';
 
 @Module({
+    imports: [CompetitionsModule],
     controllers: [AgentsController],
     providers: [AgentsService, QwenInferenceService, AgentEvaluationService, AgentRunnerService],
     exports: [AgentsService, QwenInferenceService, AgentEvaluationService, AgentRunnerService],

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentsService } from './agents.service.js';
+import { AgentRunnerService } from './services/agent-runner.service.js';
 import { DeployAgentDto, DeployForecastingAgentDto } from './dto/index.js';
 
 // Note: Using a simple guard placeholder — in production this should be your JwtAuthGuard
@@ -22,7 +23,10 @@ import { DeployAgentDto, DeployForecastingAgentDto } from './dto/index.js';
 @ApiTags('AI Agents')
 @Controller('agents')
 export class AgentsController {
-    constructor(private readonly agentsService: AgentsService) { }
+    constructor(
+        private readonly agentsService: AgentsService,
+        private readonly agentRunner: AgentRunnerService,
+    ) { }
 
     /**
      * Deploy a new AI agent
@@ -81,14 +85,15 @@ export class AgentsController {
     }
 
     /**
-     * Terminate a forecaster agent
+     * Manually trigger the agent runner loop for testing
      */
-    @Delete('forecasters/:id')
-    @HttpCode(HttpStatus.NO_CONTENT)
-    @ApiOperation({ summary: 'Terminate a forecaster agent (frees quota slot)' })
-    async terminateForecaster(@Param('id') id: string, @Req() req: any) {
-        const userId = req.user?.id || req.headers['x-user-id'];
-        return this.agentsService.terminateForecaster(id, userId);
+    @Post('runner/trigger')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Manually trigger agent prediction loop' })
+    async triggerAgentRunner() {
+        // Run in background 
+        this.agentRunner.runAgentLoop().catch(err => console.error(err));
+        return { message: 'Agent prediction loop started' };
     }
 
     /**
@@ -114,10 +119,28 @@ export class AgentsController {
     }
 
     /**
+     * Get weighted live leaderboard with competition metadata
+     */
+    @Get('leaderboard/live')
+    @ApiOperation({ summary: 'Get weighted live leaderboard with competition time remaining and rank trends' })
+    async getWeightedLeaderboardLive(
+        @Query('competition_id') competitionId: string,
+        @Query('limit') limit?: string,
+    ) {
+        if (!competitionId) {
+            return { entries: [], competition: null, time_remaining_ms: 0 };
+        }
+        return this.agentsService.getWeightedLeaderboardLive(
+            competitionId,
+            limit ? parseInt(limit, 10) : 50,
+        );
+    }
+
+    /**
      * Get agent leaderboard
      */
     @Get('leaderboard')
-    @ApiOperation({ summary: 'Get agent competition leaderboard (ranked by Brier score)' })
+    @ApiOperation({ summary: 'Get agent competition leaderboard (ranked by weighted score)' })
     async getLeaderboard(
         @Query('competition_id') competitionId?: string,
         @Query('limit') limit?: string,

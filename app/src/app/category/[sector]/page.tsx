@@ -9,6 +9,7 @@ import { useClusterData } from '@/hooks/useClusterData';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
+import { useAgentPredictions } from '@/hooks/useAgentPredictions';
 import { apiFetch } from '@/lib/supabase';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
@@ -149,6 +150,18 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const { clusters, connected: clusterConnected } = useClusterData(activeComp?.id);
     const { feeds, connected: feedConnected } = useLiveFeed(15, sector);
 
+    // Real-time agent predictions for the active competition
+    const { predictionsByAgent, allPredictions } = useAgentPredictions(activeComp?.id);
+
+    // Build a Map<agentId, AgentPrediction[]> for ProbabilityCurve
+    const agentPredictionsMap = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const [agentId, group] of predictionsByAgent) {
+            map.set(agentId, group.predictions);
+        }
+        return map;
+    }, [predictionsByAgent]);
+
     const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
 
     useEffect(() => {
@@ -274,6 +287,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     onResumeAgent={resumeForecaster}
                     onStopAgent={stopForecaster}
                     onDeleteAgent={stopForecaster}
+                    agentPredictions={agentPredictionsMap}
                 />
 
                 {/* Competition Timer */}

@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../../database/supabase.service.js';
 import { QwenInferenceService, ForecasterInput } from './qwen-inference.service.js';
 import { AgentEvaluationService } from './agent-evaluation.service.js';
+import { LeaderboardScoringService } from '../../competitions/services/leaderboard-scoring.service.js';
 
 const MAX_FREE_PROMPTS = 7;
 
@@ -27,6 +28,7 @@ export class AgentRunnerService {
         private readonly configService: ConfigService,
         private readonly qwenService: QwenInferenceService,
         private readonly evaluationService: AgentEvaluationService,
+        private readonly scoringService: LeaderboardScoringService,
     ) {}
 
     /**
@@ -63,6 +65,22 @@ export class AgentRunnerService {
             this.logger.error(`Agent loop error: ${err.message}`);
         } finally {
             this.isRunning = false;
+        }
+    }
+
+    /**
+     * Trigger an immediate run for a specific agent by ID (used on deployment to avoid 10 min wait)
+     */
+    async runSingleAgentId(agentId: string): Promise<void> {
+        const supabase = this.supabaseService.getAdminClient();
+        const { data: agent } = await supabase.from('agents').select('*').eq('id', agentId).single();
+        if (agent) {
+            try {
+                this.logger.log(`⚡ Immediate run triggered for agent ${agentId}`);
+                await this.runSingleAgent(agent);
+            } catch (err: any) {
+                this.logger.error(`Immediate run failed for agent ${agentId}: ${err.message}`);
+            }
         }
     }
 
@@ -145,6 +163,22 @@ export class AgentRunnerService {
     private async generatePrediction(agent: any, competition: any): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
 
+        // Fetch latest curve probability for live scoring reference
+        const { data: latestProb } = await supabase
+            .from('probability_history')
+            .select('home, draw, away')
+            .eq('competition_id', competition.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        let baseRefProb = 0.5;
+        if (latestProb && latestProb.home !== undefined) {
+            baseRefProb = Number(latestProb.home) / 100;
+        } else if (competition.probabilities && competition.probabilities.length > 0) {
+            baseRefProb = Number(competition.probabilities[0]) / 10000;
+        }
+
         // Fetch latest news cluster for this competition's category
         const { data: newsItems } = await supabase
             .from('market_data_items')
@@ -195,7 +229,7 @@ export class AgentRunnerService {
                 probability: 0.5,
                 reasoning: 'Inference unavailable — default neutral prediction',
                 curve: [{ timestamp_offset_mins: 0, probability: 0.5 }],
-            });
+            }, baseRefProb);
             return;
         }
 
@@ -204,29 +238,49 @@ export class AgentRunnerService {
             probability: forecast.base_probability,
             reasoning: forecast.reasoning,
             curve: forecast.projected_curve,
-        });
+        }, baseRefProb);
 
         this.logger.log(`  ✅ Agent ${agent.id} predicted ${(forecast.base_probability * 100).toFixed(1)}% for "${competition.title}"`);
     }
 
     /**
-     * Store a prediction in the database
+     * Store a prediction in the database and immediately score it against the live curve
      */
     private async storePrediction(agentId: string, competitionId: string, data: {
         probability: number;
         reasoning: string;
         curve: Array<{ timestamp_offset_mins: number; probability: number }>;
-    }): Promise<void> {
+    }, currentCurveProb: number): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
 
-        await supabase.from('agent_predictions').insert({
+        const { data: inserted, error } = await supabase.from('agent_predictions').insert({
             agent_id: agentId,
             competition_id: competitionId,
             probability: data.probability,
             reasoning: data.reasoning,
             projected_curve: data.curve,
             timestamp: new Date().toISOString(),
-        });
+        }).select('id').single();
+
+        if (error) {
+            this.logger.error(`Failed to store prediction for agent ${agentId}: ${error.message}`);
+            return;
+        }
+
+        if (inserted) {
+            // Live score the prediction immediately against the current curve
+            // For binary events, probability is P(Yes). So the [Yes, No] vector is [P, 1-P].
+            const predictedProbs = [data.probability, 1 - data.probability];
+            const referenceProbs = [currentCurveProb, 1 - currentCurveProb];
+            
+            await this.scoringService.scorePrediction(
+                agentId,
+                competitionId,
+                inserted.id,
+                predictedProbs,
+                referenceProbs
+            );
+        }
     }
 
     /**
