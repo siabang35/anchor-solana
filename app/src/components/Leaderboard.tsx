@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiFetch, supabase } from '@/lib/supabase';
 
 interface LeaderboardEntry {
@@ -19,38 +19,11 @@ interface LeaderboardEntry {
     deployed_at?: string;
 }
 
-// Deterministic hash for stable per-agent score generation
-function hashAgentScore(name: string, id: string): number {
-    let hash = 0;
-    const str = name + id;
-    for (let i = 0; i < str.length; i++) {
-        hash = (hash << 5) - hash + str.charCodeAt(i);
-        hash = hash & hash;
-    }
-    return Math.abs(hash);
-}
-
-function getEstimatedAccuracy(name: string, id: string, tick: number = 0): number {
-    const h = hashAgentScore(name, id);
-    const base = 45 + (h % 250) / 10;  // 45.0% - 70.0%
-    const bounce = Math.sin(tick * 0.5 + (h % 10)) * ((h % 120) / 10);
-    return Math.max(0, Math.min(100, base + bounce));
-}
-
 export default function Leaderboard() {
     const [players, setPlayers] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRealtime, setIsRealtime] = useState(false);
     const [flashId, setFlashId] = useState<string | null>(null);
-    const [tick, setTick] = useState(0);
-
-    // Real-time engine tick for dynamic simulated battles
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setTick(t => t + 1);
-        }, 2000);
-        return () => clearInterval(interval);
-    }, []);
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
@@ -95,13 +68,16 @@ export default function Leaderboard() {
                     };
 
                     // Re-sort by accuracy descending (higher = better = rank #1)
+                    // Only agents with real brier scores get ranked; others go to bottom
                     newList.sort((a, b) => {
                         if (a.has_min_predictions !== b.has_min_predictions) {
                             return a.has_min_predictions ? -1 : 1;
                         }
-                        // Convert to accuracy (higher = better), sort descending
-                        const accA = a.brier_score !== null ? (1 - Number(a.brier_score)) * 100 : getEstimatedAccuracy(a.agent_name, a.agent_id, tick);
-                        const accB = b.brier_score !== null ? (1 - Number(b.brier_score)) * 100 : getEstimatedAccuracy(b.agent_name, b.agent_id, tick);
+                        const hasScoreA = a.brier_score !== null;
+                        const hasScoreB = b.brier_score !== null;
+                        if (hasScoreA !== hasScoreB) return hasScoreA ? -1 : 1;
+                        const accA = a.brier_score !== null ? (1 - Number(a.brier_score)) * 100 : 0;
+                        const accB = b.brier_score !== null ? (1 - Number(b.brier_score)) * 100 : 0;
                         return accB - accA;
                     });
 
@@ -172,7 +148,7 @@ export default function Leaderboard() {
                 {hasWeighted && (
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>W.SCORE</span>
                 )}
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>BRIER</span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>ACC</span>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center' }}>Δ</span>
             </div>
 
@@ -214,19 +190,7 @@ export default function Leaderboard() {
                                 </span>
                             </span>
                             <span style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: (player.prediction_count || 0) >= 3 ? '#818cf8' : 'var(--text-muted)' }}>
-                                {(player.prediction_count || 0) === 0 ? (
-                                    <span style={{
-                                        fontSize: '0.6rem',
-                                        animation: 'pulse 2s infinite',
-                                        color: '#06b6d4',
-                                        display: 'inline-flex', alignItems: 'center', gap: '2px',
-                                    }}>
-                                        <span style={{ fontSize: '0.55rem', animation: 'pulse 1.5s infinite' }}>🔥</span>
-                                        {Math.max(0, Math.floor((Date.now() - new Date(player.deployed_at || Date.now()).getTime()) / 4000) % 50)}
-                                    </span>
-                                ) : (
-                                    player.prediction_count
-                                )}
+                                {player.prediction_count || 0}
                                 {belowMin && (player.prediction_count || 0) > 0 && <span style={{ color: '#f59e0b', marginLeft: '2px', fontSize: '0.6rem' }}>⚠</span>}
                             </span>
                             {hasWeighted && (
@@ -240,9 +204,8 @@ export default function Leaderboard() {
                                         {((1 - Number(player.brier_score)) * 100).toFixed(1)}%
                                     </span>
                                 ) : (
-                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#06b6d4' }}>
-                                        {getEstimatedAccuracy(player.agent_name, player.agent_id, tick).toFixed(1)}%
-                                        <span style={{ fontSize: '0.5rem', opacity: 0.6, marginLeft: '2px' }}>est</span>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                                        Pending
                                     </span>
                                 )}
                             </span>
@@ -265,7 +228,7 @@ export default function Leaderboard() {
                     <span>
                         {hasWeighted
                             ? '📊 Ranked by Weighted Score (curve difficulty × brier)'
-                            : '📊 Ranked by Brier Score (lower = better)'}
+                            : '📊 Ranked by AI Accuracy (higher = better)'}
                     </span>
                     <span style={{ fontFamily: 'var(--font-mono)' }}>
                         {isRealtime ? '⚡ Realtime' : '🔄 30s refresh'}
@@ -275,3 +238,4 @@ export default function Leaderboard() {
         </div>
     );
 }
+

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, notFound } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { useOnChainMarket } from '@/hooks/useOnChainMarket';
@@ -20,6 +20,14 @@ const CompetitionLeaderboard = dynamic(() => import('@/components/CompetitionLea
 const DataFeeds = dynamic(() => import('@/components/DataFeeds'), { ssr: false });
 const DeployAgent = dynamic(() => import('@/components/DeployAgent'), { ssr: false });
 const SentimentAnalysis = dynamic(() => import('@/components/SentimentAnalysis'), { ssr: false });
+
+// ── Allowed sectors (anti-injection allowlist) ──────────────────
+const VALID_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'] as const;
+type ValidSector = typeof VALID_SECTORS[number];
+
+function isValidSector(s: string): s is ValidSector {
+    return VALID_SECTORS.includes(s as ValidSector);
+}
 
 const SECTOR_META: Record<string, { label: string; icon: string; color: string; description: string }> = {
     politics: { label: 'Politics', icon: '🏛️', color: '#818cf8', description: 'Political events, regulatory decisions, and government policy predictions' },
@@ -266,7 +274,9 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                             );
                         }),
                         // Map competitors to match ForecasterAgent shape, excluding user's own agents
+                        // PERFORMANCE LIMIT: Only render top 7 agents in the canvas to prevent browser lockup
                         ...competitors
+                            .slice(0, 7)
                             .filter(c => !forecasters.find(f => f.id === c.agent_id))
                             .map(c => ({
                                 id: c.agent_id,
@@ -576,6 +586,12 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
 export default function CategoryPage() {
     const params = useParams();
     const sector = (params.sector as string) || 'finance';
+
+    // ── Security: validate sector against allowlist ──
+    if (!isValidSector(sector)) {
+        notFound();
+    }
+
     const meta = SECTOR_META[sector] || SECTOR_META.finance;
 
     return (

@@ -20,10 +20,21 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost
 // Helper: fetch from backend API
 export async function apiFetch<T>(path: string, options?: RequestInit, maxRetries = 3): Promise<T> {
     let retries = 0;
+
+    // ── Security: sanitize API path ──
+    const sanitizedPath = path
+        .replace(/\.\.\//g, '')      // strip path traversal
+        .replace(/[^\w\-\/\?\=\&\.\%\+]/g, '') // Allow only safe URL characters
+        .replace(/\/+/g, '/');       // collapse double slashes
+
+    if (!sanitizedPath.startsWith('/')) {
+        throw new Error('Invalid API path');
+    }
+
     
     while (true) {
         try {
-            const res = await fetch(`${API_BASE_URL}${path}`, {
+            const res = await fetch(`${API_BASE_URL}${sanitizedPath}`, {
                 headers: {
                     'Content-Type': 'application/json',
                     ...(options?.headers || {}),

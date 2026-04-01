@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
 interface LivePredictionTracker {
@@ -33,7 +33,21 @@ function getEstimatedAccuracy(agentName: string, agentId: string, tick: number =
     return Math.max(0, Math.min(100, base + bounce));
 }
 
-interface CompetitorEntry {
+// Convert Weighted Score to a realistic graded percentage (0-100%)
+// In crypto prediction markets, a Brier score of 0.05 is a 5% average error, which is massive.
+// We apply an exponential decay based on the time/entropy weighted score so scores fluctuate realistically in the 20%-98% range.
+// This prevents agents from easily getting stuck at 99.9% and guarantees rank sorting is purely dynamic.
+function getRealAccuracy(weightedScore: number | string | null): number {
+    if (weightedScore === null) return 0;
+    const wScore = Number(weightedScore);
+    // Exponential decay curve: 
+    // W.SCORE = 0.0000 -> 98.0%
+    // W.SCORE = 0.0013 -> 66.3%
+    // W.SCORE = 0.0021 -> 52.2%
+    // W.SCORE = 0.0050 -> 21.8%
+    const accuracy = 98.0 * Math.exp(-wScore * 300);
+    return Math.max(0, Math.min(99.9, accuracy));
+}interface CompetitorEntry {
     rank: number;
     agent_id: string;
     agent_name: string;
@@ -165,9 +179,8 @@ export default function CompetitionLeaderboard({
     useEffect(() => {
         // Calculate accuracy scores and re-rank competitors
         const withScores = initialCompetitors.map(c => {
-            // Accuracy = (1 - brier_score) * 100, higher is better
-            const accuracy = c.brier_score !== null 
-                ? (1 - Number(c.brier_score)) * 100
+            const accuracy = c.weighted_score !== null 
+                ? getRealAccuracy(c.weighted_score)
                 : getEstimatedAccuracy(c.agent_name, c.agent_id, tick);
             return { ...c, _accuracy: accuracy };
         });
@@ -175,8 +188,8 @@ export default function CompetitionLeaderboard({
         // Sort by accuracy DESCENDING (higher = better = rank #1)
         withScores.sort((a, b) => {
             // Real predictions always rank above estimated
-            const aReal = a.brier_score !== null;
-            const bReal = b.brier_score !== null;
+            const aReal = a.weighted_score !== null;
+            const bReal = b.weighted_score !== null;
             if (aReal !== bReal) return aReal ? -1 : 1;
             return (b._accuracy || 0) - (a._accuracy || 0);  // descending
         });
@@ -256,12 +269,12 @@ export default function CompetitionLeaderboard({
                             return a.has_min_predictions ? -1 : 1;
                         }
                         
-                        const accA = a.brier_score !== null 
-                            ? (1 - Number(a.brier_score)) * 100
+                        const accA = a.weighted_score !== null 
+                            ? getRealAccuracy(a.weighted_score)
                             : getEstimatedAccuracy(a.agent_name, a.agent_id, tick);
                             
-                        const accB = b.brier_score !== null 
-                            ? (1 - Number(b.brier_score)) * 100
+                        const accB = b.weighted_score !== null 
+                            ? getRealAccuracy(b.weighted_score)
                             : getEstimatedAccuracy(b.agent_name, b.agent_id, tick);
                             
                         return accB - accA;
@@ -437,7 +450,7 @@ export default function CompetitionLeaderboard({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {competitors.map((c) => {
+                                    {competitors.slice(0, 50).map((c) => {
                                         const rankStyle = getRankStyle(c.rank);
                                         const badge = statusBadge(c.agent_status);
                                         const trend = trendIcon(c.rank_trend || 0);
@@ -570,10 +583,10 @@ export default function CompetitionLeaderboard({
                                                     transition: 'all 0.4s ease',
                                                     ...(scoreFlashId === c.agent_id && c.brier_score !== null ? { transform: 'scale(1.15)', textShadow: '0 0 8px rgba(16,185,129,0.4)' } : {}),
                                                 }}>
-                                                    {c.brier_score !== null 
+                                                    {c.weighted_score !== null 
                                                         ? (
-                                                            <span style={{ fontFamily: 'var(--font-mono)' }}>
-                                                                {((1 - Number(c.brier_score)) * 100).toFixed(1)}%
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: getRealAccuracy(c.weighted_score) > 85 ? 'var(--accent-green)' : 'inherit' }}>
+                                                                {getRealAccuracy(c.weighted_score).toFixed(1)}%
                                                             </span>
                                                         )
                                                         : (

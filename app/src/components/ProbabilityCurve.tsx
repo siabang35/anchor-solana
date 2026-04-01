@@ -43,7 +43,33 @@ function hashString(str: string): number {
     return Math.abs(hash);
 }
 
-// ── Build real agent prediction curve from actual prediction data ──
+// Helper to convert "09:14:31 PM" or ISO strings to total seconds in the current day
+function parseTimeToSeconds(timeStr: string | Date): number {
+    if (timeStr instanceof Date) {
+        return timeStr.getHours() * 3600 + timeStr.getMinutes() * 60 + timeStr.getSeconds();
+    }
+    const str = String(timeStr).replace("'", '');
+    // Try to parse HH:MM:SS PM
+    const ampmMatch = str.match(/(\d+):(\d+):?(\d*)\s*([AaPp][Mm])?/);
+    if (ampmMatch) {
+        let [_, h, m, s, ampm] = ampmMatch;
+        let hours = parseInt(h, 10);
+        if (ampm) {
+            ampm = ampm.toUpperCase();
+            if (ampm === 'PM' && hours < 12) hours += 12;
+            if (ampm === 'AM' && hours === 12) hours = 0;
+        }
+        return hours * 3600 + parseInt(m, 10) * 60 + (s ? parseInt(s, 10) : 0);
+    }
+    // Fallback Date parse
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+        return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    }
+    return 0;
+}
+
+// ── Build real agent prediction curve or tracking line ──
 function buildRealAgentCurve(
     chartLabels: string[],
     predictions: AgentPrediction[],
@@ -51,88 +77,85 @@ function buildRealAgentCurve(
     agentName: string,
     agentIndex: number,
 ): (number | null)[] {
+    const h = hashString(agentName);
+    const freq1 = 0.3 + (h % 50) / 100;
+    const freq2 = 0.15 + (h % 30) / 100;
+    const phase1 = h % Math.PI;
+    const phase2 = (h % 100) / 10;
+    const bias = ((h % 20) - 10) / 2; // -5 to +5%
+
+    const getTrackingPoint = (i: number, base: number) => {
+        const bounce = Math.sin(i * freq1 + phase1) * 8 + Math.cos(i * freq2 + phase2) * 5 + bias;
+        return Math.max(5, Math.min(95, base + bounce));
+    };
+
+    // 1. If no predictions, show deterministic dual-harmonic tracking curve (per doc.md)
     if (!predictions || predictions.length === 0) {
-        // No predictions yet — generate a dynamic "competing" curve that follows base market data
-        // with agent-specific oscillations to show competitive AI battle dynamics
-        const seed = hashString(agentName + agentIndex);
-        const amp1 = 5 + (seed % 8);           // 5-12% primary wave amplitude
-        const amp2 = 2 + (seed % 4);           // 2-5% secondary wave
-        const freq1 = 0.08 + (seed % 20) / 100; // primary oscillation frequency
-        const freq2 = freq1 * 2.7 + 0.05;       // secondary harmonic
-        const phase1 = (seed % 360) * (Math.PI / 180);
-        const phase2 = ((seed * 7) % 360) * (Math.PI / 180);
-        const bias = ((seed % 11) - 5) * 2;    // ±10% unique bias per agent for vertical separation
-        
-        return baseData.map((val, i) => {
-            if (val === null || val === undefined) return null;
-            // Primary wave: broad market-tracking oscillation
-            const wave1 = Math.sin(i * freq1 + phase1) * amp1;
-            // Secondary wave: faster oscillation for realistic variability  
-            const wave2 = Math.cos(i * freq2 + phase2) * amp2;
-            // Micro noise: very subtle per-point variation
-            const micro = Math.sin(i * 0.7 + seed) * 1.2;
-            return Math.max(2, Math.min(98, val + wave1 + wave2 + micro + bias));
-        });
+        return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
     }
 
-    // Create a map of time label → prediction probability
-    const predByTime = new Map<string, number>();
+    // 2. Map actual predictions + their projected curves by exact seconds
+    // We store { secondsOfDay -> probability }
+    const predPoints: { sec: number; prob: number }[] = [];
+
     for (const pred of predictions) {
         const predTime = new Date(pred.timestamp);
-        // Format to match chart label format (HH:MM)
-        const timeStr = predTime.toLocaleTimeString('en-US', {
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-        predByTime.set(timeStr, pred.probability * 100); // Convert to percentage
+        const baseSec = parseTimeToSeconds(predTime);
+        predPoints.push({ sec: baseSec, prob: pred.probability * 100 });
+
+        if (pred.projected_curve && Array.isArray(pred.projected_curve)) {
+            for (const proj of pred.projected_curve) {
+                if (!proj) continue;
+                const futureSec = baseSec + (proj.timestamp_offset_mins * 60);
+                predPoints.push({ sec: futureSec, prob: proj.probability * 100 });
+            }
+        }
     }
+    
+    // Sort points by time
+    predPoints.sort((a, b) => a.sec - b.sec);
 
-    // Build curve: show prediction probability at matching timestamps
-    // For gaps between predictions, interpolate linearly
+    // 3. Build the chart array by matching chartLabel seconds to closest prediction seconds
     const result: (number | null)[] = chartLabels.map(() => null);
+    
+    // Map each chart column to its seconds value
+    const chartTimeMap = chartLabels.map(lbl => parseTimeToSeconds(lbl));
 
-    // Find the first chart index at or after the first prediction
     let firstPredIdx = -1;
     let lastPredIdx = -1;
-    let lastKnownVal: number | null = null;
 
-    // First pass: place known predictions on chart
-    for (let i = 0; i < chartLabels.length; i++) {
-        const label = chartLabels[i].replace("'", ''); // Remove trailing quote if present
-        if (predByTime.has(label)) {
-            result[i] = predByTime.get(label)!;
-            if (firstPredIdx === -1) firstPredIdx = i;
-            lastPredIdx = i;
+    // For each known prediction point, find the closest chart time (within ±3 minutes)
+    for (const pt of predPoints) {
+        let bestIdx = -1;
+        let minDiff = 180; // max 3 mins drift allowed to map a point
+        
+        for (let i = 0; i < chartTimeMap.length; i++) {
+            const diff = Math.abs(chartTimeMap[i] - pt.sec);
+            if (diff < minDiff) {
+                minDiff = diff;
+                bestIdx = i;
+            }
+        }
+        
+        if (bestIdx !== -1) {
+            result[bestIdx] = pt.prob;
+            if (firstPredIdx === -1 || bestIdx < firstPredIdx) firstPredIdx = bestIdx;
+            if (bestIdx > lastPredIdx) lastPredIdx = bestIdx;
         }
     }
 
-    // If no prediction matched any chart label, find closest match
-    if (firstPredIdx === -1 && predictions.length > 0) {
-        // Place predictions at the nearest chart position
-        const sortedPreds = [...predictions].sort(
-            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-        // Distribute predictions evenly across the latter portion of the chart
-        const startOffset = Math.max(0, Math.floor(chartLabels.length * 0.15));
-        const spacing = Math.max(1, Math.floor((chartLabels.length - startOffset) / (sortedPreds.length + 1)));
-
-        for (let p = 0; p < sortedPreds.length; p++) {
-            const idx = Math.min(startOffset + spacing * (p + 1), chartLabels.length - 1);
-            result[idx] = sortedPreds[p].probability * 100;
-            if (firstPredIdx === -1) firstPredIdx = idx;
-            lastPredIdx = idx;
+    // 4. Interpolate missing between valid points
+    if (firstPredIdx !== -1) {
+        // Fix "terputus": Fill all space BEFORE the first prediction with the tracking curve!
+        for (let i = 0; i < firstPredIdx; i++) {
+            result[i] = getTrackingPoint(i, baseData[i] || 50);
         }
-    }
 
-    // Second pass: interpolate between known points for smooth curve
-    if (firstPredIdx >= 0) {
         let prevIdx = firstPredIdx;
         let prevVal = result[firstPredIdx]!;
 
         for (let i = firstPredIdx + 1; i <= lastPredIdx; i++) {
             if (result[i] !== null) {
-                // Fill gap between prevIdx and i with linear interpolation
                 const gap = i - prevIdx;
                 if (gap > 1) {
                     const startVal = prevVal;
@@ -146,11 +169,14 @@ function buildRealAgentCurve(
                 prevVal = result[i]!;
             }
         }
-
-        // Extend the last known value to the end of the chart
+        
+        // Smoothly flatline after the final projected point is reached.
         for (let i = lastPredIdx + 1; i < chartLabels.length; i++) {
             result[i] = result[lastPredIdx];
         }
+    } else {
+        // Failsafe if absolutely no predictions matched (should rarely happen unless chart timeline is entirely older than predictions)
+        return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
     }
 
     return result;
@@ -294,33 +320,36 @@ export default function ProbabilityCurve({
     const chartLabels = data.map(d => d.time);
 
     const agentDatasets = visibleAgents.map((agent, idx) => {
-        const color = AGENT_COLORS[idx % AGENT_COLORS.length];
+        // Generate a distinct neon color from the agent's ID hash for infinite scale
+        const h = Math.abs(hashString(agent.id));
+        const color = `hsl(${h % 360}, 85%, 65%)`;
+        
         const isPaused = agent.status === 'paused' || agent.status === 'exhausted';
+        const isMassive = visibleAgents.length > 15; // Enable performance scaling
 
-        // Use real prediction data if available, otherwise show null (no fake curves)
+        // Use real prediction data if available, otherwise show tracking curve
         const agentPreds = agentPredictions?.get(agent.id) || [];
         const curveData = buildRealAgentCurve(chartLabels, agentPreds, baseHomeData, agent.name, idx);
         const hasPredictions = agentPreds.length > 0;
 
         return {
-            label: `🤖 ${agent.name}${hasPredictions ? ` (${agentPreds.length})` : ' 🔥 Competing'}`,
+            label: `🤖 ${agent.name}${hasPredictions ? ` (${agentPreds.length} preds · Pred: ${agentPreds[agentPreds.length - 1].probability * 100}%)` : ' 🔥 Competing'}`,
             data: curveData,
-            borderColor: isPaused ? `${color}60` : color,
+            borderColor: isPaused ? color.replace(')', ', 0.4)').replace('hsl', 'hsla') : color,
             backgroundColor: 'transparent',
-            borderWidth: isPaused ? 1.5 : hasPredictions ? 3 : 2.5,
+            borderWidth: isMassive ? 0.8 : (isPaused ? 1.5 : hasPredictions ? 2.5 : 2),
             tension: 0.35,
             fill: false,
-            pointRadius: hasPredictions ? ((_ctx: any) => {
-                return 0;
-            }) : 0,
-            pointHitRadius: 12,
-            pointHoverRadius: 7,
+            pointRadius: 0,
+            pointHitRadius: isMassive ? 0 : 12,
+            pointHoverRadius: isMassive ? 0 : 7,
             pointHoverBackgroundColor: color,
             pointHoverBorderColor: '#fff',
-            pointHoverBorderWidth: 2,
+            pointHoverBorderWidth: isMassive ? 0 : 2,
             borderDash: isPaused ? [6, 4] : [],
             spanGaps: true,
             order: 0,
+            normalized: true, // Boost parsing perf for massive arrays
         };
     });
 
@@ -499,7 +528,8 @@ export default function ProbabilityCurve({
                 max: 70,
             },
         },
-        animation: { duration: 800, easing: 'easeInOutQuart' },
+        animation: visibleAgents.length > 15 ? false as any : { duration: 800, easing: 'easeInOutQuart' },
+        normalized: true, // Huge performance boost for large dataset sizes
     };
 
     // ── Popover status badge ─────────────────────────────────────
@@ -617,7 +647,7 @@ export default function ProbabilityCurve({
                                         background: `${color}20`, fontWeight: 800,
                                     }}>
                                         {predCount} pred{predCount > 1 ? 's' : ''}
-                                        {latestProb !== null && ` · ${(latestProb * 100).toFixed(0)}%`}
+                                        {latestProb !== null && ` · Pred: ${(latestProb * 100).toFixed(0)}%`}
                                     </span>
                                 ) : (
                                     <span style={{
