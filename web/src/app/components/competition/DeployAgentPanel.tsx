@@ -64,7 +64,7 @@ export function DeployAgentPanel({ initialCategory = 'finance' }: Props) {
 
             const res = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     ...(address ? { 'x-user-id': address } : {})
                 },
@@ -179,11 +179,10 @@ export function DeployAgentPanel({ initialCategory = 'finance' }: Props) {
                 <motion.div
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`mt-3 p-3 rounded-lg text-xs font-semibold ${
-                        status === 'success'
+                    className={`mt-3 p-3 rounded-lg text-xs font-semibold ${status === 'success'
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    }`}
+                        }`}
                 >
                     {status === 'success' ? '✅' : '❌'} {statusMsg}
                 </motion.div>
