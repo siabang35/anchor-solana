@@ -6,15 +6,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const NAV_LINKS = [
-    { href: '/', label: 'Dashboard', icon: '📊' },
-    { href: '/category/crypto', label: 'Crypto', icon: '₿' },
-    { href: '/category/finance', label: 'Finance', icon: '📈' },
-    { href: '/category/politics', label: 'Politics', icon: '🏛️' },
-    { href: '/category/tech', label: 'Tech', icon: '💻' },
-    { href: '/category/sports', label: 'Sports', icon: '⚽' },
-];
-
+// NAV_LINKS removed for cleaner UI
 interface Props {
     theme: 'dark' | 'light';
     onToggleTheme: () => void;
@@ -33,10 +25,7 @@ export default function Header({ theme, onToggleTheme }: Props) {
         return () => clearInterval(interval);
     }, []);
 
-    // Close menu on route change
-    useEffect(() => {
-        setMenuOpen(false);
-    }, [pathname]);
+    // Close menu logic removed
 
     return (
         <header className="header">
@@ -51,34 +40,7 @@ export default function Header({ theme, onToggleTheme }: Props) {
                 <span className="badge devnet">DEVNET</span>
             </div>
 
-            {/* Desktop Navigation */}
-            <nav className="header-nav" style={{
-                display: 'flex', gap: '0.15rem', alignItems: 'center',
-                marginLeft: '1rem', marginRight: 'auto',
-            }}>
-                {NAV_LINKS.map(link => {
-                    const isActive = pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href));
-                    return (
-                        <Link
-                            key={link.href}
-                            href={link.href}
-                            style={{
-                                display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
-                                padding: '0.3rem 0.6rem', borderRadius: 'var(--radius-round, 9999px)',
-                                fontSize: '0.6rem', fontWeight: isActive ? 700 : 500,
-                                color: isActive ? '#818cf8' : 'var(--text-muted)',
-                                background: isActive ? 'rgba(129,140,248,0.1)' : 'transparent',
-                                border: isActive ? '1px solid rgba(129,140,248,0.2)' : '1px solid transparent',
-                                textDecoration: 'none', transition: 'all 0.2s',
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            <span style={{ fontSize: '0.7rem' }}>{link.icon}</span>
-                            <span className="nav-label">{link.label}</span>
-                        </Link>
-                    );
-                })}
-            </nav>
+            {/* Navigation removed for cleaner top header */}
 
             <div className="header-right">
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{time}</span>
@@ -116,38 +78,7 @@ export default function Header({ theme, onToggleTheme }: Props) {
                 </button>
             </div>
 
-            {/* Mobile Menu Overlay */}
-            {menuOpen && (
-                <div className="mobile-menu-overlay" style={{
-                    position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0,
-                    background: 'rgba(7,8,15,0.95)', backdropFilter: 'blur(12px)',
-                    zIndex: 100, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.3rem',
-                    animation: 'fadeIn 0.2s ease-out',
-                }}>
-                    {NAV_LINKS.map(link => {
-                        const isActive = pathname === link.href || (link.href !== '/' && pathname?.startsWith(link.href));
-                        return (
-                            <Link
-                                key={link.href}
-                                href={link.href}
-                                onClick={() => setMenuOpen(false)}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                    padding: '0.8rem 1rem', borderRadius: '12px',
-                                    fontSize: '0.85rem', fontWeight: isActive ? 700 : 500,
-                                    color: isActive ? '#818cf8' : 'var(--text-secondary, #94a3b8)',
-                                    background: isActive ? 'rgba(129,140,248,0.1)' : 'rgba(255,255,255,0.03)',
-                                    border: `1px solid ${isActive ? 'rgba(129,140,248,0.2)' : 'rgba(255,255,255,0.06)'}`,
-                                    textDecoration: 'none', transition: 'all 0.2s',
-                                }}
-                            >
-                                <span style={{ fontSize: '1.1rem' }}>{link.icon}</span>
-                                {link.label}
-                            </Link>
-                        );
-                    })}
-                </div>
-            )}
+            {/* Mobile Menu Overlay removed */}
 
             {/* Responsive CSS for mobile menu button */}
             <style>{`

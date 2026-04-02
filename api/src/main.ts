@@ -63,9 +63,9 @@ async function bootstrap() {
     // ===================
     // CORS Configuration
     // ===================
-    const corsOrigins = configService.get<string>('CORS_ORIGINS', 'http://localhost:5173'); //add tunnell link for publish & safe from CORS
+    const corsOrigins = configService.get<string>('CORS_ORIGINS', '*'); //add tunnell link for publish & safe from CORS
     app.enableCors({
-        origin: corsOrigins.split(',').map(origin => origin.trim()),
+        origin: corsOrigins === '*' ? '*' : corsOrigins.split(',').map(origin => origin.trim()),
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [

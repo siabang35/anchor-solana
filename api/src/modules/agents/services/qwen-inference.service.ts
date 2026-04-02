@@ -28,7 +28,7 @@ export class QwenInferenceService {
     private readonly logger = new Logger(QwenInferenceService.name);
     // Securely loading HF key using ConfigService to ensure variables are resolved
     private readonly HF_API_KEY: string;
-    private readonly MODEL_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct';
+    private readonly MODEL_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct'; // Downgraded to 7B because larger models 404 on Free Tier
 
     constructor(private readonly configService: ConfigService) {
         this.HF_API_KEY = this.configService.get<string>('HUGGINGFACE_TOKEN') || process.env.HUGGINGFACE_TOKEN || '';
