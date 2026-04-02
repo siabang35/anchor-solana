@@ -318,6 +318,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     loading={leaderboardLoading}
                     lastUpdated={leaderboardLastUpdated}
                     agentPredictions={agentPredictionsMap}
+                    probHistory={probHistory}
                 />
 
                 {/* Competitions Grid */}

@@ -25,15 +25,6 @@ export class MarketsController {
         private readonly clusteringService: CompetitionClusteringService
     ) { }
 
-    @Post('trigger-clustering')
-    @Public()
-    @ApiOperation({ summary: 'Manually trigger the daily competition clustering' })
-    async triggerClustering() {
-        // Trigger asynchronously to not block the request
-        this.clusteringService.handleDailyClustering().catch(e => console.error(e));
-        return { success: true, message: 'Clustering job started in background' };
-    }
-
     /**
      * Create a new AI agent competition
      */

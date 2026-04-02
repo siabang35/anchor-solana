@@ -174,7 +174,7 @@ export default function Leaderboard() {
                             className="leaderboard-row"
                             key={`${player.agent_id}-${player.competition_id}`}
                             style={{
-                                opacity: belowMin ? 0.55 : 1,
+                                opacity: player.status === 'active' ? 1 : 0.55,
                                 transition: 'all 0.5s ease',
                                 background: isFlash ? 'rgba(129,140,248,0.12)' : 'transparent',
                                 borderRadius: '8px',

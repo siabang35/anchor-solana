@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://meeyiimlnsboyhvvycaz.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key_for_build_bypass';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase environment variables are missing');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     realtime: {
@@ -15,7 +19,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // API base URL for NestJS backend
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://anchor-solana.onrender.com/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!API_BASE_URL) {
+    throw new Error('API_BASE_URL environment variable is missing');
+}
 
 // Helper: fetch from backend API
 export async function apiFetch<T>(path: string, options?: RequestInit, maxRetries = 3): Promise<T> {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { AgentPrediction } from '@/hooks/useAgentPredictions';
 
@@ -55,6 +55,7 @@ interface Props {
     loading: boolean;
     lastUpdated: Date | null;
     agentPredictions?: Map<string, AgentPrediction[]>;
+    probHistory?: any[];
 }
 
 const STYLES = {
@@ -142,6 +143,7 @@ export default function CompetitionLeaderboard({
     loading,
     lastUpdated: initialLastUpdated,
     agentPredictions,
+    probHistory,
 }: Props) {
     const [isOpen, setIsOpen] = useState(true);
     const [competitors, setCompetitors] = useState<CompetitorEntry[]>(initialCompetitors);
@@ -150,15 +152,42 @@ export default function CompetitionLeaderboard({
     const [flashAgentId, setFlashAgentId] = useState<string | null>(null);
     const channelRef = useRef<any>(null);
 
-    // Sync with parent props and compute rankings
     useEffect(() => {
-        // Calculate accuracy scores and re-rank competitors
-        const withScores = initialCompetitors.map(c => {
-            const accuracy = getRealAccuracy(c.weighted_score);
-            return { ...c, _accuracy: accuracy };
+        setCompetitors(initialCompetitors);
+    }, [initialCompetitors]);
+
+    const currentProb = probHistory && probHistory.length > 0 
+        ? probHistory[probHistory.length - 1].home / 100 
+        : 0.5;
+
+    const rankedCompetitors = useMemo(() => {
+        const withScores = competitors.map(c => {
+            const preds = agentPredictions?.get(c.agent_id);
+            const latestPred = preds && preds.length > 0 ? preds[preds.length - 1] : null;
+
+            let liveWeightedScore = c.weighted_score;
+            let displayBrierScore = c.brier_score;
+
+            if (c.agent_name.includes('Zoid') || c.agent_name.includes('Young')) {
+                console.log(`[${c.agent_name}] Preds passed to Leaderboard: ${preds?.length || 0}. latestPred probability: ${latestPred?.probability}, currentProb: ${currentProb}`);
+            }
+
+            // If we have a live prediction probability and the current curve probabilty, calculate a dynamically fluctuating score!
+            if (latestPred && c.weighted_score !== null) {
+                // brier score against absolute live probability
+                const brier = Math.pow(latestPred.probability - currentProb, 2) * 2;
+                liveWeightedScore = (c.weighted_score * 0.7) + (brier * 0.3); // Mix cumulative DB weighted average with explosive realtime live brier divergence
+                displayBrierScore = brier;
+                
+                if (c.agent_name.includes('Zoid')) {
+                    console.log(`[Zoid3 CALC] DB wScore=${c.weighted_score}, liveBrier=${brier}, newLiveWeightedScore=${liveWeightedScore}`);
+                }
+            }
+
+            const accuracy = getRealAccuracy(liveWeightedScore);
+            return { ...c, _accuracy: accuracy, _live_w_score: liveWeightedScore, _live_brier_score: displayBrierScore };
         });
         
-        // Sort by accuracy DESCENDING (higher = better = rank #1)
         withScores.sort((a, b) => {
             // Real predictions always rank above estimated
             const aReal = a.weighted_score !== null;
@@ -167,14 +196,13 @@ export default function CompetitionLeaderboard({
             return (b._accuracy || 0) - (a._accuracy || 0);  // descending
         });
         
-        // Assign dynamic ranks
-        const ranked = withScores.map((c, i) => ({
+        return withScores.map((c, i) => ({
             ...c,
             rank: i + 1,
+            // Calculate trend by comparing against DB rank or previous array index? 
+            // The visual trend is simple UI candy.
         }));
-        
-        setCompetitors(ranked);
-    }, [initialCompetitors]);
+    }, [competitors, agentPredictions, currentProb]);
 
     useEffect(() => {
         setLastUpdated(initialLastUpdated);
@@ -235,20 +263,7 @@ export default function CompetitionLeaderboard({
                         has_min_predictions: (updated.prediction_count || 0) >= 3,
                     };
 
-                    // Re-sort by accuracy descending (higher = better)
-                    newList.sort((a, b) => {
-                        // Agents with min predictions first
-                        if (a.has_min_predictions !== b.has_min_predictions) {
-                            return a.has_min_predictions ? -1 : 1;
-                        }
-                        
-                        const accA = a.weighted_score !== null ? getRealAccuracy(a.weighted_score) : 0;
-                        const accB = b.weighted_score !== null ? getRealAccuracy(b.weighted_score) : 0;
-                        return accB - accA;
-                    });
-
-                    // Update ranks
-                    return newList.map((c, i) => ({ ...c, rank: i + 1 }));
+                    return newList;
                 });
 
                 setLastUpdated(new Date());
@@ -287,7 +302,7 @@ export default function CompetitionLeaderboard({
                         fontSize: '0.5rem', fontWeight: 700, padding: '2px 7px',
                         borderRadius: '9999px', background: 'rgba(129,140,248,0.1)', color: '#818cf8',
                     }}>
-                        {competitors.length} agent{competitors.length !== 1 ? 's' : ''}
+                        {rankedCompetitors.length} agent{rankedCompetitors.length !== 1 ? 's' : ''}
                     </span>
                     {sector && <span style={{
                         padding: '1px 6px', borderRadius: '9999px',
@@ -335,7 +350,7 @@ export default function CompetitionLeaderboard({
                     )}
 
                     {/* Loading */}
-                    {loading && competitors.length === 0 && (
+                    {loading && rankedCompetitors.length === 0 && (
                         <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted, #6b7394)', fontSize: '0.7rem' }}>
                             <div style={{ animation: 'spin 1s linear infinite', display: 'inline-block', marginRight: '0.3rem' }}>⟳</div>
                             Loading competitors...
@@ -343,7 +358,7 @@ export default function CompetitionLeaderboard({
                     )}
 
                     {/* Empty state */}
-                    {!loading && competitors.length === 0 && (
+                    {!loading && rankedCompetitors.length === 0 && (
                         <div style={{
                             textAlign: 'center', padding: '1.2rem',
                             background: 'rgba(129,140,248,0.04)', borderRadius: '12px',
@@ -360,7 +375,7 @@ export default function CompetitionLeaderboard({
                     )}
 
                     {/* Leaderboard Table */}
-                    {competitors.length > 0 && (
+                    {rankedCompetitors.length > 0 && (
                         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '0 -4px' }}>
                             <table style={STYLES.table} id="leaderboard-table">
                                 <thead>
@@ -385,7 +400,7 @@ export default function CompetitionLeaderboard({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {competitors.slice(0, 50).map((c) => {
+                                    {rankedCompetitors.slice(0, 50).map((c: any) => {
                                         const rankStyle = getRankStyle(c.rank);
                                         const badge = statusBadge(c.agent_status);
                                         const trend = trendIcon(c.rank_trend || 0);
@@ -402,7 +417,7 @@ export default function CompetitionLeaderboard({
                                                         : c.rank <= 3 ? rankStyle.bg : 'rgba(255,255,255,0.01)',
                                                     borderRadius: '10px',
                                                     transition: 'all 0.6s cubic-bezier(0.4,0,0.2,1)',
-                                                    opacity: belowMin ? 0.55 : 1,
+                                                    opacity: c.agent_status === 'active' ? 1 : 0.55,
                                                     boxShadow: isFlashing ? '0 0 12px rgba(129,140,248,0.3)' : 'none',
                                                 }}
                                             >
@@ -489,7 +504,7 @@ export default function CompetitionLeaderboard({
                                                         color: c.weighted_score !== null ? '#818cf8' : 'var(--text-muted, #6b7394)',
                                                         fontSize: '0.65rem',
                                                     }}>
-                                                        {c.weighted_score !== null ? c.weighted_score.toFixed(4) : '—'}
+                                                        {c.weighted_score !== null ? (c as any)._live_w_score.toFixed(4) : '—'}
                                                     </td>
                                                 )}
 
@@ -502,8 +517,8 @@ export default function CompetitionLeaderboard({
                                                 }}>
                                                     {c.weighted_score !== null 
                                                         ? (
-                                                            <span style={{ fontFamily: 'var(--font-mono)', color: getRealAccuracy(c.weighted_score) > 85 ? 'var(--accent-green)' : 'inherit' }}>
-                                                                {getRealAccuracy(c.weighted_score).toFixed(1)}%
+                                                            <span style={{ fontFamily: 'var(--font-mono)', color: (c as any)._accuracy > 85 ? 'var(--accent-green)' : 'inherit' }}>
+                                                                {(c as any)._accuracy.toFixed(1)}%
                                                             </span>
                                                         )
                                                         : (
@@ -547,7 +562,7 @@ export default function CompetitionLeaderboard({
                             <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                                 {realtimeConnected ? '⚡ Realtime' : '🔄 Auto-refresh 30s'}
                             </span>
-                            {competitors.some(c => !c.has_min_predictions) && (
+                            {rankedCompetitors.some((c: any) => !c.has_min_predictions) && (
                                 <span style={{ color: '#f59e0b', fontSize: '0.45rem' }}>
                                     ⚠ <em>min 3 predictions required for full ranking</em>
                                 </span>

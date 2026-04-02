@@ -128,28 +128,54 @@ export class AgentRunnerService {
                     competition_id: comp.id,
                     status: 'active',
                 }, { onConflict: 'agent_id,competition_id', ignoreDuplicates: true });
-
-                await this.generatePrediction(agent, comp);
             }
-        } else {
-            // Predict for ALL active assigned competitions
-            for (const entry of entries) {
-                // Fetch competition details
-                const { data: comp } = await supabase
-                    .from('competitions')
-                    .select('id, title, description, sector, competition_end, status')
-                    .eq('id', entry.competition_id)
-                    .single();
+            
+            // Just predict for the first one randomly to bootstrap
+            const randComp = comps[Math.floor(Math.random() * comps.length)];
+            await this.generatePrediction(agent, randComp);
+            return;
+        }
 
-                if (comp) {
-                    // Auto-terminate entry if competition has ended
-                    if (comp.status === 'settled' || comp.status === 'resolving') {
-                        this.logger.log(`🏁 Competition ${comp.id} ended. Completing entry for agent ${agent.id}`);
-                        await supabase.from('agent_competition_entries').update({ status: 'completed' }).eq('agent_id', agent.id).eq('competition_id', comp.id);
-                        continue;
+        // Shuffle entries to ensure fairness over time when rate limits occur
+        const shuffledEntries = [...entries].sort(() => 0.5 - Math.random());
+        
+        let predictionMade = false;
+
+        // Predict for active assigned competitions, ONE max per tick
+        for (const entry of shuffledEntries) {
+            if (predictionMade) break;
+
+            const { data: comp } = await supabase
+                .from('competitions')
+                .select('id, title, description, sector, competition_end, status')
+                .eq('id', entry.competition_id)
+                .single();
+
+            if (comp) {
+                // Auto-terminate entry if competition has ended
+                if (comp.status === 'settled' || comp.status === 'resolving') {
+                    this.logger.log(`🏁 Competition ${comp.id} ended. Completing entry for agent ${agent.id}`);
+                    await supabase.from('agent_competition_entries').update({ status: 'completed' }).eq('agent_id', agent.id).eq('competition_id', comp.id);
+                    
+                    // Check if agent has any other active competitions
+                    const { count: activeCount } = await supabase
+                        .from('agent_competition_entries')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('agent_id', agent.id)
+                        .eq('status', 'active');
+                        
+                    if (!activeCount || activeCount === 0) {
+                        this.logger.log(`☠ Agent ${agent.id} has no more active competitions. Auto-terminating.`);
+                        await supabase.from('agents').update({ status: 'terminated' }).eq('id', agent.id);
+                        break; // Stop running this agent for now since it's terminated
                     }
+                    continue;
+                }
 
-                    await this.generatePrediction(agent, comp);
+                const result = await this.generatePrediction(agent, comp);
+                if (result === 'success' || result === 'failed') {
+                    // Stop trying other competitions if we made an API call (even if it failed/rate-limited)
+                    predictionMade = true;
                 }
             }
         }
@@ -158,7 +184,7 @@ export class AgentRunnerService {
     /**
      * Generate a prediction for an agent-competition pair
      */
-    private async generatePrediction(agent: any, competition: any): Promise<void> {
+    private async generatePrediction(agent: any, competition: any): Promise<'skipped' | 'failed' | 'success'> {
         const supabase = this.supabaseService.getAdminClient();
 
         // Check anti-chunking before proceeding
@@ -175,7 +201,7 @@ export class AgentRunnerService {
             const lastPredTime = new Date(lastPrediction.timestamp).getTime();
             if (Date.now() - lastPredTime < 60000) {
                 // Return silently to avoid log spam, waiting for chunking timeout
-                return;
+                return 'skipped';
             }
         }
 
@@ -240,7 +266,7 @@ export class AgentRunnerService {
 
         if (!forecast) {
             this.logger.warn(`  ⚠ Qwen returned null for agent ${agent.id} (Likely 401 or Rate Limited). Inference failed, skipping prediction.`);
-            return;
+            return 'failed';
         }
 
         // Store the prediction
@@ -251,6 +277,7 @@ export class AgentRunnerService {
         }, baseRefProb);
 
         this.logger.log(`  ✅ Agent ${agent.id} predicted ${(forecast.base_probability * 100).toFixed(1)}% for "${competition.title}"`);
+        return 'success';
     }
 
     /**

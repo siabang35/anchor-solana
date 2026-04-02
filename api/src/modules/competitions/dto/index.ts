@@ -110,6 +110,7 @@ export class CompetitionResponseDto {
     capacity_pct?: number;
     created_at: string;
     updated_at: string;
+    time_horizon?: string;
 }
 
 export class SectorSummaryDto {

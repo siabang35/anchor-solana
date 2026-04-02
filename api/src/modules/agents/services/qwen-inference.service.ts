@@ -26,36 +26,54 @@ export interface ForecasterOutput {
 @Injectable()
 export class QwenInferenceService {
     private readonly logger = new Logger(QwenInferenceService.name);
-    // Securely loading HF key using ConfigService to ensure variables are resolved
     private readonly HF_API_KEY: string;
-    private readonly MODEL_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct'; // Downgraded to 7B because larger models 404 on Free Tier
+
+    /**
+     * HuggingFace Inference Providers — OpenAI-compatible chat/completions API.
+     * Old `api-inference.huggingface.co` is deprecated since 2026.
+     * New: `router.huggingface.co/v1/chat/completions`
+     */
+    private readonly API_URL = 'https://router.huggingface.co/v1/chat/completions';
+    private readonly MODEL_ID = 'Qwen/Qwen2.5-7B-Instruct';
 
     constructor(private readonly configService: ConfigService) {
         this.HF_API_KEY = this.configService.get<string>('HUGGINGFACE_TOKEN') || process.env.HUGGINGFACE_TOKEN || '';
+        if (!this.HF_API_KEY) {
+            this.logger.warn('⚠ HUGGINGFACE_TOKEN not configured — Qwen inference will fail');
+        } else {
+            this.logger.log(`✅ HuggingFace token loaded (${this.HF_API_KEY.substring(0, 6)}...)`);
+        }
     }
 
     /**
-     * Calls Qwen 3.5 9B to generate a probability curve projection and reasoning.
+     * Calls Qwen 2.5 7B Instruct via HuggingFace Inference Providers
+     * to generate a probability curve projection and reasoning.
      */
     async generateForecast(input: ForecasterInput): Promise<ForecasterOutput | null> {
-        const prompt = this.buildPrompt(input);
+        const { systemPrompt, userPrompt } = this.buildPrompt(input);
 
         try {
-            const response = await fetch(this.MODEL_URL, {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+            const response = await fetch(this.API_URL, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.HF_API_KEY}`,
                     'Content-Type': 'application/json',
                 },
+                signal: controller.signal,
                 body: JSON.stringify({
-                    inputs: prompt,
-                    parameters: {
-                        max_new_tokens: 1500,
-                        temperature: 0.2, // Low temperature for consistent reasoning
-                        return_full_text: false,
-                    }
+                    model: this.MODEL_ID,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt },
+                    ],
+                    max_tokens: 1500,
+                    temperature: 0.2, // Low temperature for consistent reasoning
                 })
             });
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const errText = await response.text();
@@ -63,8 +81,13 @@ export class QwenInferenceService {
                 return null;
             }
 
-            const data = await response.json();
-            const generatedText = (data as any)[0]?.generated_text || '';
+            const data = await response.json() as any;
+            const generatedText = data?.choices?.[0]?.message?.content || '';
+
+            if (!generatedText) {
+                this.logger.warn('Empty response from HuggingFace API');
+                return null;
+            }
 
             return this.parseResponse(generatedText);
 
@@ -74,11 +97,10 @@ export class QwenInferenceService {
         }
     }
 
-    private buildPrompt(input: ForecasterInput): string {
+    private buildPrompt(input: ForecasterInput): { systemPrompt: string; userPrompt: string } {
         const newsSummary = input.newsCluster.map((n, i) => `[Article ${i + 1}] ${n.title || n.url}: ${n.content || 'N/A'}`).join('\n');
 
-        return `<|im_start|>system
-You are an elite Autonomous Forecasting Agent competing in the Exoduze AI Competition.
+        const systemPrompt = `You are an elite Autonomous Forecasting Agent competing in the Exoduze AI Competition.
 Your goal is to predict the probability of an event occurring over a specific time horizon.
 You must use structured reasoning:
 1. Extract signals from the news cluster.
@@ -96,17 +118,17 @@ Return ONLY a valid JSON object matching this schema:
     {"timestamp_offset_mins": 0, "probability": 0.55},
     {"timestamp_offset_mins": 60, "probability": 0.58}
   ]
-}
-<|im_end|>
-<|im_start|>user
-Event: ${input.eventTitle}
+}`;
+
+        const userPrompt = `Event: ${input.eventTitle}
 Description: ${input.description}
 Time Horizon: ${input.horizon}
 News Cluster:
 ${newsSummary}
 
-Compute the probability and curve.<|im_end|>
-<|im_start|>assistant`;
+Compute the probability and curve.`;
+
+        return { systemPrompt, userPrompt };
     }
 
     private parseResponse(text: string): ForecasterOutput | null {

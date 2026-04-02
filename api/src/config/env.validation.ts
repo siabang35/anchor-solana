@@ -85,6 +85,7 @@ export const envSchema = z.object({
     COINMARKETCAP_API_KEY: z.string().optional(),
     CRYPTOPANIC_API_KEY: z.string().optional(),
     FRED_API_KEY: z.string().optional(),
+    HUGGINGFACE_TOKEN: z.string().optional(),
 
     // Sports API Keys
     APIFOOTBALL_API_KEY: z.string().optional(),

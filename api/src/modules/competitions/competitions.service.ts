@@ -147,6 +147,28 @@ export class CompetitionsService {
     }
 
     /**
+     * Find active competitions for a specific sector + horizon
+     */
+    async findActiveByHorizon(sector: string, timeHorizon: string): Promise<CompetitionResponseDto[]> {
+        const supabase = this.supabaseService.getClient();
+
+        const { data, error } = await supabase
+            .from('competitions')
+            .select('*')
+            .eq('sector', sector)
+            .eq('time_horizon', timeHorizon)
+            .in('status', ['active', 'upcoming'])
+            .limit(1);
+
+        if (error) {
+            this.logger.error(`Failed to fetch by horizon: ${error.message}`);
+            return [];
+        }
+
+        return (data || []).map((c: any) => this.toResponseDto(c));
+    }
+
+    /**
      * Update competition probabilities (used by on-chain sync)
      */
     async updateProbabilities(id: string, probabilities: number[]): Promise<void> {
@@ -206,6 +228,7 @@ export class CompetitionsService {
             image_url: competition.image_url,
             tags: competition.tags || [],
             metadata: competition.metadata || {},
+            time_horizon: competition.time_horizon || null,
             seconds_remaining: Math.max(0, Math.floor((endTime - now) / 1000)),
             progress_pct: now < startTime ? 0 : now > endTime ? 100 :
                 Math.round((now - startTime) / (endTime - startTime) * 100),

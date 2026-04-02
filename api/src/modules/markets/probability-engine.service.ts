@@ -15,7 +15,7 @@ export interface ProbabilitySnapshot {
 export class ProbabilityEngineService {
     private readonly logger = new Logger(ProbabilityEngineService.name);
     // HuggingFace Inference API endpoint for Qwen 3.5 9B
-    private readonly qwenApiUrl = 'https://api-inference.huggingface.co/models/Qwen/Qwen3.5-9B-Instruct';
+    private readonly qwenApiUrl = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen3.5-9B-Instruct';
     private qwenApiKey: string;
 
     constructor(

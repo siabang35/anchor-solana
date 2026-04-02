@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../database/supabase.service.js';
 import { AntiManipulationUtil } from '../utils/anti-manipulation.util.js';
 import { CurveGeneratorService, Signal } from './curve-generator.service.js';
-import { CompetitionManagerService } from './competition-manager.service.js';
 
 @Injectable()
 export class EtlIngestionService {
@@ -11,11 +10,12 @@ export class EtlIngestionService {
     constructor(
         private readonly supabaseService: SupabaseService,
         private readonly curveGenerator: CurveGeneratorService,
-        private readonly compManager: CompetitionManagerService
     ) {}
 
     /**
-     * Process an incoming cluster of news from the ETL pipeline
+     * Process an incoming cluster of news from the ETL pipeline.
+     * UPDATED: This service no longer creates competitions independently.
+     * It only updates existing competitions created by the Seeder.
      */
     async processCluster(category: string, articles: any[], title: string, signals: Signal[], horizon: string = '24h') {
         try {
@@ -30,37 +30,33 @@ export class EtlIngestionService {
 
             const supabase = this.supabaseService.getAdminClient();
 
-            // 2. Check if there's an active competition matching this event
-            // Note: For simplicity, we assume one ongoing event per major cluster title.
-            // In a real system, we'd use embedding similarity to match existing competitions.
-            let { data: existingComp } = await supabase
+            // 2. Find the active competition matching this title dynamically.
+            // Since the seeder appends suffixes like "— outcome prediction?", we cannot exact match.
+            const { data: activeComps } = await supabase
                 .from('competitions')
-                .select('*')
-                .eq('title', title)
-                .eq('status', 'active')
-                .single();
+                .select('id, title')
+                .eq('sector', category.toLowerCase())
+                .eq('status', 'active');
 
-            let competitionId;
+            let competitionId = null;
 
-            if (existingComp) {
-                competitionId = existingComp.id;
-            } else {
-                // 3. New event: Check category quota
-                const slots = await this.compManager.getAvailableSlots(category);
-                if (slots <= 0) {
-                    this.logger.log(`Category ${category} full. Cannot create competition for: ${title}`);
-                    return null;
+            if (activeComps && activeComps.length > 0) {
+                const normalizedEtlTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+                for (const comp of activeComps) {
+                    const normalizedDbTitle = comp.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (normalizedDbTitle.includes(normalizedEtlTitle) || normalizedEtlTitle.includes(normalizedDbTitle)) {
+                        competitionId = comp.id;
+                        break;
+                    }
                 }
-
-                // 4. Create new competition
-                // Base probability uses Bayesian prior or default 0.5
-                const newComp = await this.compManager.createCompetition(category, title, `Event forecasting for ${title}`, horizon, 0.5);
-                if (!newComp) return null;
-                competitionId = newComp.id;
             }
 
-            // 5. Save the news cluster
-            // Hash the articles URLs and content for immutability
+            if (!competitionId) {
+                this.logger.debug(`No active competition matches ETL cluster "${title}". Skipping update.`);
+                return null;
+            }
+
+            // 3. Save the news cluster
             const clusterData = { title, articles: weightedArticles.map(a => a.url) };
             const clusterHash = AntiManipulationUtil.hashSnapshot(clusterData);
 
@@ -69,16 +65,15 @@ export class EtlIngestionService {
                 cluster_hash: clusterHash,
                 article_urls: weightedArticles.map(a => a.url),
                 signals,
-                sentiment: 0 // Could calculate average sentiment
+                sentiment: 0
             }).select('id').single();
 
             if (clusterError || !newCluster) {
-                // Might be a duplicate cluster hash
                 this.logger.warn(`Skipping identical cluster update for ${title}`);
                 return null;
             }
 
-            // 6. Update probability curve based on new signals
+            // 4. Update probability curve based on new signals
             await this.curveGenerator.generateCurveSnapshot(
                 competitionId,
                 newCluster.id,
@@ -86,7 +81,7 @@ export class EtlIngestionService {
                 horizon
             );
 
-            this.logger.log(`Successfully processed ETL cluster for: ${title}`);
+            this.logger.log(`✅ Successfully attached ETL cluster updates to existing event: ${title}`);
             return true;
 
         } catch (error: any) {
