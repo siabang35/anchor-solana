@@ -15,7 +15,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // API base URL for NestJS backend
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://anchor-solana.onrender.com/api/v1';
 
 // Helper: fetch from backend API
 export async function apiFetch<T>(path: string, options?: RequestInit, maxRetries = 3): Promise<T> {
@@ -31,7 +31,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
         throw new Error('Invalid API path');
     }
 
-    
+
     while (true) {
         try {
             const res = await fetch(`${API_BASE_URL}${sanitizedPath}`, {
@@ -44,7 +44,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
 
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ message: res.statusText }));
-                
+
                 // If 429 Too Many Requests and we have retries left, wait and retry
                 if (res.status === 429 && retries < maxRetries) {
                     retries++;
@@ -53,10 +53,10 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
                     await new Promise(r => setTimeout(r, backoff));
                     continue;
                 }
-                
+
                 throw new Error(err.message || `API Error: ${res.status}`);
             }
-            
+
             return res.json();
         } catch (error: any) {
             // Only retry on network errors or 429s (handled above), throw everything else
