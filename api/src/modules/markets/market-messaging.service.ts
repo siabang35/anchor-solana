@@ -140,8 +140,13 @@ export class MarketMessagingService implements OnModuleInit, OnModuleDestroy {
         try {
             // Dynamic import of amqplib to avoid issues if not installed
             const amqp = await import('amqplib');
+            const connectFn = amqp.connect || (amqp.default && amqp.default.connect);
+            
+            if (!connectFn) {
+                throw new Error('amqplib connection function not found');
+            }
 
-            this.connection = await amqp.connect(this.rabbitMQUrl!);
+            this.connection = await connectFn(this.rabbitMQUrl!);
             this.logger.log('Connected to RabbitMQ');
 
             this.connection.on('error', (error: Error) => {

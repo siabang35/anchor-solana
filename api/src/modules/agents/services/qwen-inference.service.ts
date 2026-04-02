@@ -26,11 +26,13 @@ export interface ForecasterOutput {
 @Injectable()
 export class QwenInferenceService {
     private readonly logger = new Logger(QwenInferenceService.name);
-    // Hardcoded HF key as requested by prompt
-    private readonly HF_API_KEY = process.env.HUGGINGFACE_TOKEN;
-    private readonly MODEL_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen3.5-9B-Instruct';
+    // Securely loading HF key using ConfigService to ensure variables are resolved
+    private readonly HF_API_KEY: string;
+    private readonly MODEL_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-72B-Instruct';
 
-    constructor(private readonly configService: ConfigService) { }
+    constructor(private readonly configService: ConfigService) {
+        this.HF_API_KEY = this.configService.get<string>('HUGGINGFACE_TOKEN') || process.env.HUGGINGFACE_TOKEN || '';
+    }
 
     /**
      * Calls Qwen 3.5 9B to generate a probability curve projection and reasoning.

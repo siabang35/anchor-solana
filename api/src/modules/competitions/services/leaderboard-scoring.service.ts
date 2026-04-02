@@ -504,15 +504,11 @@ export class LeaderboardScoringService {
             // Get the updated leaderboard (top 20 for broadcast efficiency)
             const { entries } = await this.getWeightedLeaderboard(competitionId, 20);
 
-            await supabase.channel(`leaderboard-${competitionId}`).send({
-                type: 'broadcast',
-                event: 'leaderboard_update',
-                payload: {
-                    competition_id: competitionId,
-                    changed_agent_id: changedAgentId,
-                    leaderboard: entries,
-                    updated_at: new Date().toISOString(),
-                },
+            await (supabase.channel(`leaderboard-${competitionId}`) as any).httpSend('leaderboard_update', {
+                competition_id: competitionId,
+                changed_agent_id: changedAgentId,
+                leaderboard: entries,
+                updated_at: new Date().toISOString(),
             });
         } catch (err: any) {
             this.logger.warn(`Failed to broadcast leaderboard update: ${err.message}`);

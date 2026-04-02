@@ -180,9 +180,7 @@ export class CurveGeneratorService {
 
         // Broadcast the real snapshot data for smooth client frontend chart updates
         const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-        await supabase.channel(`competition-market-${competitionId}`).send({
-            type: 'broadcast',
-            event: 'probability_update',
+        await (supabase.channel(`competition-market-${competitionId}`) as any).httpSend('probability_update', {
             payload: {
                 marketId: competitionId,
                 snapshot: {

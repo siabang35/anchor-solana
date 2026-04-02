@@ -95,7 +95,7 @@ export class GDELTClient extends BaseAPIClient {
         const endpoint = `/doc/doc?${params.toString()}`;
 
         try {
-            const response = await this.makeRequest<any>(endpoint, { timeout: 15000, retries: 1 });
+            const response = await this.makeRequest<any>(endpoint, { timeout: 5000, retries: 0 });
 
             if (!response.articles) {
                 return [];
@@ -179,7 +179,7 @@ export class GDELTClient extends BaseAPIClient {
         const endpoint = `/doc/doc?${params.toString()}`;
 
         try {
-            const response = await this.makeRequest<any>(endpoint, { timeout: 15000, retries: 1 });
+            const response = await this.makeRequest<any>(endpoint, { timeout: 5000, retries: 0 });
 
             if (!response.timeline) {
                 return [];

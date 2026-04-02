@@ -113,7 +113,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
 
             if (res.ok) {
                 const responseData = await res.json();
-                const itemsList = Array.isArray(responseData) ? responseData : (responseData?.data || []);
+                const itemsList = Array.isArray(responseData) ? responseData : (responseData?.items || responseData?.data || []);
                 const items = itemsList.map(mapToFeedItem);
                 
                 setFeeds(items);

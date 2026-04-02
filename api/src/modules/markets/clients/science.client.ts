@@ -39,7 +39,7 @@ export interface SciencePaper {
 // ========================
 
 const SEMANTIC_SCHOLAR_RATE_LIMIT: RateLimitConfig = {
-    requestsPerMinute: 100,
+    requestsPerMinute: 20,
     requestsPerDay: 5000,
     retryAfterMs: 60000,
 };
@@ -50,13 +50,13 @@ export class SemanticScholarClient extends BaseAPIClient {
         super(
             'SemanticScholarClient',
             'https://api.semanticscholar.org/graph/v1',
-            undefined,
+            process.env.SEMANTIC_SCHOLAR_API_KEY,
             SEMANTIC_SCHOLAR_RATE_LIMIT
         );
     }
 
     protected getAuthHeaders(): Record<string, string> {
-        return {};
+        return this.apiKey ? { 'x-api-key': this.apiKey } : {};
     }
 
     /**

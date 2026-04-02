@@ -329,7 +329,7 @@ export class CryptoPanicClient extends BaseAPIClient {
     constructor(private readonly configService: ConfigService) {
         super(
             'CryptoPanicClient',
-            'https://cryptopanic.com/api/free/v1', // Free tier API endpoint
+            'https://cryptopanic.com/api/v1', // Free tier API endpoint
             undefined, // Don't pass API key here, use lazy loading
             CRYPTOPANIC_RATE_LIMIT
         );

@@ -29,7 +29,7 @@ export class AgentRunnerService {
         private readonly qwenService: QwenInferenceService,
         private readonly evaluationService: AgentEvaluationService,
         private readonly scoringService: LeaderboardScoringService,
-    ) {}
+    ) { }
 
     /**
      * Run agent prediction loop every 15 seconds for realtime simulation
@@ -161,6 +161,24 @@ export class AgentRunnerService {
     private async generatePrediction(agent: any, competition: any): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
 
+        // Check anti-chunking before proceeding
+        const { data: lastPrediction } = await supabase
+            .from('agent_predictions')
+            .select('timestamp')
+            .eq('agent_id', agent.id)
+            .eq('competition_id', competition.id)
+            .order('timestamp', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (lastPrediction && lastPrediction.timestamp) {
+            const lastPredTime = new Date(lastPrediction.timestamp).getTime();
+            if (Date.now() - lastPredTime < 60000) {
+                // Return silently to avoid log spam, waiting for chunking timeout
+                return;
+            }
+        }
+
         // Fetch latest curve probability for live scoring reference
         const { data: latestProb } = await supabase
             .from('probability_history')
@@ -222,24 +240,24 @@ export class AgentRunnerService {
 
         if (!forecast) {
             this.logger.warn(`  ⚠ Qwen returned null for agent ${agent.id} (Likely 401 or Rate Limited). Using realtime simulation fallback.`);
-            
+
             // Create a deterministic but dynamic realtime simulation based on the agent's ID
             // This wandering sine-wave logic means agents gracefully drift across the market over hours.
             // This prevents "stuck at 66%" issues because their Brier error is constantly, fluidly changing!
             let hash = 0;
             for (let i = 0; i < agent.id.length; i++) hash = Math.imul(31, hash) + agent.id.charCodeAt(i) | 0;
-            
+
             const timeSec = Math.floor(Date.now() / 1000); // Current second
             // Fast frequency: Cycle completes roughly every 60-120 seconds for maximum realtime volatility
-            const freq = 0.05 + ((Math.abs(hash) % 50) / 1000); 
+            const freq = 0.05 + ((Math.abs(hash) % 50) / 1000);
             const phase = Math.abs(hash) % Math.PI; // Unique starting position
 
             // Current bias from the base line (-30% to +30% for aggressive rank swapping)
             const wanderingBias = Math.sin(timeSec * freq + phase) * 0.30;
             const noise = (Math.random() * 0.04 - 0.02); // High-freq noise (±2%)
-            
+
             const baseProb = Math.max(0.01, Math.min(0.99, baseRefProb + wanderingBias + noise));
-            
+
             // Forecast the future flawlessly along the same deterministic trajectory
             // We project ahead in SECONDS since the curve is moving fast!
             // offsets: 15s, 30s, 60s, 120s
@@ -291,7 +309,13 @@ export class AgentRunnerService {
         }).select('id').single();
 
         if (error) {
-            this.logger.error(`Failed to store prediction for agent ${agentId}: ${error.message}`);
+            // If the Postgres trigger gracefully blocks the duplicate cron job due to anti-chunking, 
+            // log it as a debug trace instead of a scary RED Error block
+            if (error.message?.includes('Anti-chunking')) {
+                this.logger.debug(`Supabase blocked concurrent prediction for agent ${agentId} (Anti-chunking guard)`);
+            } else {
+                this.logger.error(`Failed to store prediction for agent ${agentId}: ${error.message}`);
+            }
             return;
         }
 
@@ -300,7 +324,7 @@ export class AgentRunnerService {
             // For binary events, probability is P(Yes). So the [Yes, No] vector is [P, 1-P].
             const predictedProbs = [data.probability, 1 - data.probability];
             const referenceProbs = [currentCurveProb, 1 - currentCurveProb];
-            
+
             await this.scoringService.scorePrediction(
                 agentId,
                 competitionId,
