@@ -2,16 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import type { AgentPrediction } from '@/hooks/useAgentPredictions';
 
-interface LivePredictionTracker {
-    [agentId: string]: {
-        count: number;
-        latest_probability: number | null;
-        latest_at: string | null;
-    };
-}
-
-// Deterministic hash for stable per-agent score generation
+// Deterministic hash for stable per-agent rank fallbacks if needed
 function hashAgentScore(name: string, id: string): number {
     let hash = 0;
     const str = name + id;
@@ -22,17 +15,6 @@ function hashAgentScore(name: string, id: string): number {
     return Math.abs(hash);
 }
 
-// Generate a competitive estimated accuracy score (higher = better)
-// Accuracy = (1 - brier_score) * 100, range 45% - 80%
-function getEstimatedAccuracy(agentName: string, agentId: string, tick: number = 0): number {
-    const h = hashAgentScore(agentName, agentId);
-    const base = 45 + (h % 250) / 10;  // 45.0% - 70.0%
-    
-    // Add real-time fluctuation (bounce up to ±12% based on tick and agent hash)
-    const bounce = Math.sin(tick * 0.5 + (h % 10)) * ((h % 120) / 10);
-    return Math.max(0, Math.min(100, base + bounce));
-}
-
 // Convert Weighted Score to a realistic graded percentage (0-100%)
 // In crypto prediction markets, a Brier score of 0.05 is a 5% average error, which is massive.
 // We apply an exponential decay based on the time/entropy weighted score so scores fluctuate realistically in the 20%-98% range.
@@ -40,12 +22,14 @@ function getEstimatedAccuracy(agentName: string, agentId: string, tick: number =
 function getRealAccuracy(weightedScore: number | string | null): number {
     if (weightedScore === null) return 0;
     const wScore = Number(weightedScore);
-    // Exponential decay curve: 
+    // Exponential decay curve (calibrated for Brier-weighted scores):
     // W.SCORE = 0.0000 -> 98.0%
-    // W.SCORE = 0.0013 -> 66.3%
-    // W.SCORE = 0.0021 -> 52.2%
-    // W.SCORE = 0.0050 -> 21.8%
-    const accuracy = 98.0 * Math.exp(-wScore * 300);
+    // W.SCORE = 0.0100 -> 92.2%
+    // W.SCORE = 0.0500 -> 73.9%
+    // W.SCORE = 0.1000 -> 54.2%
+    // W.SCORE = 0.2000 -> 29.7%
+    // W.SCORE = 0.5000 ->  4.9%
+    const accuracy = 98.0 * Math.exp(-wScore * 6);
     return Math.max(0, Math.min(99.9, accuracy));
 }interface CompetitorEntry {
     rank: number;
@@ -70,6 +54,7 @@ interface Props {
     competitors: CompetitorEntry[];
     loading: boolean;
     lastUpdated: Date | null;
+    agentPredictions?: Map<string, AgentPrediction[]>;
 }
 
 const STYLES = {
@@ -156,32 +141,20 @@ export default function CompetitionLeaderboard({
     competitors: initialCompetitors,
     loading,
     lastUpdated: initialLastUpdated,
+    agentPredictions,
 }: Props) {
     const [isOpen, setIsOpen] = useState(true);
     const [competitors, setCompetitors] = useState<CompetitorEntry[]>(initialCompetitors);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(initialLastUpdated);
     const [realtimeConnected, setRealtimeConnected] = useState(false);
     const [flashAgentId, setFlashAgentId] = useState<string | null>(null);
-    const [livePredictions, setLivePredictions] = useState<LivePredictionTracker>({});
-    const [scoreFlashId, setScoreFlashId] = useState<string | null>(null);
     const channelRef = useRef<any>(null);
-    const [tick, setTick] = useState(0);
-
-    // Real-time engine tick for dynamic simulated battles
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setTick(t => t + 1);
-        }, 2000);
-        return () => clearInterval(interval);
-    }, []);
 
     // Sync with parent props and compute rankings
     useEffect(() => {
         // Calculate accuracy scores and re-rank competitors
         const withScores = initialCompetitors.map(c => {
-            const accuracy = c.weighted_score !== null 
-                ? getRealAccuracy(c.weighted_score)
-                : getEstimatedAccuracy(c.agent_name, c.agent_id, tick);
+            const accuracy = getRealAccuracy(c.weighted_score);
             return { ...c, _accuracy: accuracy };
         });
         
@@ -201,7 +174,7 @@ export default function CompetitionLeaderboard({
         }));
         
         setCompetitors(ranked);
-    }, [initialCompetitors, tick]);
+    }, [initialCompetitors]);
 
     useEffect(() => {
         setLastUpdated(initialLastUpdated);
@@ -269,14 +242,8 @@ export default function CompetitionLeaderboard({
                             return a.has_min_predictions ? -1 : 1;
                         }
                         
-                        const accA = a.weighted_score !== null 
-                            ? getRealAccuracy(a.weighted_score)
-                            : getEstimatedAccuracy(a.agent_name, a.agent_id, tick);
-                            
-                        const accB = b.weighted_score !== null 
-                            ? getRealAccuracy(b.weighted_score)
-                            : getEstimatedAccuracy(b.agent_name, b.agent_id, tick);
-                            
+                        const accA = a.weighted_score !== null ? getRealAccuracy(a.weighted_score) : 0;
+                        const accB = b.weighted_score !== null ? getRealAccuracy(b.weighted_score) : 0;
                         return accB - accA;
                     });
 
@@ -290,41 +257,9 @@ export default function CompetitionLeaderboard({
             })
             .subscribe();
 
-        // Also listen to new prediction inserts to track live prediction counts
-        const predChannel = supabase
-            .channel(`pred-track-${competitionId}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'agent_predictions',
-                filter: `competition_id=eq.${competitionId}`,
-            }, (payload: any) => {
-                const newPred = payload.new;
-                if (!newPred) return;
-
-                setLivePredictions(prev => {
-                    const agentId = newPred.agent_id;
-                    const existing = prev[agentId] || { count: 0, latest_probability: null, latest_at: null };
-                    return {
-                        ...prev,
-                        [agentId]: {
-                            count: existing.count + 1,
-                            latest_probability: newPred.probability ? Number(newPred.probability) : null,
-                            latest_at: newPred.timestamp,
-                        },
-                    };
-                });
-
-                // Flash the agent row
-                setScoreFlashId(newPred.agent_id);
-                setTimeout(() => setScoreFlashId(null), 2000);
-            })
-            .subscribe();
-
         return () => {
             supabase.removeChannel(channel);
             supabase.removeChannel(dbChannel);
-            supabase.removeChannel(predChannel);
             channelRef.current = null;
             setRealtimeConnected(false);
         };
@@ -495,17 +430,17 @@ export default function CompetitionLeaderboard({
                                                             <div style={{ fontWeight: 700, color: 'var(--text-primary, #e2e8f0)', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                 {c.agent_name}
                                                                 {(() => {
-                                                                    const liveProb = livePredictions[c.agent_id]?.latest_probability;
-                                                                    if (liveProb !== null && liveProb !== undefined) {
+                                                                    const preds = agentPredictions?.get(c.agent_id);
+                                                                    const latestPred = preds && preds.length > 0 ? preds[preds.length - 1] : null;
+                                                                    if (latestPred) {
                                                                         return (
                                                                             <span style={{
                                                                                 fontSize: '0.45rem', padding: '1px 4px',
                                                                                 borderRadius: '9999px',
                                                                                 background: 'rgba(16,185,129,0.12)',
                                                                                 color: '#10b981', fontWeight: 800,
-                                                                                animation: scoreFlashId === c.agent_id ? 'pulse 0.5s ease' : 'none',
                                                                             }}>
-                                                                                📊 {(liveProb * 100).toFixed(0)}%
+                                                                                📊 {(latestPred.probability * 100).toFixed(0)}%
                                                                             </span>
                                                                         );
                                                                     }
@@ -531,33 +466,16 @@ export default function CompetitionLeaderboard({
                                                     </span>
                                                 </td>
 
-                                                {/* Prediction Count */}
+                                                {/* Prediction Count — uses agentPredictions (same source as curve) */}
                                                 <td style={{
                                                     padding: '0.45rem 0.5rem', textAlign: 'right', fontWeight: 700,
-                                                    color: (c.prediction_count || 0) >= 3 ? '#818cf8' : '#06b6d4',
+                                                    color: (agentPredictions?.get(c.agent_id)?.length || c.prediction_count || 0) >= 3 ? '#818cf8' : '#06b6d4',
                                                     fontSize: '0.6rem',
                                                     transition: 'all 0.4s ease',
-                                                    ...(scoreFlashId === c.agent_id ? { color: '#10b981', transform: 'scale(1.2)' } : {}),
                                                 }}>
-                                                    {(() => {
-                                                        const liveExtra = livePredictions[c.agent_id]?.count || 0;
-                                                        const totalPreds = (c.prediction_count || 0) + liveExtra;
-                                                        if (totalPreds === 0) {
-                                                            // Dynamic simulated prediction count before first real commit
-                                                            const simPreds = Math.max(0, Math.floor((Date.now() - new Date(c.deployed_at).getTime()) / 4000) % 50);
-                                                            return (
-                                                                <span style={{
-                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                                                    color: '#06b6d4', fontSize: '0.6rem',
-                                                                }}>
-                                                                    <span style={{ fontSize: '0.55rem', animation: 'pulse 1.5s infinite' }}>🔥</span>
-                                                                    {simPreds}
-                                                                </span>
-                                                            );
-                                                        }
-                                                        return totalPreds;
-                                                    })()}
-                                                    {belowMin && (c.prediction_count || 0) > 0 && (
+                                                    {/* Use agentPredictions (same source as curve) with fallback to DB prediction_count */}
+                                                    {agentPredictions?.get(c.agent_id)?.length || c.prediction_count || 0}
+                                                    {belowMin && (agentPredictions?.get(c.agent_id)?.length || c.prediction_count || 0) > 0 && (
                                                         <span style={{ fontSize: '0.4rem', color: '#f59e0b', marginLeft: '2px' }} title="Below minimum predictions">
                                                             ⚠
                                                         </span>
@@ -578,10 +496,9 @@ export default function CompetitionLeaderboard({
                                                 {/* AI Accuracy Score */}
                                                 <td style={{
                                                     padding: '0.45rem 0.5rem', textAlign: 'right', fontWeight: 700,
-                                                    color: c.brier_score !== null ? '#10b981' : '#06b6d4',
+                                                    color: c.weighted_score !== null ? '#10b981' : '#06b6d4',
                                                     fontSize: '0.6rem',
                                                     transition: 'all 0.4s ease',
-                                                    ...(scoreFlashId === c.agent_id && c.brier_score !== null ? { transform: 'scale(1.15)', textShadow: '0 0 8px rgba(16,185,129,0.4)' } : {}),
                                                 }}>
                                                     {c.weighted_score !== null 
                                                         ? (
@@ -590,9 +507,8 @@ export default function CompetitionLeaderboard({
                                                             </span>
                                                         )
                                                         : (
-                                                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
-                                                                {getEstimatedAccuracy(c.agent_name, c.agent_id, tick).toFixed(1)}%
-                                                                <span style={{ fontSize: '0.35rem', opacity: 0.6, marginLeft: '2px' }}>est</span>
+                                                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                                                0.0%
                                                             </span>
                                                         )
                                                     }

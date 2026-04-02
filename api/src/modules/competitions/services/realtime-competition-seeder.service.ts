@@ -142,7 +142,7 @@ export class RealtimeCompetitionSeederService {
 
         for (let i = 0; i < Math.min(slots, topics.length); i++) {
             const topic = topics[i];
-            const horizon = HORIZON_OPTIONS[i % HORIZON_OPTIONS.length];
+            const horizon = this.determineEventHorizon(topic.title, topic.description);
 
             try {
                 const comp = await this.compManager.createCompetition(
@@ -160,6 +160,36 @@ export class RealtimeCompetitionSeederService {
                 this.logger.warn(`  ❌ Failed to create competition: ${err.message}`);
             }
         }
+    }
+
+    /**
+     * Intelligently analyze the event context to assign an appropriate duration automatically.
+     * Matches the required time scale depending on urgency / horizon keywords.
+     */
+    private determineEventHorizon(title: string, desc: string): string {
+        const text = (title + ' ' + desc).toLowerCase();
+        
+        // 1. Multi-day / Long-term signals (up to Max 7 Days)
+        if (text.match(/\b(election|month|policy|bill|quarter|season|legislation|long-term|annual|weekly|tour|championship|campaign)\b/)) {
+            const options = ['3d', '5d', '7d'];
+            return options[Math.floor(Math.random() * options.length)];
+        }
+
+        // 2. Medium-term / Next Day signals 
+        if (text.match(/\b(tomorrow|weekend|week|earnings|report|meeting|summit|conference|hearing|trial)\b/)) {
+            const options = ['12h', '24h', '3d'];
+            return options[Math.floor(Math.random() * options.length)];
+        }
+
+        // 3. Short-term / Breaking / Urgent signals
+        if (text.match(/\b(tonight|today|breaking|urgent|live|match|game|speech|address|press|ongoing|immediate)\b/)) {
+            const options = ['2h', '7h', '12h'];
+            return options[Math.floor(Math.random() * options.length)];
+        }
+
+        // 4. Default automatic baseline for uncategorized news
+        const defaults = ['7h', '12h', '24h', '3d'];
+        return defaults[Math.floor(Math.random() * defaults.length)];
     }
 
     /**
@@ -262,52 +292,8 @@ export class RealtimeCompetitionSeederService {
                 }
             }
 
-            // Fallback: Generate template-based competitions if not enough data
-            while (topics.length < count) {
-                const idx = topics.length;
-                const template = templates[idx % templates.length];
-                const fallbackTopics = this.getFallbackTopics(category);
-                const topic = fallbackTopics[idx % fallbackTopics.length];
-                const entity = fallbackTopics[(idx + 1) % fallbackTopics.length];
-
-                const title = template
-                    .replace('{topic}', topic)
-                    .replace('{entity}', entity);
-
-                if (usedTitles.has(title)) {
-                    topics.push({
-                        title: `${category.charAt(0).toUpperCase() + category.slice(1)} Event #${idx + 1}: ${topic} forecast`,
-                        description: `Auto-generated forecast competition for ${category}`,
-                        baseProbability: 0.45 + Math.random() * 0.1,
-                    });
-                } else {
-                    topics.push({
-                        title,
-                        description: `Probability assessment for ${topic} in ${category} sector`,
-                        baseProbability: 0.45 + Math.random() * 0.1,
-                    });
-                }
-                usedTitles.add(title);
-            }
-
         } catch (err: any) {
             this.logger.debug(`ETL topic fetch error for ${category}: ${err.message}`);
-
-            // Complete fallback
-            const templates = CATEGORY_EVENT_TEMPLATES[category] || CATEGORY_EVENT_TEMPLATES.finance;
-            const fallbackTopics = this.getFallbackTopics(category);
-
-            while (topics.length < count) {
-                const idx = topics.length;
-                const template = templates[idx % templates.length];
-                topics.push({
-                    title: template
-                        .replace('{topic}', fallbackTopics[idx % fallbackTopics.length])
-                        .replace('{entity}', fallbackTopics[(idx + 2) % fallbackTopics.length]),
-                    description: `Auto-generated competition for ${category}`,
-                    baseProbability: 0.45 + Math.random() * 0.1,
-                });
-            }
         }
 
         return topics.slice(0, count);

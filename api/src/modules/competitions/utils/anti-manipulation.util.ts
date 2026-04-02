@@ -30,8 +30,13 @@ export class AntiManipulationUtil {
         });
 
         return filtered.map(a => {
-            const domain = new URL(a.url).hostname.replace('www.', '');
-            const weight = credibilityWeights[domain] || 1.0;
+            let domain = '';
+            try {
+                domain = new URL(a.url).hostname.replace('www.', '');
+            } catch (e) {
+                // Return default weight if URL is malformed
+            }
+            const weight = domain ? (credibilityWeights[domain] || 1.0) : 1.0;
             return {
                 ...a,
                 weight

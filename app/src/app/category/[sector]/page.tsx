@@ -49,9 +49,9 @@ function getCompetitionStatus(comp: Competition): 'live' | 'upcoming' | 'ended' 
 }
 
 function getHorizonLabel(comp: Competition): string {
-    const start = new Date(comp.competition_start).getTime();
     const end = new Date(comp.competition_end).getTime();
-    const hours = (end - start) / (1000 * 60 * 60);
+    const now = Date.now();
+    const hours = Math.max(0, (end - now) / (1000 * 60 * 60));
     if (hours <= 2) return '2H';
     if (hours <= 7) return '7H';
     if (hours <= 12) return '12H';
@@ -317,6 +317,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     competitors={competitors}
                     loading={leaderboardLoading}
                     lastUpdated={leaderboardLastUpdated}
+                    agentPredictions={agentPredictionsMap}
                 />
 
                 {/* Competitions Grid */}

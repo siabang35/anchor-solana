@@ -99,6 +99,8 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
         fetchCompetitions();
 
         const channelName = sector ? `competitions-${sector}` : 'competitions-all';
+        const filterStr = sector && sector !== 'all' ? `sector=eq.${sector}` : undefined;
+
         const channel = supabase
             .channel(channelName)
             .on(
@@ -107,12 +109,18 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                     event: '*',
                     schema: 'public',
                     table: 'competitions',
+                    ...(filterStr ? { filter: filterStr } : {}),
                 },
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
                         const newComp = payload.new as unknown as Competition;
                         if (!sector || sector === 'all' || newComp.sector === sector) {
-                            setCompetitions((prev) => [newComp, ...prev]);
+                            setCompetitions((prev) => {
+                                // dedup and memory check
+                                if (prev.some(p => p.id === newComp.id)) return prev;
+                                const updated = [newComp, ...prev];
+                                return updated.slice(0, 100); // memory cap
+                            });
                         }
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = payload.new as unknown as Competition;

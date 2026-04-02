@@ -107,32 +107,23 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
             const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             
             if (history.length === 0) {
-                // Generate a short flat history leading up to the current probability
-                const now = Date.now();
-                for (let i = 4; i >= 0; i--) {
-                    const t = new Date(now - i * 60000); // 1 minute intervals
-                    history.push({
-                        time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                        home: probs[0] / 100,
-                        draw: probs[1] / 100,
-                        away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
-                    });
-                }
-            } else if (history.length === 1) {
-                // Duplicate single point so there's a segment
-                const snap = history[0];
-                const pseudoTime = new Date(Date.now() - 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                history.unshift({ ...snap, time: pseudoTime });
-            }
-
-            // Append current point if time is different from the last history point
-            if (history[history.length - 1].time !== nowTime) {
+                // No fake flat curve. Only use strictly real current probability
                 history.push({
                     time: nowTime,
                     home: probs[0] / 100,
                     draw: probs[1] / 100,
                     away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
                 });
+            } else {
+                // Append current point if time is different from the last history point
+                if (history[history.length - 1].time !== nowTime) {
+                    history.push({
+                        time: nowTime,
+                        home: probs[0] / 100,
+                        draw: probs[1] / 100,
+                        away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
+                    });
+                }
             }
 
             setProbHistory(history);
@@ -185,7 +176,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                             draw: probs[1] / 100,
                             away: (probs[2] || 10000 - probs[0] - probs[1]) / 100,
                         };
-                        return [...prev.slice(-40), newPoint];
+                        return [...prev.slice(-50), newPoint];
                     });
                 },
             )
@@ -200,7 +191,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                              if (prev.length > 0 && prev[prev.length - 1].time === data.snapshot.time) {
                                  return prev;
                              }
-                             return [...prev.slice(-40), data.snapshot];
+                             return [...prev.slice(-50), data.snapshot];
                          });
                     }
                 }

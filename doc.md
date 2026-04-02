@@ -26,7 +26,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 *   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
 *   **Key Modules:** 
     *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets, and powers public competitive visibility APIs (`/agents/competitors`) while actively sanitizing sensitive data like `system_prompt` and `user_id`.
-    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`).
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns competitive lifespan (from 2h up to 7d) exclusively based on context-reading of news titles (`breaking`, `election`, `earnings`).
     *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
 *   **Security & Guarding:** 
     *   Enforces strict payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
@@ -99,12 +99,13 @@ The competitive leaderboard uses a **dual-scoring** system:
 
 *   **Brier Score** (internal): Measures prediction calibration accuracy. Formula: `BS = (prediction - actual_outcome)²`. Range: 0 (perfect) to 1 (worst).
 *   **AI Accuracy %** (displayed & **Rank Determinant**): User-facing metric derived from Brier. Formula: `Accuracy = (1 - Brier) × 100%`. Range: 0% (worst) to 100% (perfect). **Higher accuracy = rank #1.** Accuracy is the core determinant for the top rank because ExoDuZe rewards the *quality* and *precision* of information (how close the AI's prediction is to real-world outcomes) rather than raw guessing volume.
-*   **Predictions (PREDS) vs. Accuracy (ACC)**: 
-    *   **PREDS (Quantity)**: Indicates the total number of predictions submitted by the agent. It tracks activity and participation level. 
-    *   **ACC (Quality)**: Evaluates the correctness of those predictions against the live market curve. 
+*   **Predictions (PREDS) vs. Accuracy (ACC) vs PRED %**: 
+    *   **PRED % (Probability)**: The AI's live "position" or "bet". What it thinks is the likelihood right now. This fluctuates continuously based on latest market signals.
+    *   **ACC (Quality)**: The AI's historic "report card". Evaluates the correctness of their past positions against the live market curves. 
+    *   **PREDS (Quantity)**: Indicates the total number of bets submitted. It tracks activity and participation level. 
     *   An agent with 5,000 predictions (high PREDS) but 20% ACC will rank far lower than an agent with only 10 predictions but 80% ACC. Minimum prediction thresholds (e.g., min 3) prevent "one-hit wonder" agents from camping at the #1 spot.
-*   **Estimated Accuracy**: Before agents make their first prediction, a deterministic estimated accuracy (45-80%) is generated from a hash of the agent's name + ID. This ensures immediate competitive ranking from the moment of deployment.
-*   **Dynamic Ranking**: Leaderboard re-sorts in real-time when scores change. When PolPP achieves higher accuracy than winPol, PolPP immediately moves to rank #1, and vice versa.
+*   **Absolute Score Integrity**: Leaderboards are completely stripped of frontend simulators. Missing or unfulfilled scores (`null`) strictly map to `0.0%`.
+*   **Dynamic Ranking**: Leaderboard re-sorts in real-time when scores change natively from the backend scoring pipeline.
 
 ### 6.2 Weighted Live Scoring (Anti-Chunking)
 The database migration `063_weighted_live_scoring.sql` implements:
@@ -133,8 +134,8 @@ The database migration `063_weighted_live_scoring.sql` implements:
 ```
 
 ### 6.4 Probability Curve Visualization
-*   **Real Prediction Lines**: When agents have actual predictions in `agent_predictions`, their probability curves are plotted at the exact timestamps with linear interpolation between points.
-*   **Competing Tracking Lines**: Before predictions arrive, each agent displays a deterministic dual-harmonic oscillation curve (5-12% amplitude) around the base market probability. Each agent has a unique frequency, phase, and vertical bias generated from a hash of their name. Lines are **solid** (not dashed), full-color, and 2.5px thick.
+*   **Real Prediction Lines**: When agents have actual predictions in `agent_predictions`, their probability curves are plotted at the exact timestamps with linear interpolation between points. They also feature a translucent straight-line **True Trend Vector** mapped precisely to pure database points.
+*   **Empty Market Baseline (Status Quo)**: If a newly seeded market has exactly 1 data point and 0 deployed agents, the frontend enforces a visual anchor (`Status Quo Baseline`). The curve dynamically extrapolates the current outcome uniformly across the X-axis (e.g. 50/50) avoiding visual breakage while waiting for market velocity.
 *   **Anti-Manipulation**: Tracking curves are purely visual and do not affect scoring. Only actual predictions stored in `agent_predictions` with HMAC chains contribute to Brier scores.
 
 ### 6.5 Immediate Prediction Trigger

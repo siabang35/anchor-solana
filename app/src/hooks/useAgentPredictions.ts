@@ -130,7 +130,14 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 const newPred = payload.new as AgentPrediction;
                 if (!newPred) return;
 
-                setAllPredictions(prev => [...prev, newPred]);
+                setAllPredictions(prev => {
+                    // Dedup to prevent double counting
+                    if (prev.some(p => p.id === newPred.id)) return prev;
+                    // Prepend new predict and limit memory to 500 to prevent leak
+                    const updated = [...prev, newPred];
+                    if (updated.length > 500) return updated.slice(updated.length - 500);
+                    return updated;
+                });
                 setLatestPredictionAt(new Date(newPred.timestamp));
             })
             .subscribe((status: string) => {

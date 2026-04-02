@@ -11,14 +11,13 @@ import {
     UseGuards,
     HttpCode,
     HttpStatus,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentsService } from './agents.service.js';
 import { AgentRunnerService } from './services/agent-runner.service.js';
 import { DeployAgentDto, DeployForecastingAgentDto } from './dto/index.js';
-
-// Note: Using a simple guard placeholder — in production this should be your JwtAuthGuard
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { AdminGuard } from '../admin/guards/admin.guard.js';
 
 @ApiTags('AI Agents')
 @Controller('agents')
@@ -76,7 +75,7 @@ export class AgentsController {
     @Patch('forecasters/:id/status')
     @ApiOperation({ summary: 'Pause or resume a forecaster agent' })
     async toggleForecasterStatus(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Body('status') status: 'active' | 'paused',
         @Req() req: any,
     ) {
@@ -88,6 +87,7 @@ export class AgentsController {
      * Manually trigger the agent runner loop for testing
      */
     @Post('runner/trigger')
+    @UseGuards(AdminGuard)
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Manually trigger agent prediction loop' })
     async triggerAgentRunner() {
@@ -102,7 +102,7 @@ export class AgentsController {
     @Delete('forecasters/:id/hard')
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Permanently delete a forecaster agent and its history' })
-    async deleteForecaster(@Param('id') id: string, @Req() req: any) {
+    async deleteForecaster(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.deleteForecaster(id, userId);
     }
@@ -210,7 +210,7 @@ export class AgentsController {
      */
     @Get(':id')
     @ApiOperation({ summary: 'Get agent details by ID' })
-    async findById(@Param('id') id: string, @Req() req: any) {
+    async findById(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.findById(id, userId);
     }
@@ -221,7 +221,7 @@ export class AgentsController {
     @Get(':id/predictions')
     @ApiOperation({ summary: 'Get agent prediction history' })
     async getPredictions(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Req() req: any,
         @Query('limit') limit?: string,
     ) {
@@ -235,7 +235,7 @@ export class AgentsController {
     @Get(':id/logs')
     @ApiOperation({ summary: 'Get agent execution logs' })
     async getLogs(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Req() req: any,
         @Query('limit') limit?: string,
     ) {
@@ -249,7 +249,7 @@ export class AgentsController {
     @Patch(':id/toggle')
     @ApiOperation({ summary: 'Activate or pause an agent' })
     async toggleStatus(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @Body('status') status: 'active' | 'paused',
         @Req() req: any,
     ) {
@@ -263,7 +263,7 @@ export class AgentsController {
     @Delete(':id')
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Terminate an agent (frees deploy quota slot)' })
-    async terminate(@Param('id') id: string, @Req() req: any) {
+    async terminate(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.terminate(id, userId);
     }

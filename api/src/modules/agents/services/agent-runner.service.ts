@@ -239,43 +239,7 @@ export class AgentRunnerService {
         const forecast = await this.qwenService.generateForecast(input);
 
         if (!forecast) {
-            this.logger.warn(`  ⚠ Qwen returned null for agent ${agent.id} (Likely 401 or Rate Limited). Using realtime simulation fallback.`);
-
-            // Create a deterministic but dynamic realtime simulation based on the agent's ID
-            // This wandering sine-wave logic means agents gracefully drift across the market over hours.
-            // This prevents "stuck at 66%" issues because their Brier error is constantly, fluidly changing!
-            let hash = 0;
-            for (let i = 0; i < agent.id.length; i++) hash = Math.imul(31, hash) + agent.id.charCodeAt(i) | 0;
-
-            const timeSec = Math.floor(Date.now() / 1000); // Current second
-            // Fast frequency: Cycle completes roughly every 60-120 seconds for maximum realtime volatility
-            const freq = 0.05 + ((Math.abs(hash) % 50) / 1000);
-            const phase = Math.abs(hash) % Math.PI; // Unique starting position
-
-            // Current bias from the base line (-30% to +30% for aggressive rank swapping)
-            const wanderingBias = Math.sin(timeSec * freq + phase) * 0.30;
-            const noise = (Math.random() * 0.04 - 0.02); // High-freq noise (±2%)
-
-            const baseProb = Math.max(0.01, Math.min(0.99, baseRefProb + wanderingBias + noise));
-
-            // Forecast the future flawlessly along the same deterministic trajectory
-            // We project ahead in SECONDS since the curve is moving fast!
-            // offsets: 15s, 30s, 60s, 120s
-            const projectedCurve = [15, 30, 60, 120].map(offsetSec => {
-                const futureSec = timeSec + offsetSec;
-                const futureWander = Math.sin(futureSec * freq + phase) * 0.30;
-                const futureNoise = (Math.random() * 0.02 - 0.01);
-                return {
-                    timestamp_offset_mins: offsetSec / 60.0, // UI expects minutes
-                    probability: Math.max(0.01, Math.min(0.99, baseRefProb + futureWander + futureNoise))
-                };
-            });
-
-            await this.storePrediction(agent.id, competition.id, {
-                probability: baseProb,
-                reasoning: `Inference unavailable (API 401/Rate Limit). Simulated autonomous trajectory tracking current market momentum with a ${(wanderingBias * 100).toFixed(1)}% variance pattern.`,
-                curve: [{ timestamp_offset_mins: 0, probability: baseProb }, ...projectedCurve],
-            }, baseRefProb);
+            this.logger.warn(`  ⚠ Qwen returned null for agent ${agent.id} (Likely 401 or Rate Limited). Inference failed, skipping prediction.`);
             return;
         }
 

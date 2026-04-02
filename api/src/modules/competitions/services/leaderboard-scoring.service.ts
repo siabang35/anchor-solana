@@ -194,6 +194,17 @@ export class LeaderboardScoringService {
     ): Promise<ScoredPrediction | null> {
         const supabase = this.supabaseService.getAdminClient();
 
+        // 0. Idempotency Check (Anti double-score)
+        const { count: existingCount } = await supabase
+            .from('leaderboard_snapshots')
+            .select('*', { count: 'exact', head: true })
+            .eq('prediction_id', predictionId);
+
+        if (existingCount && existingCount > 0) {
+            this.logger.warn(`Prediction ${predictionId} already scored. Skipping to prevent double-counting.`);
+            return null;
+        }
+
         // 1. Calculate raw Brier score against the LIVE reference curve
         const rawBrier = this.calculateBrierScore(predictedProbabilities, referenceProbabilities);
 

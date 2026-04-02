@@ -156,9 +156,9 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
     useEffect(() => {
         fetchFeeds();
 
-        // Supabase Realtime subscription for new items
+        const channelName = category ? `live-feed-inserts-${category}` : 'live-feed-inserts-all';
         const channel = supabase
-            .channel('live-feed-inserts')
+            .channel(channelName)
             .on(
                 'postgres_changes',
                 {
@@ -173,7 +173,11 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
 
                     if (newRow.is_active !== false && newRow.is_duplicate !== true && matchesCategory) {
                         const feedItem = mapToFeedItem(newRow);
-                        setFeeds((prev) => [feedItem, ...prev].slice(0, limit));
+                        setFeeds((prev) => {
+                            // Dedup guard
+                            if (prev.some(p => p.id === feedItem.id)) return prev;
+                            return [feedItem, ...prev].slice(0, limit);
+                        });
                     }
                 },
             )

@@ -89,7 +89,7 @@ function buildRealAgentCurve(
         return Math.max(5, Math.min(95, base + bounce));
     };
 
-    // 1. If no predictions, show deterministic dual-harmonic tracking curve (per doc.md)
+    // 1. If no predictions, fall back to tracking the main curve visually
     if (!predictions || predictions.length === 0) {
         return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
     }
@@ -124,10 +124,10 @@ function buildRealAgentCurve(
     let firstPredIdx = -1;
     let lastPredIdx = -1;
 
-    // For each known prediction point, find the closest chart time (within ±3 minutes)
+    // For each known prediction point, find the absolute closest chart time 
     for (const pt of predPoints) {
         let bestIdx = -1;
-        let minDiff = 180; // max 3 mins drift allowed to map a point
+        let minDiff = Infinity; 
         
         for (let i = 0; i < chartTimeMap.length; i++) {
             const diff = Math.abs(chartTimeMap[i] - pt.sec);
@@ -144,9 +144,9 @@ function buildRealAgentCurve(
         }
     }
 
-    // 4. Interpolate missing between valid points
+    // 4. Interpolate gaps and add visual "battling" jitter anchored to real data
     if (firstPredIdx !== -1) {
-        // Fix "terputus": Fill all space BEFORE the first prediction with the tracking curve!
+        // Space BEFORE the first prediction naturally tracks the reference curve
         for (let i = 0; i < firstPredIdx; i++) {
             result[i] = getTrackingPoint(i, baseData[i] || 50);
         }
@@ -162,21 +162,72 @@ function buildRealAgentCurve(
                     const endVal = result[i]!;
                     for (let j = prevIdx + 1; j < i; j++) {
                         const t = (j - prevIdx) / gap;
-                        result[j] = startVal + (endVal - startVal) * t;
+                        const interpolatedBase = startVal + (endVal - startVal) * t;
+                        result[j] = getTrackingPoint(j, interpolatedBase);
                     }
                 }
                 prevIdx = i;
                 prevVal = result[i]!;
             }
         }
-        
-        // Smoothly flatline after the final projected point is reached.
+
+        // Space AFTER the final projected point flatlines the real prediction, but keeps jittering
         for (let i = lastPredIdx + 1; i < chartLabels.length; i++) {
-            result[i] = result[lastPredIdx];
+            result[i] = getTrackingPoint(i, result[lastPredIdx]!);
         }
     } else {
-        // Failsafe if absolutely no predictions matched (should rarely happen unless chart timeline is entirely older than predictions)
+        // Failsafe if absolutely no predictions matched
         return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
+    }
+
+    return result;
+}
+
+// ── Build absolute true data trajectory line (straight, no jitter) ──
+function buildTrueAgentCurve(
+    chartLabels: string[],
+    predictions: AgentPrediction[],
+): (number | null)[] {
+    if (!predictions || predictions.length === 0) {
+        return chartLabels.map(() => null);
+    }
+
+    const predPoints: { sec: number; prob: number }[] = [];
+
+    for (const pred of predictions) {
+        const predTime = new Date(pred.timestamp);
+        const baseSec = parseTimeToSeconds(predTime);
+        predPoints.push({ sec: baseSec, prob: pred.probability * 100 });
+
+        if (pred.projected_curve && Array.isArray(pred.projected_curve)) {
+            for (const proj of pred.projected_curve) {
+                if (!proj) continue;
+                const futureSec = baseSec + (proj.timestamp_offset_mins * 60);
+                predPoints.push({ sec: futureSec, prob: proj.probability * 100 });
+            }
+        }
+    }
+    
+    predPoints.sort((a, b) => a.sec - b.sec);
+
+    const result: (number | null)[] = chartLabels.map(() => null);
+    const chartTimeMap = chartLabels.map(lbl => parseTimeToSeconds(lbl));
+
+    for (const pt of predPoints) {
+        let bestIdx = -1;
+        let minDiff = Infinity;
+        
+        for (let i = 0; i < chartTimeMap.length; i++) {
+            const diff = Math.abs(chartTimeMap[i] - pt.sec);
+            if (diff < minDiff) {
+                minDiff = diff;
+                bestIdx = i;
+            }
+        }
+        
+        if (bestIdx !== -1) {
+            result[bestIdx] = pt.prob;
+        }
     }
 
     return result;
@@ -261,9 +312,9 @@ export default function ProbabilityCurve({
     // ── Horizon + live status ────────────────────────────────────
     const getHorizon = () => {
         if (!competition) return '';
-        const start = new Date(competition.competition_start).getTime();
         const end = new Date(competition.competition_end).getTime();
-        const hours = (end - start) / (1000 * 60 * 60);
+        const now = Date.now();
+        const hours = Math.max(0, (end - now) / (1000 * 60 * 60));
         if (hours <= 2) return '2H';
         if (hours <= 7) return '7H';
         if (hours <= 12) return '12H';
@@ -315,11 +366,36 @@ export default function ProbabilityCurve({
 
     // ── Build agent datasets (neural lines) ──────────────────────
     // First dataset index for agents (after the 3 base datasets)
+    // First dataset index for agents (after the 3 base datasets)
     const AGENT_DATASET_OFFSET = 3;
 
+    // ── Extend X-axis for future agent projections / Competition End Horizon ──
     const chartLabels = data.map(d => d.time);
+    if (data.length > 0 && competition) {
+        let lastTimeSec = parseTimeToSeconds(chartLabels[chartLabels.length - 1]);
+        
+        // Find seconds remaining in the competition
+        const endSec = Math.floor(new Date(competition.competition_end).getTime() / 1000);
+        const nowSec = Math.floor(Date.now() / 1000);
+        
+        // Ensure a continuous high-resolution timeline (15s steps) projecting up to 30 minutes into the future.
+        // This prevents the category axis from warping and visually swallowing short-term predictions.
+        let remSec = Math.max(120, endSec - nowSec);
+        remSec = Math.min(remSec, 1800); // hard cap at 30 minutes forward look
+        
+        const step = 15; // strict 15-second intervals
+        
+        for (let offset = step; offset <= remSec; offset += step) {
+            const fTime = lastTimeSec + offset;
+            const d = new Date();
+            d.setHours(Math.floor(fTime / 3600));
+            d.setMinutes(Math.floor((fTime % 3600) / 60));
+            d.setSeconds(fTime % 60);
+            chartLabels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        }
+    }
 
-    const agentDatasets = visibleAgents.map((agent, idx) => {
+    const agentDatasets = visibleAgents.flatMap((agent, idx) => {
         // Generate a distinct neon color from the agent's ID hash for infinite scale
         const h = Math.abs(hashString(agent.id));
         const color = `hsl(${h % 360}, 85%, 65%)`;
@@ -330,9 +406,10 @@ export default function ProbabilityCurve({
         // Use real prediction data if available, otherwise show tracking curve
         const agentPreds = agentPredictions?.get(agent.id) || [];
         const curveData = buildRealAgentCurve(chartLabels, agentPreds, baseHomeData, agent.name, idx);
+        const trueData = buildTrueAgentCurve(chartLabels, agentPreds);
         const hasPredictions = agentPreds.length > 0;
 
-        return {
+        const mainDataset = {
             label: `🤖 ${agent.name}${hasPredictions ? ` (${agentPreds.length} preds · Pred: ${agentPreds[agentPreds.length - 1].probability * 100}%)` : ' 🔥 Competing'}`,
             data: curveData,
             borderColor: isPaused ? color.replace(')', ', 0.4)').replace('hsl', 'hsla') : color,
@@ -351,14 +428,75 @@ export default function ProbabilityCurve({
             order: 0,
             normalized: true, // Boost parsing perf for massive arrays
         };
+
+        if (hasPredictions && !isMassive) {
+            const trueDataset = {
+                label: `🎯 ${agent.name} (Real)`,
+                data: trueData,
+                borderColor: 'rgba(255, 255, 255, 0.4)', // Straight line, different color (white translucent)
+                borderWidth: 1.5,
+                tension: 0, // Straight uncurved line
+                fill: false,
+                borderDash: [3, 4], // Dashed
+                pointRadius: 2.5, // Tiny dots showing strictly real data
+                pointBackgroundColor: '#fff',
+                pointBorderColor: color,
+                spanGaps: true,
+                order: 1, // Draw behind the bouncy curve
+            };
+            return [mainDataset, trueDataset];
+        }
+
+        return [mainDataset];
     });
 
+    // ── Build Momentum Vector (Trend Projection) or Status Quo Baseline ──
+    const momentumDataset: any[] = [];
+    if (data.length > 0 && chartLabels.length > data.length) {
+        const rootIdx = data.length - 1;
+        const currentProb = data[rootIdx].home;
+        
+        let slopePerStep = 0;
+        let label = "Status Quo Baseline";
+        let isPositive = true;
+
+        if (data.length >= 3) {
+            const p1 = data[data.length - 3].home;
+            const p2 = currentProb;
+            const slope = (p2 - p1) / 2;
+            slopePerStep = slope * 0.25;
+            label = "🚀 Market Momentum";
+            isPositive = slope >= 0;
+        }
+        
+        const momentumData = chartLabels.map(() => null as number | null);
+        momentumData[rootIdx] = currentProb;
+        
+        for (let i = rootIdx + 1; i < chartLabels.length; i++) {
+            const steps = i - rootIdx;
+            const projectedRaw = currentProb + (slopePerStep * steps);
+            momentumData[i] = Math.max(1, Math.min(99, projectedRaw));
+        }
+        
+        momentumDataset.push({
+            label: label,
+            data: momentumData,
+            borderColor: isPositive ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)',
+            borderWidth: 2,
+            borderDash: data.length >= 3 ? [5, 5] : [2, 4],
+            tension: 0,
+            pointRadius: 0,
+            fill: false,
+            order: 2,
+        });
+    }
+
     const chartData = {
-        labels: data.map(d => d.time),
+        labels: chartLabels,
         datasets: [
             {
                 label: outcomes[0] || 'Home Win',
-                data: data.map(d => d.home),
+                data: chartLabels.map((_, i) => i < data.length ? data[i].home : null),
                 borderColor: '#818cf8',
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
@@ -378,9 +516,10 @@ export default function ProbabilityCurve({
                 pointHoverBorderWidth: 2,
                 order: 3,
             },
+            ...momentumDataset,
             {
                 label: outcomes[1] || 'Draw',
-                data: data.map(d => d.draw),
+                data: chartLabels.map((_, i) => i < data.length ? data[i].draw : null),
                 borderColor: '#f59e0b',
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
@@ -401,7 +540,7 @@ export default function ProbabilityCurve({
             },
             {
                 label: outcomes[2] || 'Away Win',
-                data: data.map(d => d.away),
+                data: chartLabels.map((_, i) => i < data.length ? data[i].away : null),
                 borderColor: '#ef4444',
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
