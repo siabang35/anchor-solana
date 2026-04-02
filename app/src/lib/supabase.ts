@@ -15,7 +15,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // API base URL for NestJS backend
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://anchor-solana.onrender.com/api/v1';
 
 // Helper: fetch from backend API
 export async function apiFetch<T>(path: string, options?: RequestInit, maxRetries = 3): Promise<T> {
