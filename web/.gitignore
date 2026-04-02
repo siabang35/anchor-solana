@@ -30,3 +30,4 @@ app/.vercel
 .env.local
 .env.template
 .env.*.local
+.env.production
