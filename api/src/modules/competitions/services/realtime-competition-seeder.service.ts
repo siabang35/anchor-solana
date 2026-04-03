@@ -294,29 +294,100 @@ export class RealtimeCompetitionSeederService {
             }
         }
 
-        // 2b. If category is 'sports', also fetch from sports_events
+        // 2b. If category is 'sports', also fetch from sports_events with proper status + team names
         if (category === 'sports') {
+            // Query sports_events — simple select to avoid FK hint issues
             const { data: sportsEvents } = await supabase
                 .from('sports_events')
-                .select('home_team_id, away_team_id, start_time, status, sport, external_id')
-                .eq('status', 'NS') // Not Started
+                .select('id, home_team_id, away_team_id, start_time, status, sport, external_id, name, venue, league_id')
+                .eq('status', 'scheduled') // FIXED: was 'NS', actual enum is 'scheduled'
                 .order('start_time', { ascending: true })
-                .limit(20);
+                .limit(25);
 
-            if (sportsEvents) {
+            if (sportsEvents && sportsEvents.length > 0) {
+                this.logger.log(`[sports] Found ${sportsEvents.length} scheduled sports events`);
+
+                // Batch-resolve team names for all events
+                const teamIds = new Set<string>();
+                const leagueIds = new Set<string>();
+                for (const ev of sportsEvents) {
+                    if (ev.home_team_id) teamIds.add(ev.home_team_id);
+                    if (ev.away_team_id) teamIds.add(ev.away_team_id);
+                    if (ev.league_id) leagueIds.add(ev.league_id);
+                }
+
+                const teamNameMap = new Map<string, string>();
+                const leagueNameMap = new Map<string, string>();
+
+                if (teamIds.size > 0) {
+                    const { data: teams } = await supabase
+                        .from('sports_teams')
+                        .select('id, name')
+                        .in('id', Array.from(teamIds));
+                    if (teams) teams.forEach(t => teamNameMap.set(t.id, t.name));
+                }
+
+                if (leagueIds.size > 0) {
+                    const { data: leagues } = await supabase
+                        .from('sports_leagues')
+                        .select('id, name')
+                        .in('id', Array.from(leagueIds));
+                    if (leagues) leagues.forEach(l => leagueNameMap.set(l.id, l.name));
+                }
+
                 for (const event of sportsEvents) {
-                    const title = `${event.sport} Match: Team ${event.home_team_id} vs Team ${event.away_team_id}`;
+                    const homeName = teamNameMap.get(event.home_team_id) || event.name?.split(' vs ')?.[0] || `Team ${(event.home_team_id || '').substring(0, 8)}`;
+                    const awayName = teamNameMap.get(event.away_team_id) || event.name?.split(' vs ')?.[1] || `Team ${(event.away_team_id || '').substring(0, 8)}`;
+                    const leagueName = leagueNameMap.get(event.league_id) || '';
+                    const sportLabel = (event.sport || 'sports').charAt(0).toUpperCase() + (event.sport || 'sports').slice(1);
+
+                    const title = leagueName
+                        ? `${leagueName}: ${homeName} vs ${awayName}`
+                        : `${sportLabel}: ${homeName} vs ${awayName}`;
+
+                    const startDate = event.start_time ? new Date(event.start_time) : null;
+                    const timeHint = startDate
+                        ? (startDate.getTime() - Date.now() < 24 * 60 * 60 * 1000 ? 'today live' : 'tomorrow upcoming')
+                        : '';
+
                     allCandidates.push({
                         title: title,
                         cleanTitle: this.cleanTitle(title),
-                        description: `Upcoming ${event.sport} match prediction`,
+                        description: `${sportLabel} match prediction: ${homeName} vs ${awayName}${leagueName ? ` (${leagueName})` : ''}${event.venue ? ` at ${event.venue}` : ''}`,
                         baseProbability: 0.5,
-                        textRaw: `${title} match sports game outcome prediction`,
+                        textRaw: `${title} ${homeName} ${awayName} match sports game outcome prediction ${sportLabel} ${leagueName}`,
                         source: 'market',
                         category,
-                        urgencyHints: `live today tomorrow match game`,
+                        urgencyHints: `${timeHint} match game ${sportLabel}`,
                         payload: event,
                     });
+                }
+            } else {
+                this.logger.debug(`[sports] No scheduled sports_events found, trying fallback queries`);
+
+                // Fallback: try 'live' status events too
+                const { data: liveEvents } = await supabase
+                    .from('sports_events')
+                    .select('id, home_team_id, away_team_id, start_time, status, sport, name, venue')
+                    .in('status', ['live', 'halftime'])
+                    .order('start_time', { ascending: true })
+                    .limit(15);
+
+                if (liveEvents) {
+                    for (const event of liveEvents) {
+                        const title = event.name || `${event.sport}: Live Match`;
+                        allCandidates.push({
+                            title,
+                            cleanTitle: this.cleanTitle(title),
+                            description: `Live ${event.sport} match outcome prediction`,
+                            baseProbability: 0.5,
+                            textRaw: `${title} live match sports game outcome prediction`,
+                            source: 'market',
+                            category,
+                            urgencyHints: `live now today match game breaking`,
+                            payload: event,
+                        });
+                    }
                 }
             }
         }
@@ -345,6 +416,99 @@ export class RealtimeCompetitionSeederService {
                     category,
                     urgencyHints: trend.topic,
                 });
+            }
+        }
+
+        // 4. SCIENCE FALLBACK: Query science_papers and science_breakthroughs directly
+        //    when the standard ETL tables have insufficient data
+        if (category === 'science' && allCandidates.length < 5) {
+            this.logger.debug(`[science] Only ${allCandidates.length} candidates from main ETL, querying science_papers...`);
+
+            const { data: papers } = await supabase
+                .from('science_papers')
+                .select('title, abstract, tldr, citation_count, venue, fields_of_study, paper_url, first_author')
+                .eq('is_active', true)
+                .order('citation_count', { ascending: false })
+                .limit(20);
+
+            if (papers) {
+                for (const paper of papers) {
+                    if (!paper.title) continue;
+                    const citationImpact = (paper.citation_count || 0) > 100 ? 0.7 : (paper.citation_count || 0) > 10 ? 0.6 : 0.5;
+                    allCandidates.push({
+                        title: paper.title,
+                        cleanTitle: this.cleanTitle(paper.title),
+                        description: paper.tldr || paper.abstract?.substring(0, 300) || `Research paper: ${paper.title}`,
+                        baseProbability: citationImpact,
+                        textRaw: `${paper.title} ${paper.abstract || ''} ${(paper.fields_of_study || []).join(' ')} science research`,
+                        source: 'market',
+                        category,
+                        urgencyHints: `research paper ${(paper.fields_of_study || []).join(' ')}`,
+                        url: paper.paper_url,
+                        payload: paper,
+                    });
+                }
+                this.logger.log(`[science] Added ${papers.length} papers from science_papers fallback`);
+            }
+
+            // Also try science_breakthroughs
+            const { data: breakthroughs } = await supabase
+                .from('science_breakthroughs')
+                .select('title, description, summary, field, impact_level, source_url')
+                .eq('is_active', true)
+                .order('announcement_date', { ascending: false })
+                .limit(10);
+
+            if (breakthroughs) {
+                for (const bt of breakthroughs) {
+                    if (!bt.title) continue;
+                    const impactProb = bt.impact_level === 'critical' ? 0.75 : bt.impact_level === 'high' ? 0.65 : 0.55;
+                    allCandidates.push({
+                        title: bt.title,
+                        cleanTitle: this.cleanTitle(bt.title),
+                        description: bt.summary || bt.description || `Scientific breakthrough: ${bt.title}`,
+                        baseProbability: impactProb,
+                        textRaw: `${bt.title} ${bt.description || ''} ${bt.field || ''} breakthrough discovery science`,
+                        source: 'market',
+                        category,
+                        urgencyHints: `breakthrough discovery ${bt.field || 'science'}`,
+                        url: bt.source_url,
+                        payload: bt,
+                    });
+                }
+                this.logger.log(`[science] Added ${breakthroughs.length} entries from science_breakthroughs fallback`);
+            }
+        }
+
+        // 5. GENERIC LAST-RESORT FALLBACK: If we still have 0 candidates after all queries,
+        //    pull the most recent historical market_data_items (without is_active filter)
+        if (allCandidates.length === 0) {
+            this.logger.warn(`[${category}] ⚠️ All ETL sources returned 0 data — using historical fallback`);
+
+            const { data: historicalItems } = await supabase
+                .from('market_data_items')
+                .select('title, description, sentiment_score, impact, source_name, url')
+                .eq('category', category)
+                .order('published_at', { ascending: false })
+                .limit(15);
+
+            if (historicalItems) {
+                for (const item of historicalItems) {
+                    if (!item.title) continue;
+                    allCandidates.push({
+                        title: item.title,
+                        cleanTitle: this.cleanTitle(item.title),
+                        description: item.description || `Event forecasting: ${item.title}`,
+                        baseProbability: Math.max(0.2, Math.min(0.8, 0.5 + (item.sentiment_score || 0) * 0.2)),
+                        textRaw: `${item.title} ${item.description || ''} ${category} ${item.impact || ''}`,
+                        source: 'market',
+                        category,
+                        urgencyHints: `${item.title} ${item.description || ''} ${item.impact || ''}`,
+                        url: item.url,
+                        payload: item,
+                    });
+                }
+                this.logger.log(`[${category}] Historical fallback yielded ${historicalItems.length} candidates`);
             }
         }
     }

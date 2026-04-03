@@ -142,13 +142,24 @@ Compute the probability and curve.`;
             const parsed = JSON.parse(jsonStr) as ForecasterOutput;
 
             // Validate and sanitize base probability (avoid extreme predictions)
-            parsed.base_probability = Math.max(0.05, Math.min(0.95, parsed.base_probability || 0.5));
+            // If the model mistakenly outputs a percentage (e.g., 95 instead of 0.95), convert it
+            let rawProb = parsed.base_probability || 0.5;
+            if (rawProb > 1 && rawProb <= 100) {
+                rawProb = rawProb / 100;
+            }
+            parsed.base_probability = Math.max(0.01, Math.min(0.99, rawProb));
 
             // Constrain curve
-            parsed.projected_curve = (parsed.projected_curve || []).map(p => ({
-                timestamp_offset_mins: p.timestamp_offset_mins,
-                probability: Math.max(0.05, Math.min(0.95, p.probability))
-            }));
+            parsed.projected_curve = (parsed.projected_curve || []).map(p => {
+                let pProb = p.probability;
+                if (pProb > 1 && pProb <= 100) {
+                    pProb = pProb / 100;
+                }
+                return {
+                    timestamp_offset_mins: p.timestamp_offset_mins,
+                    probability: Math.max(0.01, Math.min(0.99, pProb))
+                };
+            });
 
             return parsed;
         } catch (e: any) {

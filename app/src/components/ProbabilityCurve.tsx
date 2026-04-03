@@ -662,9 +662,9 @@ export default function ProbabilityCurve({
             y: {
                 grid: { color: 'rgba(99, 102, 241, 0.04)', drawTicks: false },
                 border: { display: false },
-                ticks: { color: 'rgba(107, 115, 148, 0.5)', font: { size: 9, family: 'JetBrains Mono' }, callback: (val) => `${val}%`, padding: 8, stepSize: 10 },
-                min: 5,
-                max: 70,
+                ticks: { color: 'rgba(107, 115, 148, 0.5)', font: { size: 9, family: 'JetBrains Mono' }, callback: (val) => `${val}%`, padding: 8, stepSize: 20 },
+                min: 0,
+                max: 100,
             },
         },
         animation: visibleAgents.length > 15 ? false as any : { duration: 800, easing: 'easeInOutQuart' },
@@ -739,65 +739,6 @@ export default function ProbabilityCurve({
                         <span>🧠</span> AI Market Momentum Analysis
                     </div>
                     <i>&quot;{latest.narrative}&quot;</i>
-                </div>
-            )}
-
-            {/* Agent Legend — scrollable on mobile */}
-            {visibleAgents.length > 0 && (
-                <div style={{
-                    display: 'flex', gap: '0.35rem', flexWrap: 'wrap',
-                    marginBottom: '0.6rem', justifyContent: 'center',
-                    maxHeight: '60px', overflowY: 'auto',
-                }}>
-                    {visibleAgents.map((agent, i) => {
-                        const color = AGENT_COLORS[i % AGENT_COLORS.length];
-                        const isPaused = agent.status === 'paused' || agent.status === 'exhausted';
-                        const agentPreds = agentPredictions?.get(agent.id) || [];
-                        const predCount = agentPreds.length;
-                        const latestProb = predCount > 0 ? agentPreds[agentPreds.length - 1].probability : null;
-
-                        return (
-                            <button
-                                key={agent.id}
-                                onClick={() => {
-                                    setPopover(popover?.agent.id === agent.id ? null : {
-                                        agent,
-                                        color,
-                                        x: containerRef.current ? containerRef.current.offsetWidth / 2 : 200,
-                                        y: 200,
-                                    });
-                                    setConfirmAction(null);
-                                }}
-                                style={{
-                                    display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                                    padding: '3px 10px', borderRadius: 'var(--radius-round)',
-                                    background: popover?.agent.id === agent.id ? `${color}25` : `${color}10`,
-                                    border: `1px solid ${popover?.agent.id === agent.id ? color : `${color}30`}`,
-                                    fontSize: '0.55rem', fontWeight: 700, color, cursor: 'pointer',
-                                    opacity: isPaused ? 0.6 : 1,
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                <span style={{ width: '8px', height: '3px', background: color, borderRadius: '2px', display: 'inline-block', opacity: isPaused ? 0.5 : 1 }} />
-                                <span>🤖 {agent.name}</span>
-                                {predCount > 0 ? (
-                                    <span style={{
-                                        fontSize: '0.45rem', padding: '1px 4px', borderRadius: '9999px',
-                                        background: `${color}20`, fontWeight: 800,
-                                    }}>
-                                        {predCount} pred{predCount > 1 ? 's' : ''}
-                                        {latestProb !== null && ` · Pred: ${(latestProb * 100).toFixed(0)}%`}
-                                    </span>
-                                ) : (
-                                    <span style={{
-                                        fontSize: '0.4rem', animation: 'pulse 2s infinite',
-                                        opacity: 0.7,
-                                    }}>🔥 Competing</span>
-                                )}
-                                {isPaused && <span style={{ fontSize: '0.4rem' }}>⏸</span>}
-                            </button>
-                        );
-                    })}
                 </div>
             )}
 
