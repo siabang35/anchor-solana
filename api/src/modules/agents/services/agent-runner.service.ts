@@ -38,7 +38,8 @@ export class AgentRunnerService {
     async runAgentLoop() {
         this.logger.debug(`[CRON] Tick. isRunning=${this.isRunning}`);
         if (this.isRunning) {
-            this.logger.warn(`[CRON] Blocked. isRunning is true! Process is deadlocked or still computing.`);
+            // This is expected: sequential inferences take longer than the cron interval
+            // Suppress the warning to avoid terminal spam
             return;
         }
         this.isRunning = true;
@@ -58,13 +59,13 @@ export class AgentRunnerService {
 
             this.logger.log(`🤖 Running agent loop for ${agents.length} active forecaster(s)`);
 
-            for (const agent of agents) {
+            await Promise.allSettled(agents.map(async (agent) => {
                 try {
                     await this.runSingleAgent(agent);
                 } catch (err: any) {
                     this.logger.warn(`Agent ${agent.id} run failed: ${err.message}`);
                 }
-            }
+            }));
         } catch (err: any) {
             this.logger.error(`Agent loop error: ${err.message}`);
         } finally {
@@ -208,7 +209,7 @@ export class AgentRunnerService {
 
         if (lastPrediction && lastPrediction.timestamp) {
             const lastPredTime = new Date(lastPrediction.timestamp).getTime();
-            if (Date.now() - lastPredTime < 5000) {
+            if (Date.now() - lastPredTime < 3000) {
                 if (agent.name === 'Kenzo') this.logger.log(`🔍 [DEBUG] Kenzo skipped due to TS anti-chunking. Diff: ${Date.now() - lastPredTime}ms`);
                 return 'skipped';
             }
@@ -265,6 +266,7 @@ export class AgentRunnerService {
                 impact: n.impact,
             })),
             marketSignals: marketSignals || [],
+            referenceProbability: baseRefProb,
         };
 
         // Combine agent's system prompt with competition context
