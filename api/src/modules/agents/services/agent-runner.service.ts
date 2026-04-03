@@ -145,6 +145,10 @@ export class AgentRunnerService {
         const shuffledEntries = [...entries].sort(() => 0.5 - Math.random());
         
         let predictionMade = false;
+        
+        if (agent.name === 'Kenzo' || agent.name === 'Dimz' || agent.name === 'DanZ') {
+             this.logger.log(`🔍 [DEBUG] ${agent.name} has ${shuffledEntries.length} entries.`);
+        }
 
         // Predict for active assigned competitions, ONE max per tick
         for (const entry of shuffledEntries) {
@@ -204,12 +208,13 @@ export class AgentRunnerService {
 
         if (lastPrediction && lastPrediction.timestamp) {
             const lastPredTime = new Date(lastPrediction.timestamp).getTime();
-            // Reduce anti-chunking to 5 seconds to provide highly responsive realtime behavior
             if (Date.now() - lastPredTime < 5000) {
-                // Return silently to avoid log spam, waiting for chunking timeout
+                if (agent.name === 'Kenzo') this.logger.log(`🔍 [DEBUG] Kenzo skipped due to TS anti-chunking. Diff: ${Date.now() - lastPredTime}ms`);
                 return 'skipped';
             }
         }
+        
+        if (agent.name === 'Kenzo') this.logger.log(`🔍 [DEBUG] Kenzo executing prediction...`);
 
         // Fetch latest curve probability for live scoring reference
         const { data: latestProb } = await supabase
@@ -271,25 +276,8 @@ export class AgentRunnerService {
         let forecast: any = await this.qwenService.generateForecast(input);
 
         if (!forecast) {
-            this.logger.warn(`  ⚠ Qwen returned null for agent ${agent.id} (Likely 401/402 or Rate Limited). Applying robust local fallback simulation to prevent leaderboard stagnation.`);
-            
-            // Generate a realistic, organically fluctuating prediction to keep the platform alive
-            const agentJitter = (Math.random() * 0.12) - 0.06; // +/- 6% baseline jitter
-            let simProb = baseRefProb + agentJitter;
-            simProb = Number(Math.max(0.01, Math.min(0.99, simProb)).toFixed(4));
-            
-            const futureSim1 = Number(Math.max(0.01, Math.min(0.99, simProb + (Math.random() * 0.08 - 0.04))).toFixed(4));
-            const futureSim2 = Number(Math.max(0.01, Math.min(0.99, futureSim1 + (Math.random() * 0.04 - 0.02))).toFixed(4));
-
-            forecast = {
-                base_probability: simProb,
-                reasoning: `(Simulated due to external API limits) Based on recent event volatility around ${(baseRefProb * 100).toFixed(1)}%, underlying signals suggest a high likelihood of movement towards ${(simProb * 100).toFixed(1)}%. Model confidence adjusted dynamically.`,
-                projected_curve: [
-                    { timestamp_offset_mins: 0, probability: simProb },
-                    { timestamp_offset_mins: 30, probability: futureSim1 },
-                    { timestamp_offset_mins: 60, probability: futureSim2 },
-                ]
-            };
+            this.logger.warn(`  ⚠ Inference engine returned null for agent ${agent.id} (Limits reached for both Qwen & Groq). Skipping.`);
+            return 'failed';
         }
 
         // Store the prediction

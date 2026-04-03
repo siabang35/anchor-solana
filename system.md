@@ -133,10 +133,12 @@ Menentukan bobot setiap prediksi berdasarkan tingkat kesulitan saat prediksi dib
 
 ## 5. Anti-Exploitation Security Matrix
 
-| Serangan | Pertahanan | Implementasi |
+| Serangan / Kelemahan | Pertahanan | Implementasi |
 |---|---|---|
-| **Score Chunking** | Anti-chunk guard trigger | Min 60 detik antar prediksi per agen |
-| **Prediction Spam** | Prompt quota | `MAX_FREE_PROMPTS = 7`, auto-pause saat habis |
+| **API Limit & Throttling (HuggingFace)** | Dual-Inference Fallback | Auto-routing failover ke **Groq API (Llama 3)** jika limit habis |
+| **Data Manipulation (Mock Probabilities)** | Strict LLM Processing | Simulasi matematis `Math.random()` telah dihapus. Semua prediksi **wajib** melalui LLM |
+| **Score Chunking** | Anti-chunk guard trigger | Min 5 detik antar prediksi per agen untuk hyper-realtime tracking |
+| **Prediction Spam** | Prompt quota | `MAX_FREE_PROMPTS = 500,000`, siap menangani puluhan agen 24/7 |
 | **Score Manipulation** | Velocity limiter | Max Δ score = 0.2 per tick, log ke `curve_audit_log` |
 | **Retroactive Tampering** | HMAC-SHA256 chain | Setiap snapshot di-hash berantai seperti blockchain |
 | **Bot Threshold Targeting** | Stochastic engine | Merton Jump Diffusion + OU Mean Reversion |
@@ -199,10 +201,10 @@ Sistem Seeder secara otomatis menghitung `competition_end` (rentang batas waktu 
 
 | File | Fungsi |
 |---|---|
-| `api/src/modules/agents/services/qwen-inference.service.ts` | Panggilan ke Qwen 3.5 9B via HuggingFace Router API |
-| `api/src/modules/agents/services/agent-runner.service.ts` | Loop agen otonom (setiap 10 menit) + immediate trigger |
-| `api/src/modules/competitions/services/leaderboard-scoring.service.ts` | Weighted Brier scoring, HMAC chain, rank trends, broadcast |
-| `app/src/components/CompetitionLeaderboard.tsx` | Frontend leaderboard realtime dengan flash animation |
+| `qwen-inference.service.ts` | Dual-Inference Engine. Memanggil Qwen 2.5 9B via HuggingFace Router API. Jika error/limit `402`, langsung melakukan routing failover ke **Groq API (Llama-3)**. |
+| `agent-runner.service.ts` | Loop agen otonom realtime (setiap 5 detik). *Anti-manipulasi:* Membutuhkan respons JSON sah dari LLM Engine; menolak iterasi jika LLM API gagal/down. |
+| `leaderboard-scoring.service.ts` | Weighted Brier scoring, HMAC chain, rank trends, broadcast |
+| `CompetitionLeaderboard.tsx` | Frontend realtime dengan indikator badge spesifik (`📊 QWEN-API` atau `⚡ GROQ-LLAMA3`) tanpa state simulasi. |
 
 ---
 

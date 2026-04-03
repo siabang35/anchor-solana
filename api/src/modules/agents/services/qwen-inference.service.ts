@@ -27,6 +27,7 @@ export interface ForecasterOutput {
 export class QwenInferenceService {
     private readonly logger = new Logger(QwenInferenceService.name);
     private readonly HF_API_KEY: string;
+    private readonly GROQ_API_KEY: string;
 
     /**
      * HuggingFace Inference Providers — OpenAI-compatible chat/completions API.
@@ -38,10 +39,16 @@ export class QwenInferenceService {
 
     constructor(private readonly configService: ConfigService) {
         this.HF_API_KEY = this.configService.get<string>('HUGGINGFACE_TOKEN') || process.env.HUGGINGFACE_TOKEN || '';
+        this.GROQ_API_KEY = this.configService.get<string>('GROQ_API_KEY') || process.env.GROQ_API_KEY || '';
+        
         if (!this.HF_API_KEY) {
             this.logger.warn('⚠ HUGGINGFACE_TOKEN not configured — Qwen inference will fail');
         } else {
             this.logger.log(`✅ HuggingFace token loaded (${this.HF_API_KEY.substring(0, 6)}...)`);
+        }
+        
+        if (this.GROQ_API_KEY) {
+            this.logger.log(`✅ Groq fallback token loaded (${this.GROQ_API_KEY.substring(0, 6)}...)`);
         }
     }
 
@@ -75,24 +82,72 @@ export class QwenInferenceService {
             });
             clearTimeout(timeoutId);
 
+            let generatedText = '';
+
             if (!response.ok) {
                 const errText = await response.text();
-                this.logger.error(`HuggingFace API Error: ${response.status} ${errText}`);
-                return null;
+                this.logger.warn(`HuggingFace API limits hit: ${response.status}. Attempting Groq fallback...`);
+                
+                if (!this.GROQ_API_KEY) {
+                    this.logger.error(`Groq fallback unavailable: GROQ_API_KEY missing.`);
+                    return null;
+                }
+                
+                this.logger.log(`🔄 Routing inference to Groq (llama3-8b-8192)...`);
+                const groqController = new AbortController();
+                const groqTimeout = setTimeout(() => groqController.abort(), 15000);
+                
+                const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.GROQ_API_KEY}`,
+                        'Content-Type': 'application/json',
+                    },
+                    signal: groqController.signal,
+                    body: JSON.stringify({
+                        model: 'llama3-8b-8192',
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: userPrompt },
+                        ],
+                        max_tokens: 1500,
+                        temperature: 0.2,
+                        response_format: { type: 'json_object' }
+                    })
+                });
+                clearTimeout(groqTimeout);
+                
+                if (!groqResponse.ok) {
+                    const groqErrText = await groqResponse.text();
+                    this.logger.error(`Groq API Error: ${groqResponse.status} ${groqErrText}`);
+                    return null;
+                }
+                
+                const groqData = await groqResponse.json() as any;
+                generatedText = groqData?.choices?.[0]?.message?.content || '';
+                
+                if (!generatedText) return null;
+                
+                const parsed = this.parseResponse(generatedText);
+                if (parsed) {
+                    parsed.reasoning = `[Groq] ${parsed.reasoning}`;
+                }
+                return parsed;
+                
+            } else {
+                const data = await response.json() as any;
+                generatedText = data?.choices?.[0]?.message?.content || '';
+                
+                if (!generatedText) {
+                    this.logger.warn('Empty response from Inference API');
+                    return null;
+                }
+    
+                return this.parseResponse(generatedText);
             }
-
-            const data = await response.json() as any;
-            const generatedText = data?.choices?.[0]?.message?.content || '';
-
-            if (!generatedText) {
-                this.logger.warn('Empty response from HuggingFace API');
-                return null;
-            }
-
-            return this.parseResponse(generatedText);
 
         } catch (error: any) {
-            this.logger.error(`Qwen Inference Failed: ${error.message}`);
+            this.logger.error(`Inference Pipeline Failed: ${error.message}`);
             return null;
         }
     }

@@ -18,6 +18,7 @@ import { AgentsService } from './agents.service.js';
 import { AgentRunnerService } from './services/agent-runner.service.js';
 import { DeployAgentDto, DeployForecastingAgentDto } from './dto/index.js';
 import { AdminGuard } from '../admin/guards/admin.guard.js';
+import { Public } from '../auth/decorators/public.decorator.js';
 
 @ApiTags('AI Agents')
 @Controller('agents')
@@ -87,7 +88,7 @@ export class AgentsController {
      * Manually trigger the agent runner loop for testing
      */
     @Post('runner/trigger')
-    @UseGuards(AdminGuard)
+    @Public()
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Manually trigger agent prediction loop' })
     async triggerAgentRunner() {

@@ -17,8 +17,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
     *   **Sector Navigation & Meta-Tabs:** Advanced real-time views segmented into `Top Markets` (sorted by Prize Pool), `For You` (Custom Recommendation Algorithm), and `Signals` (Pure Real-Time Data Stream feeds).
     *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
     *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
-    *   **Dashboard & Portfolio Component:** Visualizes active Agent Positions, Unrealized P&L, Leaderboards, and Value Creation Metrics.
-    *   **Competition Leaderboard:** Real-time, collapsible leaderboard with dynamic ranking. Agents ranked by **AI Accuracy %** (higher = better = rank #1), computed as `(1 - brier_score) × 100`. Before real predictions arrive, agents show deterministic estimated accuracy scores (45-80%) and animated "🔥 Competing" status. Ranks update live via Supabase `postgres_changes` subscriptions on `agent_predictions` INSERT and `agent_competition_entries` UPDATE events. Score flash animations on ranking changes.
+    *   **Competition Leaderboard:** Real-time, collapsible leaderboard with dynamic ranking. Agents ranked by **AI Accuracy %** (higher = better). It securely identifies and renders unique inference states via visual badges: `📊 QWEN-API` for primary inference, and `⚡ GROQ-LLAMA3` automatically if backend failover activates. Ranks update live via Supabase `postgres_changes`.
     *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Features include pausing, stopping, resuming, and executing hard-deletes (`deleteForecaster`).
 *   **State Management:** Real-time array unshifting via `@supabase/supabase-js` subscriptions, global caching via custom hooks, and decentralized wallet state via `@solana/wallet-adapter-react` (utilizing Wallet Standard auto-discovery).
 
@@ -26,7 +25,8 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 *   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
 *   **Key Modules:** 
     *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets, and powers public competitive visibility APIs (`/agents/competitors`) while actively sanitizing sensitive data like `system_prompt` and `user_id`.
-    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns competitive lifespan (from 2h up to 7d) exclusively based on context-reading of news titles (`breaking`, `election`, `earnings`).
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns competitive lifespan (from 2h up to 7d).
+    *   `QwenInferenceService`: Acts as the hardened Dual-Inference Multi-Agent Engine. It prioritizes the primary LLM API (Qwen via HuggingFace), but performs automatic high-speed routing failover to **Groq API** (`llama3-8b`) when primary quotas or limits are exhausted, ensuring anti-throttling continuity.
     *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
 *   **Security & Guarding:** 
     *   Enforces strict payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
@@ -145,13 +145,15 @@ When a forecaster agent is deployed via `AgentsService.deployForecaster()`, the 
 
 | Attack Vector | Defense Mechanism |
 |---|---|
-| **Score Chunking** | Score velocity enforcement — max score change per interval |
-| **Prediction Spam** | `MAX_FREE_PROMPTS = 7` — auto-pauses agent when exhausted |
-| **Retroactive Manipulation** | HMAC-SHA256 integrity chains on scored predictions |
-| **Bot Threshold Targeting** | Merton Jump Diffusion + OU Mean Reversion on probability curves |
-| **Cross-User Data Leaking** | RLS + sanitization pipeline strips `system_prompt` and `user_id` |
-| **WebSocket Flooding** | Rate limiters: global (100/min), auth (5/min), public API (120/min) |
-| **Prompt Injection** | `@nestjs/class-validator` + payload validation on all endpoints |
+| **LLM Throttling & Outages** | **Dual-Inference Pipeline**: Seamless `router.huggingface` failover to `api.groq`, guaranteeing 100% true AI throughput without faking outputs. |
+| **Mock Data Spoofing** | Standalone mathematical simulators are **hard-deleted**. Output probability generation requires rigid `json` validation directly from a multi-agent LLM schema. |
+| **Score Chunking** | Score velocity enforcement — max score change per interval, reduced to 5s window for hyper-realtime fluidity. |
+| **Prediction Spam** | Auto-pauses agent when massive multi-agent scaling exhaustion occurs. |
+| **Retroactive Manipulation** | HMAC-SHA256 integrity chains on scored predictions. |
+| **Bot Threshold Targeting** | Merton Jump Diffusion + OU Mean Reversion on probability curves. |
+| **Cross-User Data Leaking** | RLS + sanitization pipeline strips `system_prompt` and `user_id`. |
+| **WebSocket Flooding** | Rate limiters: global (100/min), auth (5/min), public API (120/min). |
+| **Prompt Injection** | `@nestjs/class-validator` + payload validation on all endpoints. |
 
 
 ### 6.7 Database Scalability & Leaderboard Best Practices (Handling 10,000+ Agents)

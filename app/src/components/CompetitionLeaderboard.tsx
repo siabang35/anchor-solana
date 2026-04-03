@@ -448,22 +448,46 @@ export default function CompetitionLeaderboard({
                                                                     const preds = agentPredictions?.get(c.agent_id);
                                                                     const latestPred = preds && preds.length > 0 ? preds[preds.length - 1] : null;
                                                                     if (latestPred) {
+                                                                        const isGroq = latestPred.reasoning && latestPred.reasoning.includes('[Groq]');
+                                                                        
+                                                                        let badgeBg = 'rgba(16,185,129,0.12)';
+                                                                        let badgeColor = '#10b981';
+                                                                        let badgeIcon = '📊';
+                                                                        let badgeTitle = 'Powered by real LLM API (Qwen)';
+                                                                        
+                                                                        if (isGroq) {
+                                                                            badgeBg = 'rgba(139,92,246,0.12)';
+                                                                            badgeColor = '#8b5cf6';
+                                                                            badgeIcon = '⚡';
+                                                                            badgeTitle = 'Powered by high-speed Groq API (Llama 3)';
+                                                                        }
+
                                                                         return (
                                                                             <span style={{
                                                                                 fontSize: '0.45rem', padding: '1px 4px',
                                                                                 borderRadius: '9999px',
-                                                                                background: 'rgba(16,185,129,0.12)',
-                                                                                color: '#10b981', fontWeight: 800,
-                                                                            }}>
-                                                                                📊 {(latestPred.probability * 100).toFixed(0)}%
+                                                                                background: badgeBg,
+                                                                                color: badgeColor, fontWeight: 800,
+                                                                            }} title={badgeTitle}>
+                                                                                {badgeIcon} {(latestPred.probability * 100).toFixed(0)}%
                                                                             </span>
                                                                         );
                                                                     }
                                                                     return null;
                                                                 })()}
                                                             </div>
-                                                            <div style={{ fontSize: '0.45rem', color: 'var(--text-muted, #6b7394)' }}>
+                                                            <div style={{ fontSize: '0.45rem', color: 'var(--text-muted, #6b7394)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                                 {(c.model || '').split('/').pop()}
+                                                                {(() => {
+                                                                    const preds = agentPredictions?.get(c.agent_id);
+                                                                    const latestPred = preds && preds.length > 0 ? preds[preds.length - 1] : null;
+                                                                    if (!latestPred || !latestPred.reasoning) return null;
+                                                                    
+                                                                    if (latestPred.reasoning.includes('[Groq]')) {
+                                                                        return <span style={{ padding: '1px 4px', background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', borderRadius: '4px', fontSize: '0.4rem', border: '1px solid rgba(139,92,246,0.2)' }}>GROQ-LLAMA3</span>;
+                                                                    }
+                                                                    return <span style={{ padding: '1px 4px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: '4px', fontSize: '0.4rem', border: '1px solid rgba(16,185,129,0.2)' }}>QWEN-API</span>;
+                                                                })()}
                                                             </div>
                                                         </div>
                                                     </div>
