@@ -88,7 +88,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const [direction, setDirection] = useState<'UP' | 'DOWN'>('UP');
     const [strategy, setStrategy] = useState('');
     const [riskLevel, setRiskLevel] = useState(3);
-    const [wagerAmount, setWagerAmount] = useState<string>('');
+    const [stakeAmount, setStakeAmount] = useState<string>('');
     const [modelTierId, setModelTierId] = useState('free');
     const [step, setStep] = useState<BuilderStep>('config');
 
@@ -210,10 +210,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 body: JSON.stringify(body),
             });
 
-            // Submits Wager
-            if (parseFloat(wagerAmount) > 0 && marketIds.length > 0) {
+            // Submits Entry Stake
+            if (parseFloat(stakeAmount) > 0 && marketIds.length > 0) {
                 try {
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Staking ${wagerAmount} SOL for competition entry... (50% refund on loss)` }]);
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Allocating ${stakeAmount} SOL for tournament entry... (50% capital protection)` }]);
                     await apiFetch('/agents/wager', {
                         method: 'POST',
                         headers: { 
@@ -223,12 +223,12 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         body: JSON.stringify({
                             agent_id: result.id,
                             competition_id: marketIds[0],
-                            wager_amount: parseFloat(wagerAmount)
+                            wager_amount: parseFloat(stakeAmount)
                         }),
                     });
                     setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `✅ Stake confirmed on devnet!` }]);
-                } catch (wagerErr: any) {
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ Staking failed: ${wagerErr.message}` }]);
+                } catch (stakeErr: any) {
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ Allocation failed: ${stakeErr.message}` }]);
                 }
             }
 
@@ -282,7 +282,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         } finally {
             setDeploying(false);
         }
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, wagerAmount, selectedMarket, agentTypes, categoryId, marketIds, quota]);
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota]);
 
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
@@ -802,21 +802,22 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 )}
 
                 {/* Wager Amount UI */}
+                {/* Entry Stake UI */}
                 {marketIds.length > 0 && (
                     <div className="form-group">
-                        <label className="form-label">Competition Entry Stake (SOL) — Optional</label>
+                        <label className="form-label">Tournament Entry Stake (SOL) — Optional</label>
                         <input
                             type="number"
                             className="form-select"
                             placeholder="e.g. 0.5 (You get 50% back if agent loses)"
-                            value={wagerAmount}
-                            onChange={(e) => setWagerAmount(e.target.value)}
+                            value={stakeAmount}
+                            onChange={(e) => setStakeAmount(e.target.value)}
                             min={0}
                             step={0.1}
                             style={{ fontFamily: 'var(--font-sans)', padding: '0.6rem' }}
                         />
                         <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                            Stake SOL on your agent's performance. The prize pool is distributed to the top predictors!
+                            Allocate SOL on your agent's performance. The prize pool is distributed to the top predictors!
                         </div>
                     </div>
                 )}
@@ -1017,7 +1018,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 )}
             </div>
 
-            {/* Wagering Section */}
+            {/* Tournament Allocation Section */}
             {deployedAgent && step === 'active' && (
                 <div style={{
                     marginTop: '0.75rem',
@@ -1027,10 +1028,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     border: '1px solid rgba(99,102,241,0.2)',
                 }}>
                     <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
-                        🎲 Agent Wager (Optional)
+                        🎲 Tournament Entry Stake (Optional)
                     </div>
                     <p style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: '0.4rem', lineHeight: 1.4 }}>
-                        Bet on your agent's performance vs others. <strong style={{ color: '#10b981' }}>50% refund on loss</strong> — we believe in fair competition.
+                        Allocate pool capital for your agent's performance. <strong style={{ color: '#10b981' }}>50% capital protection</strong> — we believe in skill-based tournaments.
                     </p>
                     <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                         <input
@@ -1045,11 +1046,11 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             className="btn-primary"
                             style={{ fontSize: '0.65rem', padding: '0.4rem 0.8rem', whiteSpace: 'nowrap' }}
                             onClick={() => {
-                                // Wager creation would call /agents/wager endpoint
-                                setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🎲 Wager submitted! Tracking your agent...' }]);
+                                // Allocation creation would call /agents/wager endpoint
+                                setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🏦 Pool allocation submitted! Tracking your agent...' }]);
                             }}
                         >
-                            Place Wager
+                            Deposit Stake
                         </button>
                     </div>
                     <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
