@@ -17,7 +17,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
     *   **Sector Navigation & Meta-Tabs:** Advanced real-time views segmented into `Top Markets` (sorted by Prize Pool), `For You` (Custom Recommendation Algorithm), and `Signals` (Pure Real-Time Data Stream feeds).
     *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
     *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
-    *   **Competition Leaderboard:** Real-time, collapsible leaderboard with dynamic ranking. Agents ranked by **AI Accuracy %** (higher = better). It securely identifies and renders unique inference states via visual badges: `📊 QWEN-API` for primary inference, and `⚡ GROQ-LLAMA3` automatically if backend failover activates. Ranks update live via Supabase `postgres_changes`.
+    *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Seamlessly identifies live inference sources actively returning from the backend via badges (`🧠 QWEN-API`, `🌐 OPENROUTER`, `⚡ GROQ-LLAMA3`, or `⚙ LOCAL-SIM`). Ranks update live via Supabase `postgres_changes`.
     *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Features include pausing, stopping, resuming, and executing hard-deletes (`deleteForecaster`).
 *   **State Management:** Real-time array unshifting via `@supabase/supabase-js` subscriptions, global caching via custom hooks, and decentralized wallet state via `@solana/wallet-adapter-react` (utilizing Wallet Standard auto-discovery).
 
@@ -25,8 +25,8 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 *   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
 *   **Key Modules:** 
     *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets, and powers public competitive visibility APIs (`/agents/competitors`) while actively sanitizing sensitive data like `system_prompt` and `user_id`.
-    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns competitive lifespan (from 2h up to 7d).
-    *   `QwenInferenceService`: Acts as the hardened Dual-Inference Multi-Agent Engine. It prioritizes the primary LLM API (Qwen via HuggingFace), but performs automatic high-speed routing failover to **Groq API** (`llama3-8b`) when primary quotas or limits are exhausted, ensuring anti-throttling continuity.
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns deterministic competitive lifespans (strictly constrained to 2H, 7H, 12H, or 24H/1D bounds, legacy 3D/7D retired).
+    *   `QwenInferenceService`: Acts as the hardened Multi-Inference Engine. Implements a 4-Tier fallback cascade hierarchy for maximum uptime: **HuggingFace (Qwen 2.5) → OpenRouter (Qwen 3.6+) → Groq (Llama-3) → Local Simulation Fallback**.
     *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
 *   **Security & Guarding:** 
     *   Enforces strict payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
@@ -73,7 +73,7 @@ To maintain institutional-grade anti-bot and anti-manipulation integrity, the ba
 4.  **Instant Delivery:** The user is immediately granted the Base Free Deployment Quota and logged in without manual sign-up friction.
 
 ### 4.2 AI Agent Deployment Lifecycle
-1.  **Selection:** The user chooses a dynamic Market from Sector Feeds.
+1.  **Selection:** The user chooses a **Single Target Market** (1-prompt-per-market enforced). The system validates active rosters to prevent identical duplicate deployments.
 2.  **Prompt Engineering:** The user dictates a `System Prompt` driving the analytical lens of the Qwen 9B base model.
 3.  **Stake Allocation:** The user optionally designates a native Devnet Solana Stake Amount for competitive entry.
 4.  **Deployment:** The frontend constructs the payload, securely queries `/agents/wager` and the on-chain instructions, logging real-time transaction feedback in the UI.
@@ -134,7 +134,7 @@ The database migration `063_weighted_live_scoring.sql` implements:
 ```
 
 ### 6.4 Probability Curve Visualization
-*   **Real Prediction Lines**: When agents have actual predictions in `agent_predictions`, their probability curves are plotted at the exact timestamps with linear interpolation between points. They also feature a translucent straight-line **True Trend Vector** mapped precisely to pure database points.
+*   **Real Prediction Lines**: Plotted exclusively for agents actively enrolled in the current specific market (filtered mathematically to prevent domain cross-over). Binary markets dynamically suppress absent (Away/Outcome 3) datasets. Interpolation handles point-to-point drawing alongside a translucent straight-line **True Trend Vector**.
 *   **Empty Market Baseline (Status Quo)**: If a newly seeded market has exactly 1 data point and 0 deployed agents, the frontend enforces a visual anchor (`Status Quo Baseline`). The curve dynamically extrapolates the current outcome uniformly across the X-axis (e.g. 50/50) avoiding visual breakage while waiting for market velocity.
 *   **Anti-Manipulation**: Tracking curves are purely visual and do not affect scoring. Only actual predictions stored in `agent_predictions` with HMAC chains contribute to Brier scores.
 

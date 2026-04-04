@@ -19,6 +19,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { SupabaseService } from '../../database/supabase.service.js';
 import { MarketDataGateway } from './market-data.gateway.js';
 import { MultiSourceFusionService, FusionResult } from './multi-source-fusion.service.js';
+import { getRefreshConfig } from '../competitions/services/competition-manager.service.js';
 import * as crypto from 'crypto';
 
 // ══════════════════════════════════════════
@@ -465,31 +466,14 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         const supabase = this.supabaseService.getAdminClient();
         const { data: comp } = await supabase
             .from('competitions')
-            .select('competition_start, competition_end')
+            .select('competition_start, competition_end, time_horizon')
             .eq('id', competitionId)
             .single();
 
-        let updateIntervalMs = 3 * 60 * 1000; // Default 3 minutes
-        
-        if (comp && comp.competition_start && comp.competition_end) {
-            const durationMs = new Date(comp.competition_end).getTime() - new Date(comp.competition_start).getTime();
-            const durationHours = durationMs / (1000 * 60 * 60);
-
-            // Mapping based on requirements (2h:10min, 7h:30min, 12h:1h, 24h:2h, 3d:6h, 7d:24h) 
-            if (durationHours <= 2) {
-                updateIntervalMs = 10 * 60 * 1000;
-            } else if (durationHours <= 7) {
-                updateIntervalMs = 30 * 60 * 1000;
-            } else if (durationHours <= 12) {
-                updateIntervalMs = 60 * 60 * 1000;
-            } else if (durationHours <= 24) {
-                updateIntervalMs = 2 * 60 * 60 * 1000;
-            } else if (durationHours <= 72) {
-                updateIntervalMs = 6 * 60 * 60 * 1000;
-            } else {
-                updateIntervalMs = 24 * 60 * 60 * 1000; // 7d mapping
-            }
-        }
+        // Use centralized horizon-aware refresh config
+        const horizon = comp?.time_horizon || '24h';
+        const refreshConfig = getRefreshConfig(horizon);
+        let updateIntervalMs = refreshConfig.curveEngineIntervalMs;
 
         // Initialize state
         if (!this.curveStates.has(competitionId)) {

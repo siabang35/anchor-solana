@@ -446,15 +446,17 @@ export default function CompetitionLeaderboard({
                                                                 {c.agent_name}
                                                                 {(() => {
                                                                     const predGroup = agentPredictions?.get(c.agent_id);
-                                                                    const latestPred = predGroup?.predictions && predGroup.predictions.length > 0 ? predGroup.predictions[predGroup.predictions.length - 1] : null;
+                                                                    const latestPred = predGroup && predGroup.length > 0 ? predGroup[predGroup.length - 1] : null;
                                                                     if (latestPred) {
                                                                         const isGroq = latestPred.reasoning && latestPred.reasoning.includes('[Groq]');
                                                                         const isSim = latestPred.reasoning && latestPred.reasoning.includes('[Simulation');
+                                                                        const isOpenRouter = latestPred.reasoning && latestPred.reasoning.includes('[OpenRouter');
+                                                                        const isQwenHF = latestPred.reasoning && latestPred.reasoning.includes('[Qwen]');
                                                                         
                                                                         let badgeBg = 'rgba(16,185,129,0.12)';
                                                                         let badgeColor = '#10b981';
                                                                         let badgeIcon = '📊';
-                                                                        let badgeTitle = 'Powered by real LLM API (Qwen)';
+                                                                        let badgeTitle = 'Powered by real LLM API';
                                                                         
                                                                         if (isSim) {
                                                                             badgeBg = 'rgba(245,158,11,0.12)';
@@ -466,6 +468,16 @@ export default function CompetitionLeaderboard({
                                                                             badgeColor = '#8b5cf6';
                                                                             badgeIcon = '⚡';
                                                                             badgeTitle = 'Powered by high-speed Groq API (Llama 3)';
+                                                                        } else if (isOpenRouter) {
+                                                                            badgeBg = 'rgba(56,189,248,0.12)';
+                                                                            badgeColor = '#38bdf8';
+                                                                            badgeIcon = '🌐';
+                                                                            badgeTitle = 'Powered by OpenRouter API (Qwen 3.6+)';
+                                                                        } else if (isQwenHF) {
+                                                                            badgeBg = 'rgba(16,185,129,0.12)';
+                                                                            badgeColor = '#10b981';
+                                                                            badgeIcon = '🧠';
+                                                                            badgeTitle = 'Powered by HuggingFace API (Qwen 2.5 7B)';
                                                                         }
 
                                                                         return (
@@ -482,20 +494,30 @@ export default function CompetitionLeaderboard({
                                                                     return null;
                                                                 })()}
                                                             </div>
-                                                            <div style={{ fontSize: '0.45rem', color: 'var(--text-muted, #6b7394)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                {(c.model || '').split('/').pop()}
+                                                            <div style={{ fontSize: '0.55rem', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
                                                                 {(() => {
                                                                     const predGroup = agentPredictions?.get(c.agent_id);
-                                                                    const latestPred = predGroup?.predictions && predGroup.predictions.length > 0 ? predGroup.predictions[predGroup.predictions.length - 1] : null;
-                                                                    if (!latestPred || !latestPred.reasoning) return null;
+                                                                    const latestPred = predGroup && predGroup.length > 0 ? predGroup[predGroup.length - 1] : null;
+                                                                    
+                                                                    if (!latestPred || !latestPred.reasoning) {
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>{(c.model || 'Qwen').split('/').pop()}</span>;
+                                                                    }
                                                                     
                                                                     if (latestPred.reasoning.includes('[Simulation')) {
-                                                                        return <span style={{ padding: '1px 4px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '4px', fontSize: '0.4rem', border: '1px solid rgba(245,158,11,0.2)' }}>LOCAL-SIM</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)', animation: 'pulse 2s infinite' }}>⚙️ LOCAL-SIM</span>;
                                                                     }
                                                                     if (latestPred.reasoning.includes('[Groq]')) {
-                                                                        return <span style={{ padding: '1px 4px', background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', borderRadius: '4px', fontSize: '0.4rem', border: '1px solid rgba(139,92,246,0.2)' }}>GROQ-LLAMA3</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(139,92,246,0.12)', color: '#a78bfa', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(139,92,246,0.4)', animation: 'pulse 2s infinite' }}>⚡ GROQ (Llama-3)</span>;
                                                                     }
-                                                                    return <span style={{ padding: '1px 4px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: '4px', fontSize: '0.4rem', border: '1px solid rgba(16,185,129,0.2)' }}>QWEN-API</span>;
+                                                                    if (latestPred.reasoning.includes('[OpenRouter')) {
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)' }}>🌐 OPENROUTER</span>;
+                                                                    }
+                                                                    if (latestPred.reasoning.includes('[Qwen]')) {
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🧠 HF (Qwen-2.5)</span>;
+                                                                    }
+                                                                    
+                                                                    // Default fallback if reasoning doesn't have tags but exists
+                                                                    return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🧠 HF (Qwen-2.5)</span>;
                                                                 })()}
                                                             </div>
                                                         </div>

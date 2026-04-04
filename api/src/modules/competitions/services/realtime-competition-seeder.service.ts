@@ -20,20 +20,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SupabaseService } from '../../../database/supabase.service.js';
-import { CompetitionManagerService, HORIZON_TIERS, type HorizonTier } from './competition-manager.service.js';
+import { CompetitionManagerService, HORIZON_TIERS, getRefreshConfig, type HorizonTier } from './competition-manager.service.js';
 import { computeTfIdf, kMeansClustering } from '../../../common/utils/clustering.util.js';
 
-/** How many unique competitions to maintain PER CATEGORY */
-const TARGET_COMPETITIONS_PER_CATEGORY = 5;
+/** How many unique competitions to maintain PER CATEGORY (one per horizon tier) */
+const TARGET_COMPETITIONS_PER_CATEGORY = 4;
 
 /** All categories to scan for ETL data */
 const CATEGORIES = ['politics', 'finance', 'crypto', 'tech', 'economy', 'science', 'sports'] as const;
 
 /**
- * All 7 valid horizon tiers — ensures every category can fill all 5 competition slots
- * even when preferred horizons overlap between urgency bands.
+ * All 4 valid horizon tiers (max 1 Day) — one competition per tier per category.
  */
-const COMPETITION_HORIZON_SLOTS: HorizonTier[] = ['2h', '7h', '12h', '24h', '3d', '5d', '7d'];
+const COMPETITION_HORIZON_SLOTS: HorizonTier[] = ['2h', '7h', '12h', '24h'];
 
 /** Intra-cluster Jaccard threshold — raised from 0.40 to 0.55 to allow more diversity */
 const INTRA_CLUSTER_JACCARD_THRESHOLD = 0.55;
@@ -74,11 +73,11 @@ export class RealtimeCompetitionSeederService {
     ) {}
 
     async onModuleInit() {
-        this.logger.log(`🌱 RealtimeCompetitionSeeder initialized — ${TARGET_COMPETITIONS_PER_CATEGORY} comps per category`);
+        this.logger.log(`🌱 RealtimeCompetitionSeeder initialized — ${TARGET_COMPETITIONS_PER_CATEGORY} comps per category (max 1Day)`);
         setTimeout(async () => {
+            await this.retireOldHorizons();
             await this.compManager.cleanupExistingDuplicates();
             await this.seedAllCategories();
-            // Backfill clusters for any competitions that missed initial binding
             await this.refreshMissingClusters();
         }, 5000);
     }
@@ -209,16 +208,16 @@ export class RealtimeCompetitionSeederService {
     }
 
     private assignHorizon(urgencyScore: number, usedHorizons: Set<string>): HorizonTier | null {
-        // Each urgency band has preferred horizons — all must be valid HORIZON_TIERS values
+        // Urgency bands mapped to 4 horizon tiers (max 1 Day)
         let preferredHorizons: HorizonTier[];
         if (urgencyScore >= 0.75) {
-            preferredHorizons = ['2h', '7h', '12h'];
-        } else if (urgencyScore >= 0.55) {
-            preferredHorizons = ['7h', '12h', '24h'];
-        } else if (urgencyScore >= 0.40) {
-            preferredHorizons = ['24h', '3d', '5d'];
+            preferredHorizons = ['2h', '7h'];       // Very urgent → short horizons
+        } else if (urgencyScore >= 0.50) {
+            preferredHorizons = ['7h', '12h'];       // Medium-high urgency
+        } else if (urgencyScore >= 0.25) {
+            preferredHorizons = ['12h', '24h'];      // Medium urgency
         } else {
-            preferredHorizons = ['3d', '5d', '7d'];
+            preferredHorizons = ['24h'];             // Long-term → max 1 day
         }
 
         // Try preferred horizons first
@@ -226,7 +225,7 @@ export class RealtimeCompetitionSeederService {
             if (!usedHorizons.has(h)) return h;
         }
 
-        // Fallback: try ALL valid horizons (not just the limited COMPETITION_HORIZON_SLOTS)
+        // Fallback: try ALL valid horizon tiers
         for (const h of HORIZON_TIERS) {
             if (!usedHorizons.has(h)) return h;
         }
@@ -695,6 +694,38 @@ export class RealtimeCompetitionSeederService {
      * Periodic cluster refresh — finds active competitions with zero or stale clusters
      * and binds fresh ETL data to them. Runs every 5 minutes to keep the UI alive.
      */
+    /**
+     * Retire any existing competitions with removed horizon tiers (3d, 5d, 7d).
+     * Called once on startup after the horizon reduction to 4 tiers.
+     */
+    private async retireOldHorizons(): Promise<void> {
+        try {
+            const supabase = this.supabaseService.getAdminClient();
+            const removedHorizons = ['3d', '5d', '7d'];
+
+            const { data: oldComps, error } = await supabase
+                .from('competitions')
+                .select('id, title, time_horizon')
+                .in('status', ['active', 'upcoming'])
+                .in('time_horizon', removedHorizons);
+
+            if (error || !oldComps || oldComps.length === 0) {
+                this.logger.log('✅ No legacy horizon competitions to retire');
+                return;
+            }
+
+            const ids = oldComps.map(c => c.id);
+            await supabase
+                .from('competitions')
+                .update({ status: 'cancelled' })
+                .in('id', ids);
+
+            this.logger.log(`🧹 Retired ${ids.length} competitions with removed horizons (3d/5d/7d)`);
+        } catch (err: any) {
+            this.logger.warn(`Failed to retire old horizon competitions: ${err.message}`);
+        }
+    }
+
     private async refreshMissingClusters(): Promise<void> {
         if (this.isRefreshingClusters) return;
         this.isRefreshingClusters = true;
@@ -702,32 +733,32 @@ export class RealtimeCompetitionSeederService {
         try {
             const supabase = this.supabaseService.getAdminClient();
 
-            // Find active competitions
+            // Find active competitions WITH time_horizon for staleness check
             const { data: activeComps, error } = await supabase
                 .from('competitions')
-                .select('id, title, sector')
+                .select('id, title, sector, time_horizon')
                 .in('status', ['active', 'upcoming']);
 
             if (error || !activeComps || activeComps.length === 0) return;
 
-            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-
             let refreshed = 0;
             for (const comp of activeComps) {
-                // Check if this competition has any recent clusters (within 10 minutes)
+                // Horizon-aware staleness — use the configured cluster refresh interval
+                const horizon = comp.time_horizon || '24h';
+                const refreshConfig = getRefreshConfig(horizon);
+                const stalenessThreshold = new Date(Date.now() - refreshConfig.clusterRefreshIntervalMs).toISOString();
+
                 const { count: clusterCount } = await supabase
                     .from('news_clusters')
                     .select('id', { count: 'exact', head: true })
                     .eq('competition_id', comp.id)
-                    .gte('created_at', tenMinutesAgo);
+                    .gte('created_at', stalenessThreshold);
 
                 if ((clusterCount || 0) > 0) continue;
 
-                // No recent cluster — try to bind fresh data from the competition's category
                 const category = comp.sector;
                 if (!category) continue;
 
-                // Fetch the latest market data for this category to create a cluster
                 const { data: latestItems } = await supabase
                     .from('market_data_items')
                     .select('title, description, url, sentiment_score, impact')
@@ -750,7 +781,6 @@ export class RealtimeCompetitionSeederService {
                     ...(latestItems || []).map(i => ({ title: i.title, strength: 0.5, impact: i.impact })),
                 ].slice(0, 8);
 
-                // If we still have no data sources, create a structural cluster entry
                 if (signals.length === 0) {
                     signals.push({ title: comp.title, strength: 0.5, source: 'structural' } as any);
                 }
@@ -770,7 +800,7 @@ export class RealtimeCompetitionSeederService {
 
                 if (!insertErr) {
                     refreshed++;
-                    this.logger.debug(`🔄 Refreshed cluster for [${category}] "${comp.title.substring(0, 40)}..."`);
+                    this.logger.debug(`🔄 Refreshed cluster for [${category}/${horizon}] "${comp.title.substring(0, 40)}..."`);
                 }
             }
 

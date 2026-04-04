@@ -60,9 +60,7 @@ function getHorizonLabel(comp: Competition): string {
     if (hours <= 2) return '2H';
     if (hours <= 7) return '7H';
     if (hours <= 12) return '12H';
-    if (hours <= 24) return '24H';
-    if (hours <= 72) return '3D';
-    return '7D';
+    return '24H';
 }
 
 function getProgressPct(comp: Competition): number {

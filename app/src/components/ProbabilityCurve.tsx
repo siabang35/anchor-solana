@@ -318,9 +318,7 @@ export default function ProbabilityCurve({
         if (hours <= 2) return '2H';
         if (hours <= 7) return '7H';
         if (hours <= 12) return '12H';
-        if (hours <= 24) return '24H';
-        if (hours <= 72) return '3D';
-        return '7D';
+        return '24H';
     };
     const horizon = getHorizon();
     const isLive = competition && competition.status === 'active';
@@ -517,7 +515,7 @@ export default function ProbabilityCurve({
                 order: 3,
             },
             ...momentumDataset,
-            {
+            ...(outcomes.length > 2 ? [{
                 label: outcomes[1] || 'Draw',
                 data: chartLabels.map((_, i) => i < data.length ? data[i].draw : null),
                 borderColor: '#f59e0b',
@@ -537,8 +535,8 @@ export default function ProbabilityCurve({
                 pointHoverBackgroundColor: '#f59e0b',
                 borderDash: [6, 3],
                 order: 3,
-            },
-            {
+            }] : []),
+            ...(outcomes.length > 2 ? [{
                 label: outcomes[2] || 'Away Win',
                 data: chartLabels.map((_, i) => i < data.length ? data[i].away : null),
                 borderColor: '#ef4444',
@@ -557,7 +555,7 @@ export default function ProbabilityCurve({
                 pointHoverRadius: 4,
                 pointHoverBackgroundColor: '#ef4444',
                 order: 3,
-            },
+            }] : []),
             ...agentDatasets,
         ],
     };
@@ -710,7 +708,7 @@ export default function ProbabilityCurve({
                 {[
                     { label: outcomes[0] || '🏠 Home', value: latest.home, delta: homeDelta, color: '#818cf8', bg: 'rgba(129,140,248,0.1)' },
                     { label: outcomes[1] || '🤝 Draw', value: latest.draw, delta: drawDelta, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-                    { label: outcomes[2] || '✈️ Away', value: latest.away, delta: awayDelta, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
+                    ...(outcomes.length > 2 ? [{ label: outcomes[2] || '✈️ Away', value: latest.away, delta: awayDelta, color: '#ef4444', bg: 'rgba(239,68,68,0.1)' }] : [])
                 ].map(item => (
                     <div key={item.label} style={{
                         display: 'flex', alignItems: 'center', gap: '0.4rem',

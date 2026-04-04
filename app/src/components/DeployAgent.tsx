@@ -122,11 +122,11 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     // Reset dependent fields on category/subcategory change
     useEffect(() => { setSubCategoryId(''); setSelectedOutcome(0); }, [categoryId]);
 
-    // Auto-select all available markets when they load for the selected category
+    // Auto-select first available market when they load for the selected category
     useEffect(() => {
         if (autoSelectedCategory !== categoryId) {
             if (availableMarkets.length > 0) {
-                setMarketIds(availableMarkets.map(m => m.id));
+                setMarketIds([availableMarkets[0].id]);
                 setAutoSelectedCategory(categoryId);
             } else {
                 setMarketIds([]);
@@ -153,8 +153,16 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         fetchMeta();
     }, [deployedAgent, publicKey]); // Refresh quota after deploy or wallet change
 
+    const agentAlreadyInMarket = useMemo(() => {
+        if (!selectedMarket || !forecasters) return false;
+        return forecasters.some(f => 
+            (f.status === 'active' || f.status === 'paused' || f.status === 'exhausted') && 
+            f.competitions?.some((c: any) => c.competition_id === selectedMarket.id)
+        );
+    }, [selectedMarket, forecasters]);
+
     const canDeploy = connected && agentName.trim() && categoryId && marketIds.length > 0 && strategy.trim()
-        && (!quota || quota.deploys_remaining > 0);
+        && (!quota || quota.deploys_remaining > 0) && !agentAlreadyInMarket;
 
     // ========================
     // Deploy via Backend API
@@ -599,10 +607,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             }}
                             onClick={() => setIsMarketsExpanded(!isMarketsExpanded)}
                         >
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <label className="form-label" style={{ margin: 0, cursor: 'pointer' }}>Target Markets</label>
-                                <span style={{ fontSize: '0.65rem', color: marketIds.length === availableMarkets.length ? 'var(--accent-green)' : 'var(--text-muted)', fontWeight: 600 }}>
-                                    {marketIds.length} of {availableMarkets.length} markets selected
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', width: 'calc(100% - 30px)', overflow: 'hidden' }}>
+                                <label className="form-label" style={{ margin: 0, cursor: 'pointer' }}>Target Market</label>
+                                <span style={{ fontSize: '0.65rem', color: marketIds.length === 1 ? 'var(--accent-green)' : 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {marketIds.length > 0 && selectedMarket ? selectedMarket.title : 'No market selected (Click to choose)'}
                                 </span>
                             </div>
                             <div style={{
@@ -631,37 +639,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                 borderRadius: 'var(--radius-xs)',
                                 border: '1px solid var(--border-card)'
                             }}>
-                                {/* Select All / Deselect All (Moved to top for better UX) */}
-                                {availableMarkets.length > 1 && (
-                                    <button
-                                        onClick={() => {
-                                            if (marketIds.length === availableMarkets.length) {
-                                                setMarketIds([]);
-                                            } else {
-                                                setMarketIds(availableMarkets.map(m => m.id));
-                                            }
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.5rem 0.6rem',
-                                            borderRadius: 'var(--radius-xs)',
-                                            border: '1px dashed var(--border-card)',
-                                            background: 'rgba(0,0,0,0.2)',
-                                            color: 'var(--text-muted)',
-                                            fontSize: '0.65rem',
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '0.4rem',
-                                            marginBottom: '0.6rem'
-                                        }}
-                                    >
-                                        {marketIds.length === availableMarkets.length ? '✕ Deselect All Markets' : '✓ Select All Markets'}
-                                    </button>
-                                )}
+                                {/* Select All / Deselect All Removed */}
 
                                 <div className="feed-scroll" style={{ 
                                     display: 'flex', 
@@ -677,11 +655,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                             <button
                                                 key={m.id}
                                                 onClick={() => {
-                                                    if (isSelected) {
-                                                        setMarketIds(prev => prev.filter(id => id !== m.id));
-                                                    } else {
-                                                        setMarketIds(prev => [...prev, m.id]);
-                                                    }
+                                                    setMarketIds([m.id]);
+                                                    setIsMarketsExpanded(false);
                                                 }}
                                                 style={{
                                                     padding: '0.5rem 0.6rem',
@@ -703,16 +678,16 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                                 <div style={{
                                                     width: '14px',
                                                     height: '14px',
-                                                    borderRadius: '3px',
+                                                    borderRadius: '50%',
                                                     border: '1px solid',
                                                     borderColor: isSelected ? 'var(--accent-indigo)' : 'var(--border-card)',
-                                                    background: isSelected ? 'var(--accent-indigo)' : 'transparent',
+                                                    background: 'transparent',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
                                                     flexShrink: 0
                                                 }}>
-                                                    {isSelected && <span style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>✓</span>}
+                                                    {isSelected && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-indigo)' }} />}
                                                 </div>
                                                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</span>
                                             </button>
@@ -866,6 +841,12 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     </div>
                 </div>
 
+                {agentAlreadyInMarket && (
+                    <div style={{ padding: '0.65rem', marginTop: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-xs)', fontSize: '0.65rem', color: '#ef4444', textAlign: 'center', fontWeight: 'bold' }}>
+                        ⚠️ You already have an active agent deployed in this specific target market.
+                    </div>
+                )}
+                
                 {/* Deploy Button */}
                 <button
                     className="btn-primary"
@@ -874,6 +855,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     style={{ marginTop: '0.5rem' }}
                 >
                     {!connected ? '🔗 Connect Wallet First'
+                        : agentAlreadyInMarket ? '⛔ Already Deployed Here'
                         : quota && quota.deploys_remaining <= 0 ? '⚠️ Deploy Limit Reached'
                         : !canDeploy ? '⚠️ Complete All Fields'
                         : deploying ? '⏳ Deploying...'

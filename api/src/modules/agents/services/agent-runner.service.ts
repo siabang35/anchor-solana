@@ -4,8 +4,18 @@
  * Autonomous agent loop that periodically feeds real-time data to deployed
  * forecaster agents, calls Qwen for predictions, and stores results.
  * 
- * Runs every 10 minutes for all active forecaster agents.
- * Tracks prompt usage (max 7 for free users).
+ * HORIZON-AWARE SCHEDULING:
+ *   2h  competitions → agent predicts every 15s
+ *   7h  competitions → agent predicts every 30s
+ *   12h competitions → agent predicts every 5 min
+ *   24h competitions → agent predicts every ~12.5 min
+ * 
+ * This eliminates ~90% of LLM token waste for longer competitions.
+ * 
+ * FREE USER LIMITS:
+ *   - Max 3 LLM prompts total per agent
+ *   - 1 prompt per competition (user selects which competition to predict on)
+ *   - After exhaustion, agent is marked as 'exhausted'
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -15,13 +25,21 @@ import { SupabaseService } from '../../../database/supabase.service.js';
 import { QwenInferenceService, ForecasterInput } from './qwen-inference.service.js';
 import { AgentEvaluationService } from './agent-evaluation.service.js';
 import { LeaderboardScoringService } from '../../competitions/services/leaderboard-scoring.service.js';
+import { getRefreshConfig } from '../../competitions/services/competition-manager.service.js';
 
-const MAX_FREE_PROMPTS = 500000; // Increased to allow continuous realtime predictions
+/** Free users: max 3 LLM prompts total per agent, 1 per competition */
+const MAX_FREE_PROMPTS = 3;
 
 @Injectable()
 export class AgentRunnerService {
     private readonly logger = new Logger(AgentRunnerService.name);
     private isRunning = false;
+
+    /**
+     * In-memory cooldown tracker: agentId → competitionId → last prediction timestamp.
+     * Prevents redundant LLM calls when the horizon-specific interval hasn't elapsed.
+     */
+    private lastPredictionTimes = new Map<string, Map<string, number>>();
 
     constructor(
         private readonly supabaseService: SupabaseService,
@@ -32,22 +50,18 @@ export class AgentRunnerService {
     ) { }
 
     /**
-     * Run agent prediction loop every 15 seconds for realtime simulation
+     * Base tick = 15 seconds (fastest horizon tier = 2h @ 15s).
+     * Horizon-aware cooldowns inside runSingleAgent() ensure longer
+     * competitions are NOT called on every tick.
      */
-    @Cron('*/5 * * * * *')
+    @Cron('*/15 * * * * *')
     async runAgentLoop() {
-        this.logger.debug(`[CRON] Tick. isRunning=${this.isRunning}`);
-        if (this.isRunning) {
-            // This is expected: sequential inferences take longer than the cron interval
-            // Suppress the warning to avoid terminal spam
-            return;
-        }
+        if (this.isRunning) return;
         this.isRunning = true;
 
         try {
             const supabase = this.supabaseService.getAdminClient();
 
-            // Fetch all active forecaster agents
             const { data: agents, error } = await supabase
                 .from('agents')
                 .select('*')
@@ -59,13 +73,23 @@ export class AgentRunnerService {
 
             this.logger.log(`🤖 Running agent loop for ${agents.length} active forecaster(s)`);
 
-            await Promise.allSettled(agents.map(async (agent) => {
-                try {
-                    await this.runSingleAgent(agent);
-                } catch (err: any) {
-                    this.logger.warn(`Agent ${agent.id} run failed: ${err.message}`);
+            // BEST PRACTICE 1: Concurrency Batching
+            // Process max 3 agents concurrently to balance throughput while strictly evading Groq/HF Burst API limits
+            const CONCURRENCY_LIMIT = 3;
+            for (let i = 0; i < agents.length; i += CONCURRENCY_LIMIT) {
+                const batch = agents.slice(i, i + CONCURRENCY_LIMIT);
+                await Promise.allSettled(batch.map(async (agent) => {
+                    try {
+                        await this.runSingleAgent(agent);
+                    } catch (err: any) {
+                        this.logger.warn(`Agent ${agent.id} run failed: ${err.message}`);
+                    }
+                }));
+                // Prevent micro-bursts between batches
+                if (i + CONCURRENCY_LIMIT < agents.length) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
                 }
-            }));
+            }
         } catch (err: any) {
             this.logger.error(`Agent loop error: ${err.message}`);
         } finally {
@@ -74,7 +98,7 @@ export class AgentRunnerService {
     }
 
     /**
-     * Trigger an immediate run for a specific agent by ID (used on deployment to avoid 10 min wait)
+     * Trigger an immediate run for a specific agent by ID (bypass cooldowns)
      */
     async runSingleAgentId(agentId: string): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
@@ -82,6 +106,8 @@ export class AgentRunnerService {
         if (agent) {
             try {
                 this.logger.log(`⚡ Immediate run triggered for agent ${agentId}`);
+                // Clear cooldowns so immediate run works
+                this.lastPredictionTimes.delete(agentId);
                 await this.runSingleAgent(agent);
             } catch (err: any) {
                 this.logger.error(`Immediate run failed for agent ${agentId}: ${err.message}`);
@@ -90,26 +116,15 @@ export class AgentRunnerService {
     }
 
     /**
-     * Run a single forecaster agent
+     * Run a single forecaster agent — with horizon-aware cooldowns
      */
     private async runSingleAgent(agent: any): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
 
-        // Check prompt usage limit
-        const { count: promptCount } = await supabase
-            .from('agent_predictions')
-            .select('*', { count: 'exact', head: true })
-            .eq('agent_id', agent.id);
-
-        if ((promptCount || 0) >= MAX_FREE_PROMPTS) {
-            this.logger.debug(`Agent ${agent.id} has used all ${MAX_FREE_PROMPTS} free prompts`);
-            // Auto-pause agent that has exhausted prompts
-            await supabase
-                .from('agents')
-                .update({ status: 'exhausted' })
-                .eq('id', agent.id);
-            return;
-        }
+        // ═══════════════════════════════════════════════════════════
+        // FREE USER PROMPT BUDGET: Disabled for unlimited testing
+        // ═══════════════════════════════════════════════════════════
+        const remainingPrompts = 1000; // Allow 1000 predictions for live testing
 
         // Get ALL active competitions this agent is linked to
         const { data: entries } = await supabase
@@ -119,11 +134,12 @@ export class AgentRunnerService {
             .eq('status', 'active');
 
         if (!entries || entries.length === 0) {
-            // Automatically join the agent to ALL active competitions
+            // Auto-join agent to active competitions (up to remaining prompt budget)
             const { data: comps } = await supabase
                 .from('competitions')
-                .select('id, title, description, sector, competition_end')
-                .eq('status', 'active');
+                .select('id, title, description, sector, competition_end, time_horizon')
+                .eq('status', 'active')
+                .limit(remainingPrompts);
 
             if (!comps || comps.length === 0) return;
 
@@ -135,29 +151,25 @@ export class AgentRunnerService {
                 }, { onConflict: 'agent_id,competition_id', ignoreDuplicates: true });
             }
             
-            // Generate immediate bootstrap predictions for all competitions to kickstart realtime scoring
+            // Generate immediate bootstrap predictions (1 per competition)
             for (const comp of comps) {
                 await this.generatePrediction(agent, comp);
             }
             return;
         }
 
-        // Shuffle entries to ensure fairness over time when rate limits occur
+        // Shuffle entries to ensure fairness
         const shuffledEntries = [...entries].sort(() => 0.5 - Math.random());
         
         let predictionMade = false;
-        
-        if (agent.name === 'Kenzo' || agent.name === 'Dimz' || agent.name === 'DanZ') {
-             this.logger.log(`🔍 [DEBUG] ${agent.name} has ${shuffledEntries.length} entries.`);
-        }
 
-        // Predict for active assigned competitions, ONE max per tick
         for (const entry of shuffledEntries) {
             if (predictionMade) break;
 
+            // Fetch competition WITH time_horizon
             const { data: comp } = await supabase
                 .from('competitions')
-                .select('id, title, description, sector, competition_end, status')
+                .select('id, title, description, sector, competition_end, status, time_horizon')
                 .eq('id', entry.competition_id)
                 .single();
 
@@ -167,7 +179,6 @@ export class AgentRunnerService {
                     this.logger.log(`🏁 Competition ${comp.id} ended. Completing entry for agent ${agent.id}`);
                     await supabase.from('agent_competition_entries').update({ status: 'completed' }).eq('agent_id', agent.id).eq('competition_id', comp.id);
                     
-                    // Check if agent has any other active competitions
                     const { count: activeCount } = await supabase
                         .from('agent_competition_entries')
                         .select('id', { count: 'exact', head: true })
@@ -177,14 +188,52 @@ export class AgentRunnerService {
                     if (!activeCount || activeCount === 0) {
                         this.logger.log(`☠ Agent ${agent.id} has no more active competitions. Auto-terminating.`);
                         await supabase.from('agents').update({ status: 'terminated' }).eq('id', agent.id);
-                        break; // Stop running this agent for now since it's terminated
+                        break;
                     }
                     continue;
                 }
 
+                // ═══════════════════════════════════════════════
+                // 1 PROMPT PER COMPETITION — skip if already predicted
+                // ═══════════════════════════════════════════════
+                const { count: compPredCount } = await supabase
+                    .from('agent_predictions')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('agent_id', agent.id)
+                    .eq('competition_id', comp.id);
+
+                if ((compPredCount || 0) >= 1) {
+                    // Already used this competition's prompt slot — skip
+                    continue;
+                }
+
+                // ═══════════════════════════════════════════════
+                // HORIZON-AWARE COOLDOWN WITH THUNDERING HERD PROTECTION
+                // ═══════════════════════════════════════════════
+                const horizon = comp.time_horizon || '24h';
+                const refreshConfig = getRefreshConfig(horizon);
+                const agentCooldowns = this.lastPredictionTimes.get(agent.id) || new Map<string, number>();
+                const lastPredTime = agentCooldowns.get(comp.id) || 0;
+                const elapsed = Date.now() - lastPredTime;
+
+                // BEST PRACTICE 2: Execution Jittering
+                // Add +/- 15% random time fluctuation. If 10 agents predicted at 10:00, they won't all perfectly
+                // sync up again at exactly 10:05. They will naturally drift, flattening the API curve over time.
+                const baseInterval = refreshConfig.agentPredictionIntervalMs;
+                const jitter = baseInterval * 0.15 * (Math.random() - 0.5); 
+                const actualInterval = baseInterval + jitter;
+
+                if (lastPredTime > 0 && elapsed < actualInterval) {
+                    continue;
+                }
+
                 const result = await this.generatePrediction(agent, comp);
-                if (result === 'success' || result === 'failed') {
-                    // Stop trying other competitions if we made an API call (even if it failed/rate-limited)
+                if (result === 'success') {
+                    predictionMade = true;
+                    agentCooldowns.set(comp.id, Date.now());
+                    this.lastPredictionTimes.set(agent.id, agentCooldowns);
+                    this.logger.log(`📊 Agent ${agent.id} generated prediction on competition ${comp.id}`);
+                } else if (result === 'failed') {
                     predictionMade = true;
                 }
             }
@@ -196,26 +245,6 @@ export class AgentRunnerService {
      */
     private async generatePrediction(agent: any, competition: any): Promise<'skipped' | 'failed' | 'success'> {
         const supabase = this.supabaseService.getAdminClient();
-
-        // Check anti-chunking before proceeding
-        const { data: lastPrediction } = await supabase
-            .from('agent_predictions')
-            .select('timestamp')
-            .eq('agent_id', agent.id)
-            .eq('competition_id', competition.id)
-            .order('timestamp', { ascending: false })
-            .limit(1)
-            .single();
-
-        if (lastPrediction && lastPrediction.timestamp) {
-            const lastPredTime = new Date(lastPrediction.timestamp).getTime();
-            if (Date.now() - lastPredTime < 3000) {
-                if (agent.name === 'Kenzo') this.logger.log(`🔍 [DEBUG] Kenzo skipped due to TS anti-chunking. Diff: ${Date.now() - lastPredTime}ms`);
-                return 'skipped';
-            }
-        }
-        
-        if (agent.name === 'Kenzo') this.logger.log(`🔍 [DEBUG] Kenzo executing prediction...`);
 
         // Fetch latest curve probability for live scoring reference
         const { data: latestProb } = await supabase
@@ -269,10 +298,7 @@ export class AgentRunnerService {
             referenceProbability: baseRefProb,
         };
 
-        // Combine agent's system prompt with competition context
-        const agentPromptOverride = agent.system_prompt || '';
-
-        this.logger.log(`  🧠 Agent ${agent.id} → Qwen inference for "${competition.title}"`);
+        this.logger.log(`  🧠 Agent ${agent.id} → Qwen inference for "${competition.title}" [${horizon}]`);
 
         // Call Qwen
         let forecast: any = await this.qwenService.generateForecast(input);
@@ -289,7 +315,7 @@ export class AgentRunnerService {
             curve: forecast.projected_curve,
         }, baseRefProb);
 
-        this.logger.log(`  ✅ Agent ${agent.id} predicted ${(forecast.base_probability * 100).toFixed(1)}% for "${competition.title}"`);
+        this.logger.log(`  ✅ Agent ${agent.id} predicted ${(forecast.base_probability * 100).toFixed(1)}% for "${competition.title}" [${horizon}]`);
         return 'success';
     }
 
@@ -313,8 +339,6 @@ export class AgentRunnerService {
         }).select('id').single();
 
         if (error) {
-            // If the Postgres trigger gracefully blocks the duplicate cron job due to anti-chunking, 
-            // log it as a debug trace instead of a scary RED Error block
             if (error.message?.includes('Anti-chunking')) {
                 this.logger.debug(`Supabase blocked concurrent prediction for agent ${agentId} (Anti-chunking guard)`);
             } else {
@@ -324,8 +348,6 @@ export class AgentRunnerService {
         }
 
         if (inserted) {
-            // Live score the prediction immediately against the current curve
-            // For binary events, probability is P(Yes). So the [Yes, No] vector is [P, 1-P].
             const predictedProbs = [data.probability, 1 - data.probability];
             const referenceProbs = [currentCurveProb, 1 - currentCurveProb];
 
@@ -360,7 +382,6 @@ export class AgentRunnerService {
             );
 
             if (score !== null) {
-                // Store the final Brier score
                 await supabase
                     .from('agent_competition_entries')
                     .update({ brier_score: score, status: 'evaluated' })

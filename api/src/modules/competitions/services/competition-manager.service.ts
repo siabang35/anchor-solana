@@ -4,9 +4,10 @@ import { tokenize } from '../../../common/utils/clustering.util.js';
 
 /**
  * All valid horizon tiers for the competition system.
- * Each competition gets exactly one unique horizon globally.
+ * Max 1 Day — reduced from 7 tiers to 4 for LLM token efficiency.
+ * Each competition gets exactly one unique horizon per category.
  */
-export const HORIZON_TIERS = ['2h', '7h', '12h', '24h', '3d', '5d', '7d'] as const;
+export const HORIZON_TIERS = ['2h', '7h', '12h', '24h'] as const;
 export type HorizonTier = typeof HORIZON_TIERS[number];
 
 /** Duration in milliseconds per horizon */
@@ -15,10 +16,40 @@ export const HORIZON_DURATION_MS: Record<HorizonTier, number> = {
     '7h': 7 * 60 * 60 * 1000,
     '12h': 12 * 60 * 60 * 1000,
     '24h': 24 * 60 * 60 * 1000,
-    '3d': 3 * 24 * 60 * 60 * 1000,
-    '5d': 5 * 24 * 60 * 60 * 1000,
-    '7d': 7 * 24 * 60 * 60 * 1000,
 };
+
+/**
+ * Horizon-Aware Refresh Configuration
+ *
+ * Each horizon tier gets optimized refresh intervals to balance
+ * realtime UX vs LLM token consumption:
+ *   - 2h  → aggressive (15s) — short competition needs live feel
+ *   - 7h  → moderate  (30s) — active but not wasteful
+ *   - 12h → relaxed   (5min) — significant token savings
+ *   - 24h → lazy      (10-15min) — maximum efficiency
+ */
+export interface HorizonRefreshConfig {
+    /** How often agents should generate LLM predictions (ms) */
+    agentPredictionIntervalMs: number;
+    /** How often the curve engine ticks (ms) */
+    curveEngineIntervalMs: number;
+    /** How often cluster data is refreshed (ms) */
+    clusterRefreshIntervalMs: number;
+    /** Human-readable label */
+    label: string;
+}
+
+export const HORIZON_REFRESH_CONFIG: Record<HorizonTier, HorizonRefreshConfig> = {
+    '2h':  { agentPredictionIntervalMs: 15_000,    curveEngineIntervalMs: 15_000,    clusterRefreshIntervalMs: 60_000,     label: '2 Hours' },
+    '7h':  { agentPredictionIntervalMs: 30_000,    curveEngineIntervalMs: 30_000,    clusterRefreshIntervalMs: 150_000,    label: '7 Hours' },
+    '12h': { agentPredictionIntervalMs: 300_000,   curveEngineIntervalMs: 300_000,   clusterRefreshIntervalMs: 600_000,    label: '12 Hours' },
+    '24h': { agentPredictionIntervalMs: 750_000,   curveEngineIntervalMs: 600_000,   clusterRefreshIntervalMs: 1_800_000,  label: '1 Day' },
+};
+
+/** Get refresh config for a horizon, with safe fallback to 24h */
+export function getRefreshConfig(horizon: string): HorizonRefreshConfig {
+    return HORIZON_REFRESH_CONFIG[horizon as HorizonTier] || HORIZON_REFRESH_CONFIG['24h'];
+}
 
 /** Jaccard similarity threshold — raised from 0.45 to 0.65 to prevent rejecting distinct category topics with shared boilerplate */
 const SIMILARITY_THRESHOLD = 0.65;

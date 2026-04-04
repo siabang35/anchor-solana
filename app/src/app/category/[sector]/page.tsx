@@ -55,9 +55,7 @@ function getHorizonLabel(comp: Competition): string {
     if (hours <= 2) return '2H';
     if (hours <= 7) return '7H';
     if (hours <= 12) return '12H';
-    if (hours <= 24) return '24H';
-    if (hours <= 72) return '3D';
-    return '7D';
+    return '24H';
 }
 
 function getTimeRemaining(comp: Competition): string {
@@ -266,11 +264,9 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     forecasters={[
                         ...forecasters.filter(f => {
                             if (!f.competitions || f.competitions.length === 0) return false;
-                            // Show agent if it's enrolled in the selected competition
-                            // OR if it's enrolled in any competition within the same sector
+                            // Show agent ONLY if it's enrolled in the selected competition
                             return f.competitions.some((entry: any) =>
-                                entry.competition_id === activeComp?.id ||
-                                (entry.sector && entry.sector.toLowerCase() === sector.toLowerCase())
+                                entry.competition_id === activeComp?.id
                             );
                         }),
                         // Map competitors to match ForecasterAgent shape, excluding user's own agents

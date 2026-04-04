@@ -29,37 +29,63 @@ export default function Header({ theme, onToggleTheme }: Props) {
 
     return (
         <header className="header">
+            <div className="header-glass-overlay" style={{
+                position: 'absolute', inset: 0, 
+                borderRadius: 'inherit',
+                boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), inset 0 -1px 1px rgba(0,0,0,0.5)',
+                pointerEvents: 'none', zIndex: -1
+            }} />
+            
             <div className="header-left">
-                <Link href="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-                    <div>
-                        <div className="logo">ExoDuZe</div>
-                        <div className="logo-sub">AI-Native Probability Trading · Non-Zero-Sum</div>
+                <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                            width: '32px', height: '32px', borderRadius: '8px', 
+                            background: 'var(--gradient-vibrant)',
+                            backgroundSize: '200% 200%',
+                            animation: 'holographic 6s ease infinite',
+                            boxShadow: '0 4px 12px rgba(131, 56, 236, 0.4), inset 0 2px 4px rgba(255,255,255,0.3)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white', fontWeight: 900, fontSize: '1.2rem',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.4)'
+                        }}>E</div>
+                        <div>
+                            <div className="logo" style={{ lineHeight: 1.1 }}>ExoDuZe</div>
+                            <div className="logo-sub" style={{ opacity: 0.8, marginTop: '2px' }}>AI-Native Probability Trading</div>
+                        </div>
                     </div>
                 </Link>
-                <span className="badge live">● LIVE</span>
-                <span className="badge devnet">DEVNET</span>
+                
+                <div style={{ display: 'flex', gap: '6px', marginLeft: '0.5rem' }}>
+                    <span className="badge live" style={{ transform: 'translateY(-1px)' }}>● LIVE</span>
+                    <span className="badge devnet" style={{ transform: 'translateY(-1px)' }}>DEVNET</span>
+                </div>
             </div>
 
-            {/* Navigation removed for cleaner top header */}
-
             <div className="header-right">
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{time}</span>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{time}</span>
                 {publicKey && (
                     <span style={{
                         fontSize: '0.65rem',
                         fontFamily: 'var(--font-mono)',
                         color: 'var(--accent-indigo)',
-                        background: 'rgba(99,102,241,0.1)',
-                        padding: '4px 10px',
+                        background: 'rgba(99,102,241,0.15)',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.1)',
+                        padding: '5px 12px',
                         borderRadius: 'var(--radius-round)',
                     }}>
                         {publicKey.toBase58().slice(0, 4)}...{publicKey.toBase58().slice(-4)}
                     </span>
                 )}
-                <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+                <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme" style={{
+                    boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.1), 0 4px 8px rgba(0,0,0,0.2)'
+                }}>
                     {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
-                <WalletMultiButton />
+                <div style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}>
+                    <WalletMultiButton />
+                </div>
 
                 {/* Mobile Hamburger */}
                 <button

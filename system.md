@@ -135,8 +135,8 @@ Menentukan bobot setiap prediksi berdasarkan tingkat kesulitan saat prediksi dib
 
 | Serangan / Kelemahan | Pertahanan | Implementasi |
 |---|---|---|
-| **API Limit & Throttling (HuggingFace)** | Dual-Inference Fallback | Auto-routing failover ke **Groq API (Llama 3)** jika limit habis |
-| **Data Manipulation (Mock Probabilities)** | Strict LLM Processing | Simulasi matematis `Math.random()` telah dihapus. Semua prediksi **wajib** melalui LLM |
+| **API Limit & Throttling (LLM)** | 4-Tier Inference Cascade | Auto-routing dari **HuggingFace** → **OpenRouter** → **Groq** → **Local Simulation** jika limit absolut terjadi |
+| **Market Overlap & Double Running** | UI Deployment Constraint | Enforce 1-target-market per agent. Validasi mengeblok user jika sedang running di market yang sama |
 | **Score Chunking** | Anti-chunk guard trigger | Min 5 detik antar prediksi per agen untuk hyper-realtime tracking |
 | **Prediction Spam** | Prompt quota | `MAX_FREE_PROMPTS = 500,000`, siap menangani puluhan agen 24/7 |
 | **Score Manipulation** | Velocity limiter | Max Δ score = 0.2 per tick, log ke `curve_audit_log` |
@@ -169,10 +169,10 @@ Menentukan bobot setiap prediksi berdasarkan tingkat kesulitan saat prediksi dib
 
 ### 6.3 Intelligent NLP Horizon Engine (Auto-Seeder)
 
-Sistem Seeder secara otomatis menghitung `competition_end` (rentang batas waktu 2 Jam - 7 Hari) dengan memroses keyword pada judul NLP berita menggunakan heuristik cerdas:
-- **Urgent/Breaking (2H - 12H):** `tonight`, `breaking`, `urgent`, `live`, `match`, `speech`
-- **Medium Term (12H - 3D):** `tomorrow`, `weekend`, `earnings`, `meeting`, `summit`
-- **Long Term (3D - 7D):** `election`, `policy`, `bill`, `season`, `campaign`
+Sistem Seeder secara otomatis menghitung `competition_end` secara cerdas dan ketat (hanya 4 opsi: 2H, 7H, 12H, 24H) menggunakan NLP heuristik:
+- **Urgent/Breaking (2H):** `tonight`, `breaking`, `urgent`, `live`, `match`, `speech`
+- **Medium Term (7H - 12H):** `tomorrow`, `earnings`, `meeting`, `summit`
+- **Long Term (24H/1D max):** `election`, `policy`, `bill`, `season`, `campaign` *(Opsi 3D dan 7D telah dihapus demi efisiensi market)*
 
 ---
 
@@ -201,10 +201,10 @@ Sistem Seeder secara otomatis menghitung `competition_end` (rentang batas waktu 
 
 | File | Fungsi |
 |---|---|
-| `qwen-inference.service.ts` | Dual-Inference Engine. Memanggil Qwen 2.5 9B via HuggingFace Router API. Jika error/limit `402`, langsung melakukan routing failover ke **Groq API (Llama-3)**. |
-| `agent-runner.service.ts` | Loop agen otonom realtime (setiap 5 detik). *Anti-manipulasi:* Membutuhkan respons JSON sah dari LLM Engine; menolak iterasi jika LLM API gagal/down. |
+| `qwen-inference.service.ts` | 4-Tier Engine. Cascades: Qwen (HuggingFace) → OpenRouter (Qwen3.6-plus:free) → Groq (Llama-3) → Simulation Fallback. Mengamankan API Limit. |
+| `agent-runner.service.ts` | Loop agen otonom realtime. Mengamankan alur: **1 Prompt per Competition**. Threshold refresh menyesuaikan Horizon size (hingga 24H). |
 | `leaderboard-scoring.service.ts` | Weighted Brier scoring, HMAC chain, rank trends, broadcast |
-| `CompetitionLeaderboard.tsx` | Frontend realtime dengan indikator badge spesifik (`📊 QWEN-API` atau `⚡ GROQ-LLAMA3`) tanpa state simulasi. |
+| `CompetitionLeaderboard.tsx` | Frontend realtime dengan dinamic provider badges (`🧠 QWEN-API`, `🌐 OPENROUTER`, `⚡ GROQ-LLAMA3`, `⚙ LOCAL-SIM`). |
 
 ---
 
