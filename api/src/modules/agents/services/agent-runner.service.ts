@@ -54,7 +54,7 @@ export class AgentRunnerService {
      * Horizon-aware cooldowns inside runSingleAgent() ensure longer
      * competitions are NOT called on every tick.
      */
-    @Cron('*/15 * * * * *')
+    @Cron('*/45 * * * * *')
     async runAgentLoop() {
         if (this.isRunning) return;
         this.isRunning = true;
@@ -158,6 +158,35 @@ export class AgentRunnerService {
             return;
         }
 
+        // Pre-fetch all competition models and predictions to avert N+1 loops
+        const activeCompIds = entries.map((e: any) => e.competition_id);
+        
+        let compsMap = new Map<string, any>();
+        let predictedSet = new Set<string>();
+
+        if (activeCompIds.length > 0) {
+            // 1. Fetch competitions batch
+            const { data: compsData } = await supabase
+                .from('competitions')
+                .select('id, title, description, sector, competition_end, status, time_horizon')
+                .in('id', activeCompIds);
+            
+            if (compsData) {
+                for (const c of compsData) compsMap.set(c.id, c);
+            }
+
+            // 2. Fetch agent predictions batch
+            const { data: predsData } = await supabase
+                .from('agent_predictions')
+                .select('competition_id')
+                .eq('agent_id', agent.id)
+                .in('competition_id', activeCompIds);
+            
+            if (predsData) {
+                for (const p of predsData) predictedSet.add(p.competition_id);
+            }
+        }
+
         // Shuffle entries to ensure fairness
         const shuffledEntries = [...entries].sort(() => 0.5 - Math.random());
         
@@ -166,12 +195,8 @@ export class AgentRunnerService {
         for (const entry of shuffledEntries) {
             if (predictionMade) break;
 
-            // Fetch competition WITH time_horizon
-            const { data: comp } = await supabase
-                .from('competitions')
-                .select('id, title, description, sector, competition_end, status, time_horizon')
-                .eq('id', entry.competition_id)
-                .single();
+            // Fetch competition from cached map instead of N+1 DB hit
+            const comp = compsMap.get(entry.competition_id);
 
             if (comp) {
                 // Auto-terminate entry if competition has ended
@@ -196,13 +221,7 @@ export class AgentRunnerService {
                 // ═══════════════════════════════════════════════
                 // 1 PROMPT PER COMPETITION — skip if already predicted
                 // ═══════════════════════════════════════════════
-                const { count: compPredCount } = await supabase
-                    .from('agent_predictions')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('agent_id', agent.id)
-                    .eq('competition_id', comp.id);
-
-                if ((compPredCount || 0) >= 1) {
+                if (predictedSet.has(comp.id)) {
                     // Already used this competition's prompt slot — skip
                     continue;
                 }

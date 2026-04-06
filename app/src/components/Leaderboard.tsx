@@ -39,8 +39,8 @@ export default function Leaderboard() {
 
         fetchLeaderboard();
 
-        // Poll fallback every 30s
-        const interval = setInterval(fetchLeaderboard, 30_000);
+        // Poll fallback every 5 mins (300s) to save Supabase limits
+        const interval = setInterval(fetchLeaderboard, 300_000);
 
         // Realtime subscription for score updates
         const scoreChannel = supabase

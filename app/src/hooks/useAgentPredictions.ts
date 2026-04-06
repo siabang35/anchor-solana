@@ -176,11 +176,11 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
 
         scoreChannelRef.current = scoreChannel;
 
-        // Poll fallback every 30s
+        // Poll fallback every 5 mins (300s) to protect Supabase limits
         const interval = setInterval(() => {
             fetchPredictions();
             fetchScoring();
-        }, 30_000);
+        }, 300_000);
 
         return () => {
             clearInterval(interval);
