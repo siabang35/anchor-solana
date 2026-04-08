@@ -1,6 +1,6 @@
 # ExoDuZe — System Notes & Comprehensive Audit Log
 
-> Last Updated: 2026-03-31 21:37 WIB
+> Last Updated: 2026-04-08 11:15 WIB
 
 ---
 
@@ -26,7 +26,7 @@ Digunakan untuk menyimpan data agen AI yang di-deploy oleh user.
 | `user_id` | UUID FK → auth.users | Pemilik agen |
 | `name` | VARCHAR(100) | Nama agen |
 | `system_prompt` | TEXT | Prompt instruksi AI |
-| `model` | VARCHAR(50) | Model AI (default: Qwen/Qwen3.5-9B) |
+| `model` | VARCHAR(50) | Model AI (default: Qwen/Qwen2.5-7B-Instruct) |
 | `status` | ENUM agent_status | pending / active / paused / terminated / error |
 
 ### `agent_competition_entries`
@@ -39,6 +39,7 @@ Mapping antara agen dan kompetisi yang diikutinya.
 | `brier_score` | DECIMAL(5,4) | Skor Brier mentah (0 = sempurna, 1 = terburuk) |
 | `weighted_score` | DECIMAL(10,6) | Skor tertimbang (curve difficulty × brier) |
 | `prediction_count` | INTEGER | Jumlah prediksi yang sudah dikirim |
+| `final_rank` | INTEGER | Peringkat akhir setelah kompetisi usai (1, 2, 3) |
 | `score_hash` | TEXT | HMAC hash terakhir untuk verifikasi integritas |
 | `rank_trend` | INTEGER | +1 naik, -1 turun, 0 tetap |
 | `status` | ENUM | active / paused / completed / evaluated |
@@ -135,10 +136,11 @@ Menentukan bobot setiap prediksi berdasarkan tingkat kesulitan saat prediksi dib
 
 | Serangan / Kelemahan | Pertahanan | Implementasi |
 |---|---|---|
-| **API Limit & Throttling (LLM)** | 4-Tier Inference Cascade | Auto-routing dari **HuggingFace** → **OpenRouter** → **Groq** → **Local Simulation** jika limit absolut terjadi |
+| **API Limit & Throttling (LLM)** | 4-Tier Inference Cascade | Auto-routing dengan Cooldown **30s** (rate limit 429/503) & **5 menit** (billing 402). Auto-Recovery probing dari **HuggingFace** → **OpenRouter** → **Groq** (70B→8B sub-fallback) → **Local Simulation** jika limit absolut terjadi. Agent Simulation State Cache (`agentSimState`) mempertahankan probabilitas terakhir per agent saat simulation mode aktif. |
+| **Thundering Herd Exhaustion** | Serialized Agent Processing | Agent diproses **1 per 1** (concurrency=1) dengan 3s delay antar agent + 2s delay antar prediksi. Bootstrap dibatasi **2 prediksi** per agent baru. |
 | **Market Overlap & Double Running** | UI Deployment Constraint | Enforce 1-target-market per agent. Validasi mengeblok user jika sedang running di market yang sama |
-| **Score Chunking** | Anti-chunk guard trigger | Min 5 detik antar prediksi per agen untuk hyper-realtime tracking |
-| **Prediction Spam** | Prompt quota | `MAX_FREE_PROMPTS = 500,000`, siap menangani puluhan agen 24/7 |
+| **Score Chunking** | Anti-chunk guard trigger | Default **10 detik** antar prediksi per agen untuk hyper-realtime tracking |
+| **Prediction Spam** | Prompt quota | `MAX_FREE_PROMPTS` per budget agen membatasi prediksi kontinu sesuai durasi kompetisi |
 | **Score Manipulation** | Velocity limiter | Max Δ score = 0.2 per tick, log ke `curve_audit_log` |
 | **Retroactive Tampering** | HMAC-SHA256 chain | Setiap snapshot di-hash berantai seperti blockchain |
 | **Bot Threshold Targeting** | Stochastic engine | Merton Jump Diffusion + OU Mean Reversion |
@@ -194,6 +196,9 @@ Sistem Seeder secara otomatis menghitung `competition_end` secara cerdas dan ket
 | 058 | `058_add_agents_table.sql` | Tabel `agents`, `agent_competition_entries`, `agent_predictions`, `agent_wagers` |
 | 063 | `063_weighted_live_scoring.sql` | Weighted scoring, anti-chunking, HMAC chain, leaderboard snapshots |
 | 064 | `064_add_probability_to_agent_predictions.sql` | Kolom `probability`, `reasoning`, `projected_curve` + relax `prediction_data` NOT NULL |
+| 065 | `065_fix_security_lints.sql` | Fix RLS lints pada schema database |
+| 066 | `066_agent_final_ranks.sql` | Menambahkan kolom `final_rank` agar UI bisa menampilkan medali kemenangan agen |
+| 067 | `067_fix_anti_chunking.sql` | Fix anti-chunking guard di Supabase `leaderboard_score_config` diturunkan ke 10s untuk real-time prediction interval |
 
 ---
 
@@ -201,10 +206,10 @@ Sistem Seeder secara otomatis menghitung `competition_end` secara cerdas dan ket
 
 | File | Fungsi |
 |---|---|
-| `qwen-inference.service.ts` | 4-Tier Engine. Cascades: Qwen (HuggingFace) → OpenRouter (Qwen3.6-plus:free) → Groq (Llama-3) → Simulation Fallback. Mengamankan API Limit. |
-| `agent-runner.service.ts` | Loop agen otonom realtime. Mengamankan alur: **1 Prompt per Competition**. Threshold refresh menyesuaikan Horizon size (hingga 24H). |
-| `leaderboard-scoring.service.ts` | Weighted Brier scoring, HMAC chain, rank trends, broadcast |
-| `CompetitionLeaderboard.tsx` | Frontend realtime dengan dinamic provider badges (`🧠 QWEN-API`, `🌐 OPENROUTER`, `⚡ GROQ-LLAMA3`, `⚙ LOCAL-SIM`). |
+| `qwen-inference.service.ts` | **4-Tier Inference Engine.** Cascades: Qwen 2.5 7B (HuggingFace) → Llama 3.3 70B (OpenRouter) → Llama 70B/8B (Groq, dengan sub-fallback otomatis 70B→8B) → Local Simulation. Cooldown **30s** untuk rate limit (429/503), **5 menit** untuk billing error (402). Auto-Recovery probing otomatis re-probe tier yang cooldown-nya habis. **Agent Simulation State Cache** (`agentSimState`): menyimpan probabilitas terakhir per agent agar simulation tidak reset ke reference probability. **Agent-Hash Noise**: setiap agent mendapat noise deterministik unik agar output simulation divergen antar agent. |
+| `agent-runner.service.ts` | Loop agen otonom realtime dengan **serialized processing** (1 agent per waktu, 3s inter-agent delay). Bootstrap prediction dibatasi **2 prediksi** per agent baru. Inter-prediction delay 2s + execution jittering ±15%. Termasuk logic **Auto-Termination** jika semua kompetisi agen berakhir dan **Final Rank** assignment (1-3) untuk Trophy display. |
+| `leaderboard-scoring.service.ts` | Weighted Brier scoring, HMAC chain, rank trends, broadcast realtime, dan update Rank Akhir |
+| `CompetitionLeaderboard.tsx` | Frontend realtime dengan dynamic provider badges: `🧠 HF (Qwen-2.5)` via `[Qwen]` tag, `🌐 OPENROUTER (Llama-70B)` via `[OpenRouter` tag, `⚡ GROQ (Llama-3)` via `[Groq]`/`[Groq-8B]` tag, `⚙️ LOCAL-SIM` via `[LOCAL-SIM]` tag, `🤖 AI` sebagai default fallback. |
 
 ---
 
@@ -212,10 +217,15 @@ Sistem Seeder secara otomatis menghitung `competition_end` secara cerdas dan ket
 
 | Issue | Status | Catatan |
 |---|---|---|
-| HuggingFace API 410 (deprecated endpoint) | ✅ Fixed | URL diubah ke `router.huggingface.co/hf-inference/...` |
+| HuggingFace API 410 (deprecated endpoint) | ✅ Fixed | URL diubah ke `router.huggingface.co/v1/chat/completions` |
 | Missing `probability` column | ✅ Fixed | Migration 064 |
 | Missing `reasoning` column | ✅ Fixed | Migration 064 |
 | Missing `projected_curve` column | ✅ Fixed | Migration 064 |
+| HuggingFace 402 (billing/payment) | ⚠️ Active | Free tier habis. Cooldown 5 menit. Perlu tambah kredit HuggingFace untuk re-enable Tier 1. |
+| OpenRouter 429 (rate limit) | ⚠️ Active | Free tier rate-limited. Cooldown 30s dengan auto-recovery probing. |
+| Groq 70B 429 (rate limit) | ℹ️ Info | Auto-fallback ke Groq 8B (`llama-3.1-8b-instant`). Jika 8B juga 429, cooldown 30s. |
+| Frontend badge salah (Groq-8B → HF) | ✅ Fixed | Badge sekarang mendeteksi `[Groq]` DAN `[Groq-8B]`. Default fallback diubah dari "HF" ke "AI". |
+| Thundering herd API exhaustion | ✅ Fixed | Serialized processing (concurrency 1), bootstrap limit 2, inter-prediction delay 2s. |
 | HuggingFace 401 (Invalid token) | ⚠️ User Action | Perlu set `HUGGINGFACE_TOKEN` di environment variable API |
 | RabbitMQ not connected | ℹ️ Info | `MarketMessagingService` — opsional, tidak blocking |
 | CryptoPanic API 404 | ℹ️ Info | API pihak ketiga mungkin sudah berubah endpoint |

@@ -205,7 +205,7 @@ export class AgentsService {
                 user_id: userId,
                 name: dto.name,
                 system_prompt: dto.system_prompt,
-                model: 'Qwen/Qwen3.5-9B',
+                model: 'Qwen/Qwen2.5-7B-Instruct',
                 status: 'active',
             })
             .select('*')
@@ -258,7 +258,7 @@ export class AgentsService {
 
         let query = supabase
             .from('agents')
-            .select('*, agent_competition_entries(competition_id, brier_score, status, competitions(title, sector))', { count: 'exact' })
+            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector))', { count: 'exact' })
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -277,19 +277,25 @@ export class AgentsService {
         // Enrich with prompt usage count
         const enriched = await Promise.all(
             (data || []).map(async (agent: any) => {
-                const { count: promptCount } = await supabase
+                const { data: latestPreds, count: promptCount } = await supabase
                     .from('agent_predictions')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('agent_id', agent.id);
+                    .select('reasoning', { count: 'exact' })
+                    .eq('agent_id', agent.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                const latestReasoning = latestPreds && latestPreds.length > 0 ? latestPreds[0].reasoning : null;
 
                 return {
                     ...agent,
+                    latest_reasoning: latestReasoning,
                     prompts_used: promptCount || 0,
                     max_free_prompts: MAX_FREE_DEPLOYS,
                     competitions: (agent.agent_competition_entries || []).map((e: any) => ({
                         competition_id: e.competition_id,
                         brier_score: e.brier_score,
                         status: e.status,
+                        final_rank: e.final_rank,
                         title: e.competitions?.title,
                         sector: e.competitions?.sector,
                     })),

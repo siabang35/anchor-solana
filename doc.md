@@ -17,16 +17,16 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
     *   **Sector Navigation & Meta-Tabs:** Advanced real-time views segmented into `Top Markets` (sorted by Prize Pool), `For You` (Custom Recommendation Algorithm), and `Signals` (Pure Real-Time Data Stream feeds).
     *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
     *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
-    *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Seamlessly identifies live inference sources actively returning from the backend via badges (`🧠 QWEN-API`, `🌐 OPENROUTER`, `⚡ GROQ-LLAMA3`, or `⚙ LOCAL-SIM`). Ranks update live via Supabase `postgres_changes`.
-    *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Features include pausing, stopping, resuming, and executing hard-deletes (`deleteForecaster`).
+    *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Seamlessly identifies live inference sources actively returning from the backend via badges (`🧠 HF (Qwen-2.5)`, `🌐 OPENROUTER (Llama-70B)`, `⚡ GROQ (Llama-3)`, `⚙ LOCAL-SIM`, or `🤖 AI` default). Badge detection parses the `[Qwen]`, `[OpenRouter/...]`, `[Groq]`/`[Groq-8B]`, and `[LOCAL-SIM]` reasoning prefixes from the latest agent prediction. Ranks update live via Supabase `postgres_changes`.
+    *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Displays explicit victory badges (`🥇 1st`, `🥈 2nd`, `🥉 3rd` Place Trophies) once an agent's competition finalizes and their final accuracy secures the Top-3 ranks.
 *   **State Management:** Real-time array unshifting via `@supabase/supabase-js` subscriptions, global caching via custom hooks, and decentralized wallet state via `@solana/wallet-adapter-react` (utilizing Wallet Standard auto-discovery).
 
 ### 2.2 Backend (NestJS + Supabase REST)
 *   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
 *   **Key Modules:** 
     *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets, and powers public competitive visibility APIs (`/agents/competitors`) while actively sanitizing sensitive data like `system_prompt` and `user_id`.
-    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns deterministic competitive lifespans (strictly constrained to 2H, 7H, 12H, or 24H/1D bounds, legacy 3D/7D retired).
-    *   `QwenInferenceService`: Acts as the hardened Multi-Inference Engine. Implements a 4-Tier fallback cascade hierarchy for maximum uptime: **HuggingFace (Qwen 2.5) → OpenRouter (Qwen 3.6+) → Groq (Llama-3) → Local Simulation Fallback**.
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns deterministic competitive lifespans (strictly constrained to 2H, 7H, 12H, or 24H/1D bounds).
+    *   `QwenInferenceService`: Acts as the hardened Multi-Inference Engine. Implements a **4-Tier fallback cascade** hierarchy for maximum uptime: **HuggingFace (Qwen 2.5 7B) → OpenRouter (Llama 3.3 70B) → Groq (70B → 8B sub-fallback) → Local Simulation Fallback**. Features intelligent per-tier cooldowns: **30s** for rate limits (429/503), **5 minutes** for billing errors (402), and auto-recovery probing that seamlessly re-enables recovered tiers. Includes an **Agent Simulation State Cache** (`agentSimState`) that persists each agent's last known probability, ensuring simulation outputs remain continuous and divergent across agents (via deterministic agent-hash noise) instead of resetting to a static reference.
     *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
 *   **Security & Guarding:** 
     *   Enforces strict payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
@@ -73,11 +73,11 @@ To maintain institutional-grade anti-bot and anti-manipulation integrity, the ba
 4.  **Instant Delivery:** The user is immediately granted the Base Free Deployment Quota and logged in without manual sign-up friction.
 
 ### 4.2 AI Agent Deployment Lifecycle
-1.  **Selection:** The user chooses a **Single Target Market** (1-prompt-per-market enforced). The system validates active rosters to prevent identical duplicate deployments.
+1.  **Selection:** The user chooses a **Single Target Market**. The system validates active rosters to prevent identical duplicate deployments.
 2.  **Prompt Engineering:** The user dictates a `System Prompt` driving the analytical lens of the Qwen 9B base model.
 3.  **Stake Allocation:** The user optionally designates a native Devnet Solana Stake Amount for competitive entry.
 4.  **Deployment:** The frontend constructs the payload, securely queries `/agents/wager` and the on-chain instructions, logging real-time transaction feedback in the UI.
-5.  **Simulation & Hard-Deletion:** The Agent passively ingests scraped `market_data_items`, adjusts probabilities, and aligns dynamically on the CompetitionLeaderboard. The user maintains full lifecycle control, executing soft-pauses or total database purges (Hard Delete).
+5.  **Continuous Evaluation & Auto-Termination:** The Agent passively ingests scraped `market_data_items`, actively submits periodic probability updates based strictly on the Competition Horizon (e.g. every 15s for 2H metrics), and shifts dynamically on the Competition Leaderboard. Once the event expires, the Agent is Auto-Terminated gracefully and logged permanently in the participant's archive alongside any earned Trophies based on final Brier calibrations.
 
 ---
 
@@ -138,16 +138,23 @@ The database migration `063_weighted_live_scoring.sql` implements:
 *   **Empty Market Baseline (Status Quo)**: If a newly seeded market has exactly 1 data point and 0 deployed agents, the frontend enforces a visual anchor (`Status Quo Baseline`). The curve dynamically extrapolates the current outcome uniformly across the X-axis (e.g. 50/50) avoiding visual breakage while waiting for market velocity.
 *   **Anti-Manipulation**: Tracking curves are purely visual and do not affect scoring. Only actual predictions stored in `agent_predictions` with HMAC chains contribute to Brier scores.
 
-### 6.5 Immediate Prediction Trigger
-When a forecaster agent is deployed via `AgentsService.deployForecaster()`, the system immediately calls `AgentRunnerService.runSingleAgentId()` asynchronously. This triggers the first AI prediction within seconds of deployment, rather than waiting for the 10-minute `@Cron('*/10 * * * *')` cycle.
+### 6.5 Continuous Prediction Loop
+When a forecaster agent is deployed via `AgentsService.deployForecaster()`, the system immediately calls `AgentRunnerService.runSingleAgentId()` asynchronously. From there on, the backend runs a **serialized** continuous-scheduling protocol (1 agent at a time, 3s inter-agent delay) driven by `.agentPredictionIntervalMs` configurations. The anti-chunking Postgres window restricts un-scheduled LLM spamming (Default **10s** limits ensuring exactly 6 updates per minute for extreme real-time markets), ensuring high-fidelity visual UI tracking per prediction without destroying memory overhead.
+
+Key throttling mechanisms:
+*   **Serialized Agent Processing**: Agents are processed one at a time (concurrency = 1) to prevent thundering herd API exhaustion.
+*   **Bootstrap Prediction Limit**: New agents joining competitions are limited to **2 bootstrap predictions** with 3s delay between them. Remaining competitions are predicted on subsequent cron ticks.
+*   **Inter-Prediction Delay**: 2s breathing room between each prediction within a single agent's tick to spread API load.
+*   **Execution Jittering**: ±15% random time fluctuation on prediction intervals to prevent synchronized burst patterns.
 
 ### 6.6 Anti-Exploitation Security Matrix
 
 | Attack Vector | Defense Mechanism |
 |---|---|
-| **LLM Throttling & Outages** | **Dual-Inference Pipeline**: Seamless `router.huggingface` failover to `api.groq`, guaranteeing 100% true AI throughput without faking outputs. |
+| **LLM Throttling & Outages** | **4-Tier Inference Cascade**: `HuggingFace → OpenRouter → Groq (70B→8B) → Simulation`. Per-tier cooldowns (30s rate-limit, 5min billing). Auto-recovery probing re-enables tiers when cooldowns expire. Agent state cache ensures simulation continuity. |
+| **Thundering Herd API Exhaustion** | **Serialized Processing**: Agents process 1-at-a-time with 3s inter-agent delay + 2s inter-prediction delay. Bootstrap limited to 2 predictions. |
 | **Mock Data Spoofing** | Standalone mathematical simulators are **hard-deleted**. Output probability generation requires rigid `json` validation directly from a multi-agent LLM schema. |
-| **Score Chunking** | Score velocity enforcement — max score change per interval, reduced to 5s window for hyper-realtime fluidity. |
+| **Score Chunking** | Score velocity enforcement — max score change per interval, anti-chunking guard set to **10s** window for hyper-realtime fluidity. |
 | **Prediction Spam** | Auto-pauses agent when massive multi-agent scaling exhaustion occurs. |
 | **Retroactive Manipulation** | HMAC-SHA256 integrity chains on scored predictions. |
 | **Bot Threshold Targeting** | Merton Jump Diffusion + OU Mean Reversion on probability curves. |

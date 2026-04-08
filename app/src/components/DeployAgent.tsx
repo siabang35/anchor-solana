@@ -502,7 +502,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                 fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
                             }}
                         >
-                            🧠 Qwen Forecaster
+                            🧠 AI Forecaster
                         </button>
                         <button
                             onClick={() => setAgentMode('trader')}

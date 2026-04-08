@@ -236,8 +236,22 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                                                    {agent.model} · ID: {agent.id.slice(0, 8)}
+                                                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {(() => {
+                                                        const reasoning = agent.latest_reasoning || '';
+                                                        if (reasoning.includes('[LOCAL-SIM]')) {
+                                                            return <span style={{ padding: '1px 5px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)', letterSpacing: '0.02em', fontSize: '0.55rem' }}>⚙️ LOCAL-SIM</span>;
+                                                        }
+                                                        if (reasoning.includes('[Groq]') || reasoning.includes('[Groq-8B]')) {
+                                                            return <span style={{ padding: '1px 5px', background: 'rgba(139,92,246,0.12)', color: '#a78bfa', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(139,92,246,0.4)', letterSpacing: '0.02em', fontSize: '0.55rem' }}>⚡ GROQ (Llama-3)</span>;
+                                                        }
+                                                        if (reasoning.includes('[OpenRouter')) {
+                                                            return <span style={{ padding: '1px 5px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)', letterSpacing: '0.02em', fontSize: '0.55rem' }}>🌐 OPENROUTER</span>;
+                                                        }
+                                                        // Ensure default fallback uses correct model metadata string
+                                                        return <span style={{ padding: '1px 5px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)', letterSpacing: '0.02em', fontSize: '0.55rem' }}>🧠 HF (Qwen-2.5)</span>;
+                                                    })()}
+                                                    <span style={{ opacity: 0.5 }}>·</span> <span>ID: {agent.id.slice(0, 8)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -390,7 +404,11 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                             padding: '4px 8px', background: 'rgba(255,255,255,0.03)',
                                             borderRadius: '6px', border: '1px solid var(--border-glass)'
                                         }}>
-                                            <span style={{ fontSize: '0.7rem' }}>🏆</span>
+                                            <span style={{ fontSize: '0.7rem' }}>
+                                                {(mainComp.final_rank && mainComp.final_rank <= 3) 
+                                                    ? (mainComp.final_rank === 1 ? '🥇' : mainComp.final_rank === 2 ? '🥈' : '🥉') 
+                                                    : '🏆'}
+                                            </span>
                                             <span style={{ 
                                                 fontSize: '0.55rem', 
                                                 textTransform: 'uppercase', 
@@ -433,7 +451,9 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                 borderRadius: '8px', padding: '0.5rem', marginBottom: '0.75rem',
                                             }}>
                                                 <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.2rem' }}>
-                                                    🏆 Assigned Competition
+                                                    {(mainComp.final_rank && mainComp.final_rank <= 3) 
+                                                        ? (mainComp.final_rank === 1 ? '🥇' : mainComp.final_rank === 2 ? '🥈' : '🥉') 
+                                                        : '🏆'} Assigned Competition
                                                 </div>
                                                 <div style={{ fontSize: '0.7rem', color: 'var(--text-primary)', fontWeight: 600, lineHeight: 1.4 }}>
                                                     {mainComp.title || `Competition ID: ${mainComp.competition_id.slice(0, 8)}...`}
@@ -441,6 +461,7 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                 <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', marginTop: '0.2rem', display: 'flex', gap: '0.5rem' }}>
                                                     <span>Status: {mainComp.status === 'active' ? '🟢 Live' : mainComp.status === 'completed' ? '🏁 Ended' : mainComp.status}</span>
                                                     {mainComp.brier_score !== null && <span>Brier Score: {mainComp.brier_score.toFixed(3)}</span>}
+                                                    {mainComp.final_rank && <span>Rank: #{mainComp.final_rank}</span>}
                                                 </div>
                                             </div>
                                         )}

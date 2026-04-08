@@ -448,8 +448,8 @@ export default function CompetitionLeaderboard({
                                                                     const predGroup = agentPredictions?.get(c.agent_id);
                                                                     const latestPred = predGroup && predGroup.length > 0 ? predGroup[predGroup.length - 1] : null;
                                                                     if (latestPred) {
-                                                                        const isGroq = latestPred.reasoning && latestPred.reasoning.includes('[Groq]');
-                                                                        const isSim = latestPred.reasoning && latestPred.reasoning.includes('[Simulation');
+                                                                        const isGroq = latestPred.reasoning && (latestPred.reasoning.includes('[Groq]') || latestPred.reasoning.includes('[Groq-8B]'));
+                                                                        const isSim = latestPred.reasoning && latestPred.reasoning.includes('[LOCAL-SIM]');
                                                                         const isOpenRouter = latestPred.reasoning && latestPred.reasoning.includes('[OpenRouter');
                                                                         const isQwenHF = latestPred.reasoning && latestPred.reasoning.includes('[Qwen]');
                                                                         
@@ -472,7 +472,7 @@ export default function CompetitionLeaderboard({
                                                                             badgeBg = 'rgba(56,189,248,0.12)';
                                                                             badgeColor = '#38bdf8';
                                                                             badgeIcon = '🌐';
-                                                                            badgeTitle = 'Powered by OpenRouter API (Qwen 3.6+)';
+                                                                            badgeTitle = 'Powered by OpenRouter API (Llama 70B)';
                                                                         } else if (isQwenHF) {
                                                                             badgeBg = 'rgba(16,185,129,0.12)';
                                                                             badgeColor = '#10b981';
@@ -500,24 +500,24 @@ export default function CompetitionLeaderboard({
                                                                     const latestPred = predGroup && predGroup.length > 0 ? predGroup[predGroup.length - 1] : null;
                                                                     
                                                                     if (!latestPred || !latestPred.reasoning) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>{(c.model || 'Qwen').split('/').pop()}</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>{(c.model || 'Qwen/Qwen2.5-7B-Instruct').split('/').pop()}</span>;
                                                                     }
                                                                     
-                                                                    if (latestPred.reasoning.includes('[Simulation')) {
+                                                                    if (latestPred.reasoning.includes('[LOCAL-SIM]')) {
                                                                         return <span style={{ padding: '2px 6px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)', animation: 'pulse 2s infinite' }}>⚙️ LOCAL-SIM</span>;
                                                                     }
-                                                                    if (latestPred.reasoning.includes('[Groq]')) {
+                                                                    if (latestPred.reasoning.includes('[Groq]') || latestPred.reasoning.includes('[Groq-8B]')) {
                                                                         return <span style={{ padding: '2px 6px', background: 'rgba(139,92,246,0.12)', color: '#a78bfa', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(139,92,246,0.4)', animation: 'pulse 2s infinite' }}>⚡ GROQ (Llama-3)</span>;
                                                                     }
                                                                     if (latestPred.reasoning.includes('[OpenRouter')) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)' }}>🌐 OPENROUTER</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)' }}>🌐 OPENROUTER (Llama-70B)</span>;
                                                                     }
                                                                     if (latestPred.reasoning.includes('[Qwen]')) {
                                                                         return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🧠 HF (Qwen-2.5)</span>;
                                                                     }
                                                                     
-                                                                    // Default fallback if reasoning doesn't have tags but exists
-                                                                    return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🧠 HF (Qwen-2.5)</span>;
+                                                                    // Default fallback — real LLM response but unknown tag
+                                                                    return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🤖 AI</span>;
                                                                 })()}
                                                             </div>
                                                         </div>

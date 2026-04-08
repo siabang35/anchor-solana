@@ -73,9 +73,11 @@ export class AgentRunnerService {
 
             this.logger.log(`🤖 Running agent loop for ${agents.length} active forecaster(s)`);
 
-            // BEST PRACTICE 1: Concurrency Batching
-            // Process max 3 agents concurrently to balance throughput while strictly evading Groq/HF Burst API limits
-            const CONCURRENCY_LIMIT = 3;
+            // BEST PRACTICE 1: Serialized Agent Processing
+            // Process agents one at a time to prevent thundering herd on LLM APIs.
+            // With 3 concurrent agents each hitting multiple competitions,
+            // all API tiers get rate-limited within seconds.
+            const CONCURRENCY_LIMIT = 1;
             for (let i = 0; i < agents.length; i += CONCURRENCY_LIMIT) {
                 const batch = agents.slice(i, i + CONCURRENCY_LIMIT);
                 await Promise.allSettled(batch.map(async (agent) => {
@@ -85,9 +87,9 @@ export class AgentRunnerService {
                         this.logger.warn(`Agent ${agent.id} run failed: ${err.message}`);
                     }
                 }));
-                // Prevent micro-bursts between batches
+                // Prevent micro-bursts between agents — 3s breathing room
                 if (i + CONCURRENCY_LIMIT < agents.length) {
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                 }
             }
         } catch (err: any) {
@@ -134,6 +136,20 @@ export class AgentRunnerService {
             .eq('status', 'active');
 
         if (!entries || entries.length === 0) {
+            // Check if agent has EVER joined any competitions
+            const { data: allEntries } = await supabase
+                .from('agent_competition_entries')
+                .select('id')
+                .eq('agent_id', agent.id)
+                .limit(1);
+
+            if (allEntries && allEntries.length > 0) {
+                // Agent has played, but no active competitions remain. It is officially terminated.
+                this.logger.log(`☠ Agent ${agent.id} has no more active competitions (match completed). Auto-terminating.`);
+                await supabase.from('agents').update({ status: 'terminated' }).eq('id', agent.id);
+                return;
+            }
+
             // Auto-join agent to active competitions (up to remaining prompt budget)
             const { data: comps } = await supabase
                 .from('competitions')
@@ -151,9 +167,18 @@ export class AgentRunnerService {
                 }, { onConflict: 'agent_id,competition_id', ignoreDuplicates: true });
             }
             
-            // Generate immediate bootstrap predictions (1 per competition)
+            // Generate bootstrap predictions — limit to 2 to avoid exhausting all API tiers at once.
+            // Remaining competitions will be predicted on subsequent cron ticks.
+            const MAX_BOOTSTRAP_PREDICTIONS = 2;
+            let bootstrapCount = 0;
             for (const comp of comps) {
-                await this.generatePrediction(agent, comp);
+                if (bootstrapCount >= MAX_BOOTSTRAP_PREDICTIONS) break;
+                const result = await this.generatePrediction(agent, comp);
+                if (result === 'success') {
+                    bootstrapCount++;
+                    // Breathing room between bootstrap predictions
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                }
             }
             return;
         }
@@ -162,7 +187,6 @@ export class AgentRunnerService {
         const activeCompIds = entries.map((e: any) => e.competition_id);
         
         let compsMap = new Map<string, any>();
-        let predictedSet = new Set<string>();
 
         if (activeCompIds.length > 0) {
             // 1. Fetch competitions batch
@@ -173,17 +197,6 @@ export class AgentRunnerService {
             
             if (compsData) {
                 for (const c of compsData) compsMap.set(c.id, c);
-            }
-
-            // 2. Fetch agent predictions batch
-            const { data: predsData } = await supabase
-                .from('agent_predictions')
-                .select('competition_id')
-                .eq('agent_id', agent.id)
-                .in('competition_id', activeCompIds);
-            
-            if (predsData) {
-                for (const p of predsData) predictedSet.add(p.competition_id);
             }
         }
 
@@ -203,26 +216,6 @@ export class AgentRunnerService {
                 if (comp.status === 'settled' || comp.status === 'resolving') {
                     this.logger.log(`🏁 Competition ${comp.id} ended. Completing entry for agent ${agent.id}`);
                     await supabase.from('agent_competition_entries').update({ status: 'completed' }).eq('agent_id', agent.id).eq('competition_id', comp.id);
-                    
-                    const { count: activeCount } = await supabase
-                        .from('agent_competition_entries')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('agent_id', agent.id)
-                        .eq('status', 'active');
-                        
-                    if (!activeCount || activeCount === 0) {
-                        this.logger.log(`☠ Agent ${agent.id} has no more active competitions. Auto-terminating.`);
-                        await supabase.from('agents').update({ status: 'terminated' }).eq('id', agent.id);
-                        break;
-                    }
-                    continue;
-                }
-
-                // ═══════════════════════════════════════════════
-                // 1 PROMPT PER COMPETITION — skip if already predicted
-                // ═══════════════════════════════════════════════
-                if (predictedSet.has(comp.id)) {
-                    // Already used this competition's prompt slot — skip
                     continue;
                 }
 
@@ -252,9 +245,10 @@ export class AgentRunnerService {
                     agentCooldowns.set(comp.id, Date.now());
                     this.lastPredictionTimes.set(agent.id, agentCooldowns);
                     this.logger.log(`📊 Agent ${agent.id} generated prediction on competition ${comp.id}`);
-                } else if (result === 'failed') {
-                    predictionMade = true;
+                    // Inter-prediction breathing room to avoid exhausting all API tiers at once
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
+                // On failure, do NOT set predictionMade — let the agent try another competition this tick
             }
         }
     }
@@ -315,6 +309,7 @@ export class AgentRunnerService {
             })),
             marketSignals: marketSignals || [],
             referenceProbability: baseRefProb,
+            agentId: agent.id,
         };
 
         this.logger.log(`  🧠 Agent ${agent.id} → Qwen inference for "${competition.title}" [${horizon}]`);
@@ -390,9 +385,10 @@ export class AgentRunnerService {
             .from('agent_competition_entries')
             .select('agent_id')
             .eq('competition_id', competitionId)
-            .eq('status', 'active');
+            // Fetch any agent entries (even if active or completed) for settlement
+            .in('status', ['active', 'completed', 'paused']);
 
-        if (!entries) return;
+        if (!entries || entries.length === 0) return;
 
         for (const entry of entries) {
             const score = await this.evaluationService.evaluateAgentPrediction(
@@ -408,6 +404,30 @@ export class AgentRunnerService {
                     .eq('competition_id', competitionId);
 
                 this.logger.log(`  📊 Agent ${entry.agent_id} Brier Score: ${score.toFixed(4)}`);
+            }
+        }
+
+        // Write Final Ranks (Trophies) 🥇🥈🥉
+        // Must fetch via the weighted leaderboard RPC
+        const { data: leaderboard, error } = await supabase.rpc('get_weighted_leaderboard', {
+            p_competition_id: competitionId,
+            p_limit: 100
+        });
+
+        if (!error && leaderboard && leaderboard.length > 0) {
+            for (let i = 0; i < leaderboard.length; i++) {
+                const rankPos = leaderboard[i].rank_position;
+                const agentId = leaderboard[i].agent_id;
+
+                await supabase
+                    .from('agent_competition_entries')
+                    .update({ final_rank: rankPos })
+                    .eq('agent_id', agentId)
+                    .eq('competition_id', competitionId);
+                    
+                if (rankPos <= 3) {
+                    this.logger.log(`  🏆 Agent ${agentId} ranked #${rankPos} in competition ${competitionId}`);
+                }
             }
         }
     }

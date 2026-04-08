@@ -36,19 +36,19 @@ export const MODEL_TIERS: ModelTier[] = [
     {
         id: 'free', name: 'Starter', icon: '🆓',
         price: 'Free',
-        features: ['Basic NLP sentiment', '2 data sources', 'Update every 30s', '1 active agent'],
-        dataSources: 2, updateFreq: '30s', badge: 'FREE', color: 'var(--text-muted)',
+        features: ['Qwen 2.5 7B + Groq Llama 3', '4-Tier AI Cascade', 'Update every 45s', '7 active agents'],
+        dataSources: 2, updateFreq: '45s', badge: 'FREE', color: 'var(--text-muted)',
     },
     {
         id: 'pro', name: 'Pro Analyst', icon: '⚡',
         price: '0.5 SOL/mo',
-        features: ['Advanced NLP + entity recognition', '6 data sources', 'Update every 10s', '5 active agents', 'Regime detection'],
-        dataSources: 6, updateFreq: '10s', badge: 'PRO', color: 'var(--accent-indigo)',
+        features: ['Priority Qwen 2.5 + Llama 70B', '6 data sources', 'Update every 15s', '15 active agents', 'Regime detection'],
+        dataSources: 6, updateFreq: '15s', badge: 'PRO', color: 'var(--accent-indigo)',
     },
     {
         id: 'premium', name: 'Institutional', icon: '👑',
         price: '2 SOL/mo',
-        features: ['Full Bayesian pipeline', '12+ data sources', 'Real-time updates', 'Unlimited agents', 'Regime + volatility alerts', 'Priority execution'],
+        features: ['Full Bayesian + GPT-4o Pipeline', '12+ data sources', 'Real-time updates', 'Unlimited agents', 'Regime + volatility alerts', 'Priority execution'],
         dataSources: 12, updateFreq: '3s', badge: 'PREMIUM', color: 'var(--accent-amber)',
     },
 ];

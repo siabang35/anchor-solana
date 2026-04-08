@@ -38,12 +38,13 @@ export interface ForecasterAgent {
     status: 'active' | 'paused' | 'terminated' | 'exhausted' | 'error';
     prompts_used: number;
     max_free_prompts: number;
-    created_at: string;
     updated_at: string;
+    latest_reasoning?: string;
     competitions: Array<{
         competition_id: string;
         brier_score: number | null;
         status: string;
+        final_rank?: number;
         title?: string;
         sector?: string;
     }>;
