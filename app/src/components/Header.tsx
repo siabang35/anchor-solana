@@ -62,7 +62,7 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
             </div>
 
         <div className="header-right">
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{time}</span>
+                <span style={{ marginRight: 'auto', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{time}</span>
                 {publicKey && (
                     <span style={{
                         fontSize: '0.65rem',
@@ -82,7 +82,7 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                 }}>
                     {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
-                <div style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }}>
+                <div className="wallet-btn-wrap">
                     <WalletMultiButton />
                 </div>
 
@@ -94,8 +94,8 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                     style={{
                         display: 'none', background: 'rgba(99,102,241,0.1)',
                         border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px',
-                        padding: '0.4rem', cursor: 'pointer', color: '#818cf8',
-                        fontSize: '1.1rem', lineHeight: 1, width: '36px', height: '36px',
+                        padding: '0.3rem', cursor: 'pointer', color: '#818cf8',
+                        fontSize: '1rem', lineHeight: 1, width: '32px', height: '32px',
                         alignItems: 'center', justifyContent: 'center',
                     }}
                 >
@@ -195,8 +195,11 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                     .mobile-menu-btn { display: flex !important; }
                     .nav-label { display: none; }
                     .header-exoduze-logo {
-                        width: 64px;
-                        height: 64px;
+                        width: 48px;
+                        height: 48px;
+                    }
+                    .wallet-btn-wrap {
+                        transform: scale(0.78) !important;
                     }
                 }
                 @media (min-width: 769px) {
