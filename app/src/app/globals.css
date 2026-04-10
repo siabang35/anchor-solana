@@ -319,7 +319,7 @@ body {
     border-left: none;
     border-right: none;
     border-top: none;
-    padding: 0.35rem 0.75rem;
+    padding: 0.35rem 1.5rem;
     flex-wrap: wrap;
     gap: 0;
   }

@@ -48,19 +48,19 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
     return (
         <header className="header">
             <div className="header-glass-overlay" style={{
-                position: 'absolute', inset: 0, 
+                position: 'absolute', inset: 0,
                 borderRadius: 'inherit',
                 boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.1), inset 0 -1px 1px rgba(0,0,0,0.5)',
                 pointerEvents: 'none', zIndex: -1
             }} />
-            
+
             <div className="header-left">
                 <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0px' }}>
-                        <img 
-                            src="/images/logo/exoduze-logo.png" 
-                            alt="ExoDuZe Logo" 
-                            className="header-exoduze-logo" 
+                        <img
+                            src="/images/logo/exoduze-logo.png"
+                            alt="ExoDuZe Logo"
+                            className="header-exoduze-logo"
                         />
                         <div style={{ marginLeft: '-6px' }}>
                             <div className="logo" style={{ lineHeight: 1.1 }}>ExoDuZe</div>
@@ -68,14 +68,14 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                         </div>
                     </div>
                 </Link>
-                
+
                 <div style={{ display: 'flex', gap: '6px', marginLeft: '0.5rem' }}>
                     <span className="badge live" style={{ transform: 'translateY(-1px)' }}>● LIVE</span>
                     <span className="badge devnet" style={{ transform: 'translateY(-1px)' }}>DEVNET</span>
                 </div>
             </div>
 
-        <div className="header-right">
+            <div className="header-right">
                 <span style={{ marginRight: 'auto', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{time}</span>
                 {publicKey && (
                     <span style={{
@@ -149,10 +149,10 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{time}</span>
                     </div>
 
-                    <div className="hide-scrollbar" style={{ 
-                        display: 'flex', 
-                        overflowX: 'auto', 
-                        gap: '0.8rem', 
+                    <div className="hide-scrollbar" style={{
+                        display: 'flex',
+                        overflowX: 'auto',
+                        gap: '0.8rem',
                         paddingBottom: '0.5rem',
                         paddingRight: '1.2rem',
                         scrollSnapType: 'x mandatory',
