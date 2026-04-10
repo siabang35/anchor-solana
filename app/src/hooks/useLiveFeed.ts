@@ -16,6 +16,7 @@ export interface LiveFeedItem {
     category?: string;
     tags?: string[];
     url?: string;
+    image_url?: string;
 }
 
 export interface UseLiveFeedResult {
@@ -78,6 +79,7 @@ function mapToFeedItem(item: any): LiveFeedItem {
         category: item.category,
         tags: item.tags || [],
         url: item.url || item.link || '',
+        image_url: item.image_url || item.urlToImage || item.imageUrl || '',
     };
 }
 

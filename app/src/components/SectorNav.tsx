@@ -53,13 +53,25 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
         }
     }, [activeSector]);
 
+    // Route mapping for meta-tabs
+    const META_TAB_ROUTES: Record<string, string> = {
+        foryou: '/for-you',
+        signals: '/signals',
+        latest: '/latest',
+    };
+
     const handleClick = (sectorId: string) => {
         if (CATEGORY_SECTORS.includes(sectorId)) {
-            // Navigate to the dedicated category page
             router.push(`/category/${sectorId}`);
+        } else if (META_TAB_ROUTES[sectorId]) {
+            router.push(META_TAB_ROUTES[sectorId]);
         } else {
-            // Meta-tab: stay on homepage and filter
-            onSectorChange(sectorId);
+            // 'top' — stay on homepage
+            if (window.location.pathname !== '/') {
+                router.push('/');
+            } else {
+                onSectorChange(sectorId);
+            }
         }
     };
 

@@ -208,8 +208,10 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
     const sentimentLabel = item.sentiment > 0.1 ? 'BULLISH' : item.sentiment < -0.1 ? 'BEARISH' : 'NEUTRAL';
     const sentimentColor = item.sentiment > 0.1 ? 'var(--accent-green)' : item.sentiment < -0.1 ? 'var(--accent-red)' : 'var(--text-muted)';
     const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const hasImage = !!(item.image_url);
+    const hasUrl = !!(item.url);
 
-    return (
+    const cardContent = (
         <div className="feed-item animate-in" style={{
             display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
             padding: '0.75rem', borderRadius: 'var(--radius-xs)',
@@ -217,15 +219,44 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
             border: `1px solid var(--border-card)`,
             borderLeft: `3px solid ${sentimentColor}`,
             transition: 'all 0.3s ease',
+            cursor: hasUrl ? 'pointer' : 'default',
         }}>
-            <div style={{
-                width: '36px', height: '36px', borderRadius: '10px',
-                background: 'var(--bg-input)', border: '1px solid var(--border-glass)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.1rem', flexShrink: 0,
-            }}>
-                {item.icon}
-            </div>
+            {/* Thumbnail or Icon */}
+            {hasImage ? (
+                <div style={{
+                    width: '80px', height: '80px', borderRadius: '10px',
+                    overflow: 'hidden', flexShrink: 0,
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border-glass)',
+                }}>
+                    <img
+                        src={item.image_url}
+                        alt=""
+                        loading="lazy"
+                        style={{
+                            width: '100%', height: '100%',
+                            objectFit: 'cover',
+                        }}
+                        onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = 'none';
+                            if (el.parentElement) {
+                                el.parentElement.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem">${item.icon}</div>`;
+                            }
+                        }}
+                    />
+                </div>
+            ) : (
+                <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    background: 'var(--bg-input)', border: '1px solid var(--border-glass)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.1rem', flexShrink: 0,
+                }}>
+                    {item.icon}
+                </div>
+            )}
+            {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
                     <span style={{
@@ -235,17 +266,17 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                         {item.source}
                     </span>
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.55rem' }}>·</span>
-                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                        🕐 {timeStr}
-                    </span>
+                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>🕐 {timeStr}</span>
                 </div>
                 <div style={{
                     fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)',
                     lineHeight: 1.5, wordBreak: 'break-word',
+                    display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
                 }}>
                     {item.text}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
                     <span style={{
                         fontSize: '0.5rem', fontWeight: 800, padding: '2px 6px',
                         borderRadius: 'var(--radius-round)',
@@ -271,10 +302,29 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                             {item.category}
                         </span>
                     )}
+                    {hasUrl && (
+                        <span style={{
+                            fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px',
+                            borderRadius: 'var(--radius-round)',
+                            background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)',
+                            marginLeft: 'auto',
+                        }}>
+                            🔗 Source
+                        </span>
+                    )}
                 </div>
             </div>
         </div>
     );
+
+    if (hasUrl) {
+        return (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+                {cardContent}
+            </a>
+        );
+    }
+    return cardContent;
 }
 
 // ── Section Header ─────────────────────────────────────────────

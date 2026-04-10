@@ -48,7 +48,7 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                             alt="ExoDuZe Logo" 
                             className="header-exoduze-logo" 
                         />
-                        <div style={{ marginLeft: '-12px' }}>
+                        <div style={{ marginLeft: '-6px' }}>
                             <div className="logo" style={{ lineHeight: 1.1 }}>ExoDuZe</div>
                             <div className="logo-sub" style={{ opacity: 0.8, marginTop: '2px' }}>AI-Native Probability Trading</div>
                         </div>
@@ -136,14 +136,21 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                                     key={sector.id}
                                     onClick={() => {
                                         setMenuOpen(false);
+                                        const META_TAB_ROUTES: Record<string, string> = {
+                                            foryou: '/for-you',
+                                            signals: '/signals',
+                                            latest: '/latest',
+                                        };
                                         if (CATEGORY_SECTORS.includes(sector.id)) {
                                             router.push(`/category/${sector.id}`);
+                                        } else if (META_TAB_ROUTES[sector.id]) {
+                                            router.push(META_TAB_ROUTES[sector.id]);
                                         } else {
-                                            if (pathname === '/') {
-                                                onSectorChange?.(sector.id);
-                                            } else {
-                                                localStorage.setItem('redirect_tab', sector.id);
+                                            // 'top' → homepage
+                                            if (pathname !== '/') {
                                                 router.push('/');
+                                            } else {
+                                                onSectorChange?.(sector.id);
                                             }
                                         }
                                     }}

@@ -46,16 +46,11 @@ function HomeInner() {
   // Market data for the active competition (probability history)
   const { probHistory } = useOnChainMarket(activeCompetition?.id);
 
-  // Load from localStorage on mount
+  // Load theme from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('exoduze_theme');
     if (saved === 'light' || saved === 'dark') {
       setTheme(saved);
-    }
-    const redirectTab = localStorage.getItem('redirect_tab');
-    if (redirectTab) {
-      setActiveSector(redirectTab);
-      localStorage.removeItem('redirect_tab');
     }
   }, []);
 
@@ -124,54 +119,46 @@ function HomeInner() {
         {/* Sector Navigation */}
         <SectorNav activeSector={activeSector} onSectorChange={(s) => { setActiveSector(s); setSelectedCompId(null); }} />
 
-        {/* Live Probability Curve — only shown for Top Markets and category tabs */}
-        {!['signals', 'foryou', 'latest'].includes(activeSector) && (
-          <>
-            <ProbabilityCurve
-              competition={activeCompetition}
-              probHistory={probHistory}
-              forecasters={filteredForecasters}
-              onPauseAgent={pauseForecaster}
-              onResumeAgent={resumeForecaster}
-              onStopAgent={stopForecaster}
-              onDeleteAgent={stopForecaster}
-            />
+        {/* Live Probability Curve */}
+        <ProbabilityCurve
+          competition={activeCompetition}
+          probHistory={probHistory}
+          forecasters={filteredForecasters}
+          onPauseAgent={pauseForecaster}
+          onResumeAgent={resumeForecaster}
+          onStopAgent={stopForecaster}
+          onDeleteAgent={stopForecaster}
+        />
 
-            {/* Competition Timer — real data from backend */}
-            <CompetitionTimer
-              startTime={competitionStart}
-              endTime={competitionEnd}
-              label={activeCompetition?.title || 'Current Competition'}
-            />
-          </>
-        )}
+        {/* Competition Timer — real data from backend */}
+        <CompetitionTimer
+          startTime={competitionStart}
+          endTime={competitionEnd}
+          label={activeCompetition?.title || 'Current Competition'}
+        />
 
         {/* Sector Feed — Realtime Data */}
         <SectorFeed sector={activeSector} selectedCompId={activeCompetition?.id} onSelectCompetition={setSelectedCompId} />
 
-        {/* Dashboard sections — hidden on feed-only tabs */}
-        {!['signals', 'foryou', 'latest'].includes(activeSector) && (
-          <>
-            {/* AI Positions + NLP Sentiment */}
-            <div className="grid-2">
-              <AgentPosition />
-              <SentimentAnalysis />
-            </div>
+        {/* Dashboard sections — always visible on homepage */}
+        {/* AI Positions + NLP Sentiment */}
+        <div className="grid-2">
+          <AgentPosition />
+          <SentimentAnalysis />
+        </div>
 
-            {/* Data Feeds + Deploy Agent */}
-            <div className="grid-2">
-              <DataFeeds category={activeSector} />
-              <DeployAgent initialCategory={activeSector} />
-            </div>
+        {/* Data Feeds + Deploy Agent */}
+        <div className="grid-2">
+          <DataFeeds category={activeSector} />
+          <DeployAgent initialCategory={activeSector} />
+        </div>
 
-            {/* Value Pool + Performance + Leaderboard */}
-            <div className="grid-3">
-              <ValueCreationPool />
-              <Performance />
-              <Leaderboard />
-            </div>
-          </>
-        )}
+        {/* Value Pool + Performance + Leaderboard */}
+        <div className="grid-3">
+          <ValueCreationPool />
+          <Performance />
+          <Leaderboard />
+        </div>
       </main>
     </>
   );
