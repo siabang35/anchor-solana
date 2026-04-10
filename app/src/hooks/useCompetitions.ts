@@ -61,8 +61,9 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
         setLoading(true);
         setError(null);
         try {
-            // Fetch competitions
-            const sectorParam = sector && sector !== 'all' ? `?sector=${sector}` : '';
+            // Fetch competitions — meta-tabs (top, foryou, latest, signals) fetch ALL competitions
+            const META_TABS = ['all', 'top', 'foryou', 'latest', 'signals'];
+            const sectorParam = sector && !META_TABS.includes(sector) ? `?sector=${sector}` : '';
             const result = await apiFetch<Competition[]>(`/competitions${sectorParam}`);
             setCompetitions(result || []);
 
@@ -79,7 +80,7 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                     .order('competition_start', { ascending: true })
                     .limit(50);
 
-                if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest') {
+                if (sector && !['all', 'top', 'foryou', 'latest', 'signals'].includes(sector)) {
                     query = query.eq('sector', sector);
                 }
 

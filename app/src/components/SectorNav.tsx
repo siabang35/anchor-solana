@@ -24,7 +24,7 @@ export const SECTORS: Sector[] = [
     { id: 'science', label: 'Science', icon: '🔬' },
 ];
 
-const CATEGORY_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'];
+export const CATEGORY_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'];
 
 interface Props {
     activeSector: string;
@@ -100,6 +100,11 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
                     );
                 })}
             </div>
+            <style>{`
+                @media (max-width: 768px) {
+                    .sector-nav { display: none !important; }
+                }
+            `}</style>
         </nav>
     );
 }

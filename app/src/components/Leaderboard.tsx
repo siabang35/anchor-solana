@@ -128,7 +128,7 @@ export default function Leaderboard() {
                     <span style={{
                         fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px',
                         background: isRealtime ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-                        color: isRealtime ? '#10b981' : '#f59e0b',
+                        color: isRealtime ? 'var(--accent-green)' : 'var(--accent-amber)',
                     }}>
                         {isRealtime ? '● LIVE' : '○ POLL'}
                     </span>
@@ -189,12 +189,12 @@ export default function Leaderboard() {
                                     ({player.agent_id.slice(0, 4)})
                                 </span>
                             </span>
-                            <span style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: (player.prediction_count || 0) >= 3 ? '#818cf8' : 'var(--text-muted)' }}>
+                            <span style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: (player.prediction_count || 0) >= 3 ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
                                 {player.prediction_count || 0}
-                                {belowMin && (player.prediction_count || 0) > 0 && <span style={{ color: '#f59e0b', marginLeft: '2px', fontSize: '0.6rem' }}>⚠</span>}
+                                {belowMin && (player.prediction_count || 0) > 0 && <span style={{ color: 'var(--accent-amber)', marginLeft: '2px', fontSize: '0.6rem' }}>⚠</span>}
                             </span>
                             {hasWeighted && (
-                                <span style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: player.weighted_score !== null ? '#818cf8' : 'var(--text-muted)' }}>
+                                <span style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: player.weighted_score !== null ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
                                     {player.weighted_score !== null ? player.weighted_score.toFixed(4) : '—'}
                                 </span>
                             )}

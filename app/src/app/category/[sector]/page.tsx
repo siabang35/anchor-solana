@@ -94,6 +94,19 @@ function getStatusConfig(status: 'live' | 'upcoming' | 'ended') {
 function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const router = useRouter();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+    // Load from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem('exoduze_theme');
+        if (saved === 'light' || saved === 'dark') {
+            setTheme(saved);
+        }
+    }, []);
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('exoduze_theme', theme);
+    }, [theme]);
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [competitors, setCompetitors] = useState<any[]>([]);
     const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -185,7 +198,10 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
 
     return (
         <>
-            <Header theme={theme} onToggleTheme={toggleTheme} />
+            <Header 
+                theme={theme} onToggleTheme={toggleTheme} 
+                activeSector={sector} 
+            />
             <main className="main-container">
                 {/* Category Hero Header */}
                 <div className="glass-card card-body animate-in" style={{
@@ -237,7 +253,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     </div>
 
                     {/* Category Navigation */}
-                    <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                    <div className="category-nav-desktop" style={{ display: 'flex', gap: '0.3rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                         {Object.entries(SECTOR_META).map(([id, m]) => (
                             <button
                                 key={id}
@@ -255,6 +271,11 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                             </button>
                         ))}
                     </div>
+                    <style>{`
+                        @media (max-width: 768px) {
+                            .category-nav-desktop { display: none !important; }
+                        }
+                    `}</style>
                 </div>
 
                 {/* Probability Curve for Selected Competition */}

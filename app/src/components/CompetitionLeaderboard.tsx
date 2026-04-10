@@ -61,8 +61,8 @@ interface Props {
 const STYLES = {
     card: {
         borderRadius: '16px',
-        border: '1px solid rgba(99,102,241,0.12)',
-        background: 'linear-gradient(135deg, rgba(15,15,35,0.85) 0%, rgba(20,20,50,0.75) 100%)',
+        border: '1px solid var(--border-glass)',
+        background: 'var(--bg-card)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         padding: 0,
@@ -109,7 +109,7 @@ const STYLES = {
         fontSize: '0.5rem',
         textTransform: 'uppercase' as const,
         letterSpacing: '0.06em',
-        borderBottom: '1px solid rgba(99,102,241,0.08)',
+        borderBottom: '1px solid var(--border-card)',
     } as React.CSSProperties,
 };
 
@@ -361,8 +361,8 @@ export default function CompetitionLeaderboard({
                     {!loading && rankedCompetitors.length === 0 && (
                         <div style={{
                             textAlign: 'center', padding: '1.2rem',
-                            background: 'rgba(129,140,248,0.04)', borderRadius: '12px',
-                            border: '1px dashed rgba(129,140,248,0.15)',
+                            background: 'var(--bg-banner)', borderRadius: '12px',
+                            border: '1px dashed var(--border-glass)',
                         }}>
                             <div style={{ fontSize: '1.2rem', marginBottom: '0.3rem' }}>🤖</div>
                             <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary, #94a3b8)', fontWeight: 600 }}>
@@ -413,8 +413,8 @@ export default function CompetitionLeaderboard({
                                                 id={`leaderboard-row-${c.agent_id}`}
                                                 style={{
                                                     background: isFlashing
-                                                        ? 'rgba(129,140,248,0.15)'
-                                                        : c.rank <= 3 ? rankStyle.bg : 'rgba(255,255,255,0.01)',
+                                                        ? 'var(--bg-banner)'
+                                                        : c.rank <= 3 ? rankStyle.bg : 'transparent',
                                                     borderRadius: '10px',
                                                     transition: 'all 0.6s cubic-bezier(0.4,0,0.2,1)',
                                                     opacity: c.agent_status === 'active' ? 1 : 0.55,
@@ -500,17 +500,17 @@ export default function CompetitionLeaderboard({
                                                                     const latestPred = predGroup && predGroup.length > 0 ? predGroup[predGroup.length - 1] : null;
                                                                     
                                                                     if (!latestPred || !latestPred.reasoning) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>{(c.model || 'Qwen/Qwen2.5-7B-Instruct').split('/').pop()}</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'var(--bg-input)', color: 'var(--text-muted)', borderRadius: '4px', border: '1px solid var(--border-card)' }}>{(c.model || 'Qwen/Qwen2.5-7B-Instruct').split('/').pop()}</span>;
                                                                     }
                                                                     
                                                                     if (latestPred.reasoning.includes('[LOCAL-SIM]')) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)', animation: 'pulse 2s infinite' }}>⚙️ LOCAL-SIM</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(245,158,11,0.1)', color: 'var(--accent-amber)', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(245,158,11,0.3)', animation: 'pulse 2s infinite' }}>⚙️ LOCAL-SIM</span>;
                                                                     }
                                                                     if (latestPred.reasoning.includes('[Groq]') || latestPred.reasoning.includes('[Groq-8B]')) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(139,92,246,0.12)', color: '#a78bfa', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(139,92,246,0.4)', animation: 'pulse 2s infinite' }}>⚡ GROQ (Llama-3)</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(167,139,250,0.12)', color: 'var(--accent-purple)', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(167,139,250,0.4)', animation: 'pulse 2s infinite' }}>⚡ GROQ (Llama-3)</span>;
                                                                     }
                                                                     if (latestPred.reasoning.includes('[OpenRouter')) {
-                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)' }}>🌐 OPENROUTER (Llama-70B)</span>;
+                                                                        return <span style={{ padding: '2px 6px', background: 'rgba(56,189,248,0.12)', color: 'var(--accent-cyan)', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(56,189,248,0.4)' }}>🌐 OPENROUTER (Llama-70B)</span>; // Using cyan for Openrouter
                                                                     }
                                                                     if (latestPred.reasoning.includes('[Qwen]')) {
                                                                         return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🧠 HF (Qwen-2.5)</span>;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
+import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 
 interface Props {
     sector: string;
@@ -8,6 +9,15 @@ interface Props {
     onSelectCompetition?: (id: string) => void;
 }
 
+// ── Tab metadata ────────────────────────────────────────────────
+const TAB_META: Record<string, { icon: string; title: string; description: string }> = {
+    top:     { icon: '🔥', title: 'Top Markets',      description: 'Most popular competitions by participant count' },
+    foryou:  { icon: '✨', title: 'Recommended For You', description: 'Curated picks based on activity and potential' },
+    signals: { icon: '📡', title: 'Market Signals',    description: 'Latest intelligence from live data feeds' },
+    latest:  { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created' },
+};
+
+// ── Helpers ─────────────────────────────────────────────────────
 function getCompetitionStatus(comp: Competition): 'live' | 'upcoming' | 'ended' {
     const now = Date.now();
     const start = new Date(comp.competition_start).getTime();
@@ -20,34 +30,26 @@ function getCompetitionStatus(comp: Competition): 'live' | 'upcoming' | 'ended' 
 function getStatusConfig(status: 'live' | 'upcoming' | 'ended') {
     switch (status) {
         case 'live':
-            return { label: '● LIVE', bg: 'rgba(16,185,129,0.15)', color: '#10b981', glow: '0 0 8px rgba(16,185,129,0.3)' };
+            return { label: '● LIVE', bg: 'rgba(16,185,129,0.15)', color: 'var(--accent-green)', glow: '0 0 8px rgba(16,185,129,0.3)' };
         case 'upcoming':
-            return { label: '⏳ UPCOMING', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', glow: 'none' };
+            return { label: '⏳ UPCOMING', bg: 'rgba(245,158,11,0.15)', color: 'var(--accent-amber)', glow: 'none' };
         case 'ended':
-            return { label: '✓ ENDED', bg: 'rgba(107,115,148,0.15)', color: '#6b7394', glow: 'none' };
+            return { label: '✓ ENDED', bg: 'rgba(107,115,148,0.15)', color: 'var(--text-muted)', glow: 'none' };
     }
 }
 
 function getTimeRemaining(comp: Competition): string {
     const now = Date.now();
     const status = getCompetitionStatus(comp);
-
     if (status === 'ended') return 'Finished';
-
     const targetTime = status === 'upcoming'
         ? new Date(comp.competition_start).getTime()
         : new Date(comp.competition_end).getTime();
-
     const diff = targetTime - now;
     if (diff <= 0) return status === 'upcoming' ? 'Starting...' : 'Settling...';
-
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (hours >= 24) {
-        const days = Math.floor(hours / 24);
-        return `${days}d ${hours % 24}h`;
-    }
+    if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
     if (hours > 0) return `${hours}h ${mins}m`;
     return `${mins}m`;
 }
@@ -56,7 +58,6 @@ function getHorizonLabel(comp: Competition): string {
     const start = new Date(comp.competition_start).getTime();
     const end = new Date(comp.competition_end).getTime();
     const hours = (end - start) / (1000 * 60 * 60);
-
     if (hours <= 2) return '2H';
     if (hours <= 7) return '7H';
     if (hours <= 12) return '12H';
@@ -72,6 +73,7 @@ function getProgressPct(comp: Competition): number {
     return Math.round(((now - start) / (end - start)) * 100);
 }
 
+// ── Competition Card (reused for top, foryou, latest) ────────────
 function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selected?: boolean, onClick?: () => void }) {
     const probLabels = comp.outcomes || ['Home', 'Draw', 'Away'];
     const probs = comp.probabilities || [5000, 2500, 2500];
@@ -85,7 +87,7 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
         <article 
             className="feed-card animate-in" 
             style={{ 
-                border: selected ? '2px solid var(--accent-indigo)' : '1px solid rgba(99,102,241,0.2)',
+                border: selected ? '2px solid var(--accent-indigo)' : '1px solid var(--border-glass)',
                 cursor: 'pointer',
                 transform: selected ? 'scale(1.02)' : 'none',
                 transition: 'all 0.2s ease',
@@ -113,7 +115,7 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                             padding: '2px 6px',
                             borderRadius: 'var(--radius-round)',
                             background: 'rgba(139,92,246,0.15)',
-                            color: '#8b5cf6',
+                            color: 'var(--accent-purple)',
                             letterSpacing: '0.05em',
                         }}>
                             {horizon}
@@ -138,12 +140,12 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
 
                 {/* Progress bar for live competitions */}
                 {status === 'live' && (
-                    <div style={{ margin: '0.4rem 0', height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.1)', overflow: 'hidden' }}>
+                    <div style={{ margin: '0.4rem 0', height: '3px', borderRadius: '2px', background: 'var(--border-glass)', overflow: 'hidden' }}>
                         <div style={{
                             height: '100%',
                             width: `${progress}%`,
                             borderRadius: '2px',
-                            background: 'linear-gradient(90deg, #818cf8, #6366f1)',
+                            background: 'linear-gradient(90deg, var(--accent-indigo), var(--accent-purple))',
                             transition: 'width 1s ease',
                         }} />
                     </div>
@@ -166,7 +168,7 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                                 fontSize: '0.85rem',
                                 fontWeight: 800,
                                 fontFamily: 'var(--font-mono)',
-                                color: i === 0 ? '#818cf8' : i === 1 ? '#f59e0b' : '#ef4444',
+                                color: i === 0 ? 'var(--accent-indigo)' : i === 1 ? 'var(--accent-amber)' : 'var(--accent-red)',
                             }}>
                                 {((probs[i] || 0) / 100).toFixed(1)}%
                             </div>
@@ -179,7 +181,7 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                     </span>
                     <span className="feed-card__time" style={{
                         fontWeight: 700,
-                        color: status === 'live' ? '#10b981' : status === 'upcoming' ? '#f59e0b' : '#6b7394',
+                        color: status === 'live' ? 'var(--accent-green)' : status === 'upcoming' ? 'var(--accent-amber)' : 'var(--text-muted)',
                     }}>
                         {status === 'live' ? `⏱ ${timeLeft} left` : status === 'upcoming' ? `Starts in ${timeLeft}` : `✓ ${timeLeft}`}
                     </span>
@@ -201,69 +203,215 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
     );
 }
 
+// ── Signal Feed Item Card ─────────────────────────────────────
+function SignalCard({ item }: { item: LiveFeedItem }) {
+    const sentimentLabel = item.sentiment > 0.1 ? 'BULLISH' : item.sentiment < -0.1 ? 'BEARISH' : 'NEUTRAL';
+    const sentimentColor = item.sentiment > 0.1 ? 'var(--accent-green)' : item.sentiment < -0.1 ? 'var(--accent-red)' : 'var(--text-muted)';
+    const timeStr = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return (
+        <div className="feed-item animate-in" style={{
+            display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+            padding: '0.75rem', borderRadius: 'var(--radius-xs)',
+            background: 'var(--gradient-card)',
+            border: `1px solid var(--border-card)`,
+            borderLeft: `3px solid ${sentimentColor}`,
+            transition: 'all 0.3s ease',
+        }}>
+            <div style={{
+                width: '36px', height: '36px', borderRadius: '10px',
+                background: 'var(--bg-input)', border: '1px solid var(--border-glass)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.1rem', flexShrink: 0,
+            }}>
+                {item.icon}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                    <span style={{
+                        fontSize: '0.6rem', fontWeight: 800, color: 'var(--accent-indigo)',
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                        {item.source}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.55rem' }}>·</span>
+                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                        🕐 {timeStr}
+                    </span>
+                </div>
+                <div style={{
+                    fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)',
+                    lineHeight: 1.5, wordBreak: 'break-word',
+                }}>
+                    {item.text}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem' }}>
+                    <span style={{
+                        fontSize: '0.5rem', fontWeight: 800, padding: '2px 6px',
+                        borderRadius: 'var(--radius-round)',
+                        background: item.sentiment > 0.1 ? 'rgba(16,185,129,0.12)' : item.sentiment < -0.1 ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
+                        color: sentimentColor,
+                    }}>
+                        {sentimentLabel}
+                    </span>
+                    <span style={{
+                        fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px',
+                        borderRadius: 'var(--radius-round)',
+                        background: item.impact === 'high' ? 'rgba(239,68,68,0.12)' : item.impact === 'medium' ? 'rgba(245,158,11,0.12)' : 'rgba(34,211,238,0.12)',
+                        color: item.impact === 'high' ? 'var(--accent-red)' : item.impact === 'medium' ? 'var(--accent-amber)' : 'var(--accent-cyan)',
+                    }}>
+                        {item.impact.toUpperCase()}
+                    </span>
+                    {item.category && (
+                        <span style={{
+                            fontSize: '0.5rem', fontWeight: 600, padding: '2px 6px',
+                            borderRadius: 'var(--radius-round)',
+                            background: 'var(--bg-input)', color: 'var(--text-muted)',
+                        }}>
+                            {item.category}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Section Header ─────────────────────────────────────────────
+function SectionHeader({ sector, liveCount, connected }: { sector: string; liveCount: number; connected: boolean }) {
+    const meta = TAB_META[sector];
+    if (!meta) return null;
+
+    return (
+        <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            marginBottom: '0.75rem', padding: '0.75rem 0',
+            borderBottom: '1px solid var(--border-card)',
+        }}>
+            <div>
+                <h3 style={{
+                    fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)',
+                    display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
+                }}>
+                    <span>{meta.icon}</span> {meta.title}
+                </h3>
+                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem', margin: 0 }}>
+                    {meta.description}
+                </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {liveCount > 0 && (
+                    <span style={{
+                        fontSize: '0.55rem', fontWeight: 700, padding: '2px 8px',
+                        borderRadius: 'var(--radius-round)',
+                        background: 'rgba(16,185,129,0.15)', color: 'var(--accent-green)',
+                    }}>
+                        {liveCount} LIVE
+                    </span>
+                )}
+                <span className={`sector-feed__indicator ${connected ? 'sector-feed__indicator--live' : ''}`}
+                    style={{ width: '6px', height: '6px', borderRadius: '50%', background: connected ? 'var(--accent-green)' : 'var(--accent-amber)' }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// ── Main SectorFeed Component ──────────────────────────────────
 export default function SectorFeed({ sector, selectedCompId, onSelectCompetition }: Props) {
     const { competitions, loading, connected } = useCompetitions(sector);
+    const { feeds: signalFeeds, loading: signalsLoading, connected: signalsConnected } = useLiveFeed(30);
 
+    // ── Sorting logic per tab ──────────────────────────────────
     let sorted = [...competitions];
 
     if (sector === 'top') {
-        // Top Markets: sort primarily by prize_pool descending, then active status
+        // Top Markets: most popular by participant count
         sorted.sort((a, b) => {
-            const statusOrder = { live: 0, upcoming: 1, ended: 2 };
-            const statusA = statusOrder[getCompetitionStatus(a)];
-            const statusB = statusOrder[getCompetitionStatus(b)];
+            const statusOrder: Record<string, number> = { live: 0, upcoming: 1, ended: 2 };
+            const statusA = statusOrder[getCompetitionStatus(a)] ?? 2;
+            const statusB = statusOrder[getCompetitionStatus(b)] ?? 2;
             if (statusA !== statusB) return statusA - statusB;
-            // secondary sort by prize pool inside the same status
-            return (b.prize_pool || 0) - (a.prize_pool || 0);
+            return (b.entry_count || 0) - (a.entry_count || 0);
         });
     } else if (sector === 'foryou') {
-        // For You: recommendation algorithm (collaborative filtering placeholder / hotness)
-        // Composite score: prize_pool + (status) + pseudo-randomness
-        const userSeed = typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('foryou_seed') || Math.random().toString()) : 'default';
-        if (typeof window !== 'undefined' && !localStorage.getItem('foryou_seed')) localStorage.setItem('foryou_seed', userSeed);
-        
+        // For You: weighted recommendation scoring
         sorted.sort((a, b) => {
             const getScore = (comp: Competition) => {
-               let s = 0;
-               if (getCompetitionStatus(comp) === 'live') s += 1000;
-               if (getCompetitionStatus(comp) === 'upcoming') s += 500;
-               s += (comp.prize_pool || 0) * 10;
-               s += (comp.entry_count || 0) * 5;
-               // Add a deterministic pseudo-random factor per competition
-               const hash = comp.id.charCodeAt(0) + comp.id.charCodeAt(comp.id.length - 1);
-               if (hash % 3 === 0) s += 200; // personalized boost
-               return s;
+                let s = 0;
+                if (getCompetitionStatus(comp) === 'live') s += 1000;
+                if (getCompetitionStatus(comp) === 'upcoming') s += 500;
+                s += (comp.prize_pool || 0) * 10;
+                s += (comp.entry_count || 0) * 5;
+                // Capacity factor: prefer competitions that aren't full yet
+                const capacityPct = comp.max_entries > 0 ? (comp.entry_count / comp.max_entries) : 0;
+                if (capacityPct > 0.3 && capacityPct < 0.85) s += 300; // sweet spot
+                // Deterministic pseudo-random factor per competition for variety
+                const hash = comp.id.charCodeAt(0) + comp.id.charCodeAt(comp.id.length - 1);
+                if (hash % 3 === 0) s += 200;
+                return s;
             };
             return getScore(b) - getScore(a);
         });
-    } else if (sector === 'signals') {
-        // Signals: display competitions with the most recent updates
+    } else if (sector === 'latest') {
+        // Latest: newest first by creation date
         sorted.sort((a, b) => {
-            return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-        });
-    } else {
-        // Default sorting (latest, category specific)
-        sorted.sort((a, b) => {
-            const statusOrder = { live: 0, upcoming: 1, ended: 2 };
-            const statusA = statusOrder[getCompetitionStatus(a)];
-            const statusB = statusOrder[getCompetitionStatus(b)];
+            const statusOrder: Record<string, number> = { live: 0, upcoming: 1, ended: 2 };
+            const statusA = statusOrder[getCompetitionStatus(a)] ?? 2;
+            const statusB = statusOrder[getCompetitionStatus(b)] ?? 2;
             if (statusA !== statusB) return statusA - statusB;
-            
-            if (sector === 'latest') {
-                 return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            }
-            return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
     }
+    // signals tab doesn't use competitions
 
     const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
 
+    // ── Signals Tab: render live feed items ─────────────────────
+    if (sector === 'signals') {
+        return (
+            <section className="sector-feed">
+                <SectionHeader sector={sector} liveCount={signalFeeds.length} connected={signalsConnected} />
+
+                {signalsLoading && signalFeeds.length === 0 && (
+                    <div className="sector-feed__skeleton">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="feed-card feed-card--skeleton">
+                                <div className="skeleton-line skeleton-line--title" />
+                                <div className="skeleton-line skeleton-line--desc" />
+                                <div className="skeleton-line skeleton-line--short" />
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {!signalsLoading && signalFeeds.length === 0 && (
+                    <div className="sector-feed__empty">
+                        <p>No signals available yet.</p>
+                        <p className="sector-feed__empty-sub">Market intelligence will appear as events are detected from live data feeds.</p>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {signalFeeds.map((item) => (
+                        <SignalCard key={item.id} item={item} />
+                    ))}
+                </div>
+            </section>
+        );
+    }
+
+    // ── Default: Competition cards (top, foryou, latest) ────────
     return (
         <section className="sector-feed">
+            {TAB_META[sector] && (
+                <SectionHeader sector={sector} liveCount={liveCount} connected={connected} />
+            )}
+
             <div className="sector-feed__status">
                 <span className={`sector-feed__indicator ${connected ? 'sector-feed__indicator--live' : ''}`} />
                 {connected ? 'Live' : 'Connecting...'}
-                {liveCount > 0 && (
+                {liveCount > 0 && !TAB_META[sector] && (
                     <span style={{
                         marginLeft: '0.5rem',
                         fontSize: '0.6rem',
@@ -271,7 +419,7 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
                         padding: '2px 8px',
                         borderRadius: 'var(--radius-round)',
                         background: 'rgba(16,185,129,0.15)',
-                        color: '#10b981',
+                        color: 'var(--accent-green)',
                     }}>
                         {liveCount} LIVE NOW
                     </span>
