@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import Link from 'next/link';
@@ -29,7 +29,21 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
         return () => clearInterval(interval);
     }, []);
 
-    // Close menu logic removed
+    // Auto-close menu on route change
+    useEffect(() => {
+        setMenuOpen(false);
+    }, [pathname]);
+
+    // Auto-close menu on scroll
+    useEffect(() => {
+        if (!menuOpen) return;
+        const onScroll = () => setMenuOpen(false);
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, [menuOpen]);
+
+    // Close menu handler for backdrop
+    const closeMenu = useCallback(() => setMenuOpen(false), []);
 
     return (
         <header className="header">
@@ -103,6 +117,21 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                 </button>
             </div>
 
+            {/* Backdrop overlay — tap anywhere to close */}
+            {menuOpen && (
+                <div
+                    className="mobile-menu-backdrop"
+                    onClick={closeMenu}
+                    style={{
+                        position: 'fixed', inset: 0, top: 0, left: 0,
+                        background: 'rgba(0,0,0,0.4)',
+                        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+                        zIndex: 98,
+                        animation: 'fadeIn 0.2s ease',
+                    }}
+                />
+            )}
+
             {menuOpen && (
                 <div className="mobile-menu-overlay" style={{
                     position: 'absolute', top: '100%', left: 0, right: 0,
@@ -110,7 +139,7 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                     backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
                     borderBottom: '1px solid var(--border-glass)',
                     padding: '1.2rem 0 1.2rem 1.2rem',
-                    boxShadow: '0 12px 32px rgba(0,0,0,0.6)', zIndex: 100,
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.4)', zIndex: 100,
                     animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingRight: '1.2rem' }}>
