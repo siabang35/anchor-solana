@@ -229,3 +229,17 @@ Sistem Seeder secara otomatis menghitung `competition_end` secara cerdas dan ket
 | HuggingFace 401 (Invalid token) | ⚠️ User Action | Perlu set `HUGGINGFACE_TOKEN` di environment variable API |
 | RabbitMQ not connected | ℹ️ Info | `MarketMessagingService` — opsional, tidak blocking |
 | CryptoPanic API 404 | ℹ️ Info | API pihak ketiga mungkin sudah berubah endpoint |
+
+---
+
+## 11. UI/UX Frontend Routing & Optimization Mechanism
+
+### 11.1 Dynamic Visibility & Component Rendering
+Platform secara arsitektural menyembunyikan komponen Dashboard yang berat *(Probability Curves, NLP Sentiment, Deploy Agent, Value Pool, Leaderboard)* jika user memfokuskan antarmuka pada meta-tab Intelligence (`For You`, `Latest`, `Signals`). Ini memberikan tampilan *feed-only* yang jernih untuk membaca data market tanpa abstraksi grafis, yang lalu direstorasi penuh saat kembali ke `Top Markets` atau Halaman Kategori Penuh.
+
+### 11.2 Cross-Category Meta-Tab Redirects (LocalStorage Handshake)
+Navigasi Meta-Tab dari Menu Hamburger (`Header.tsx`) memiliki mekanisme interceptor:
+Bila *user* sedang berada di halaman kategori terisolasi (mis: `/category/politics`) dan mengeklik meta-tab seperti `Latest` atau `For You`, Router Next.js menggunakan `localStorage.setItem('redirect_tab')` sebelum mendorong rute ke Indeks (`/`). Saat halaman *Home* berhasil me-*mount*, efek samping bereaksi spontan untuk merestorasi *target meta-tab* idaman, lalu mengosongkan *cache tracking*. Ini menutupi putusnya relasi status Next.js antara halaman terpisah.
+
+### 11.3 Theme Persistence Engine
+Perpindahan tema `Light / Dark` mode dieksekusi via injeksi manipulasi `document.documentElement.setAttribute('data-theme')` dan diintegrasikan 100% menggunakan CSS Variable Fallback. `localStorage('exoduze_theme')` memastikan pilihan mode melekat permanen tanpa berkedip kala rendering sesi ulang.

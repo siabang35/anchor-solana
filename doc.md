@@ -14,7 +14,9 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 ### 2.1 Frontend (Next.js 16 + React)
 *   **Purpose:** Delivers a highly responsive, glassmorphism-styled, mobile-first interface.
 *   **Key Interface Modules:** 
-    *   **Sector Navigation & Meta-Tabs:** Advanced real-time views segmented into `Top Markets` (sorted by Prize Pool), `For You` (Custom Recommendation Algorithm), and `Signals` (Pure Real-Time Data Stream feeds).
+    *   **Sector Navigation & Meta-Tabs:** Advanced real-time views via mobile-first hamburger menus segmented into `Top Markets` (sorted by popularity/entry_count), `For You` (Custom Weighted Recommendation Algorithm), `Latest` (chronological sorting), and `Signals` (Pure Real-Time Data Stream feeds).
+    *   **Dynamic Dashboard Visibility:** The interface contextually hides intense computational UI components (Probability Curves, AI Deployers, Leaderboards) when users focus on intelligence feeds (`For You`, `Latest`, and `Signals`), creating a clean, distraction-free environment.
+    *   **Theme & Routing Persistence:** Leverages `localStorage` for robust session persistence, instantly maintaining global Dark/Light mode preferences and seamlessly executing cross-category smart redirects back to root Meta-Tabs.
     *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
     *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
     *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Seamlessly identifies live inference sources actively returning from the backend via badges (`🧠 HF (Qwen-2.5)`, `🌐 OPENROUTER (Llama-70B)`, `⚡ GROQ (Llama-3)`, `⚙ LOCAL-SIM`, or `🤖 AI` default). Badge detection parses the `[Qwen]`, `[OpenRouter/...]`, `[Groq]`/`[Groq-8B]`, and `[LOCAL-SIM]` reasoning prefixes from the latest agent prediction. Ranks update live via Supabase `postgres_changes`.
@@ -58,8 +60,10 @@ To maintain institutional-grade anti-bot and anti-manipulation integrity, the ba
 *   **Ornstein-Uhlenbeck (OU) Mean Reversion**: An elastic anti-spoofing filter. If anomalous signals spike the curve away from its Time-Weighted Average Probability (TWAP), a drift force safely retracts the computation back to market consensus.
 
 ### 3.3 Dynamic Interface Algorithms
-*   **Top Markets Sorting:** Ranks active platform competitions globally based strictly on cumulative `prize_pool` and live volume.
-*   **For You Recommendations:** A localized scoring composite algorithm combining active status weighting, entry counts, and a personalized pseudo-random user-seed to provide tailored, diverse market feeds per user.
+*   **Top Markets Sorting:** Ranks active platform competitions globally based strictly on community popularity (`entry_count`).
+*   **For You Recommendations:** A localized composite scoring algorithm combining live status weighting, prize pools, moderate capacity sweet-spots, and a personalized pseudo-random user-seed to provide tailored, mathematically diverse market feeds.
+*   **Latest Sorting:** Chronological ranking (`created_at`) to highlight newly injected market challenges.
+*   **Signals Feed:** Intercepts real-time NLP text nodes directly from backend scraping engines, bypassing competition cards entirely in favor of interactive sentiment blocks (`BULLISH`/`BEARISH`/`NEUTRAL`).
 *   **Probability Curve Plotting:** Contextually isolates active and paused competitors on the frontend's chart visualization based on individual sector/competition relationships, overlaying interactive read-only markers for external user agent comparison.
 
 ---
