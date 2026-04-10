@@ -51,30 +51,71 @@
 }
 
 [data-theme="light"] {
-  --bg-primary: #f5f7fb;
-  --bg-secondary: #eef1f8;
-  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-primary: #f8f9fc;
+  --bg-secondary: #eef0f6;
+  --bg-card: rgba(255, 255, 255, 0.95);
   --bg-card-hover: rgba(255, 255, 255, 1);
-  --bg-input: rgba(255, 255, 255, 0.8);
-  --bg-banner: rgba(99, 102, 241, 0.05);
+  --bg-input: rgba(241, 243, 249, 0.9);
+  --bg-banner: rgba(99, 102, 241, 0.04);
 
-  --text-primary: #111827;
-  --text-secondary: #374151;
-  --text-muted: #6b7280;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
   --text-inverse: #f1f3f9;
 
-  --border-glass: rgba(99, 102, 241, 0.15);
-  --border-card: rgba(0, 0, 0, 0.06);
-  --border-input: rgba(99, 102, 241, 0.25);
+  --border-glass: rgba(15, 23, 42, 0.08);
+  --border-card: rgba(15, 23, 42, 0.06);
+  --border-input: rgba(15, 23, 42, 0.12);
 
-  --gradient-card: linear-gradient(135deg, rgba(99, 102, 241, 0.03) 0%, rgba(168, 85, 247, 0.03) 100%);
+  --accent-indigo: #4f46e5;
+  --accent-purple: #7c3aed;
+  --accent-cyan: #0891b2;
+  --accent-green: #059669;
+  --accent-red: #dc2626;
+  --accent-amber: #d97706;
+  --accent-blue: #2563eb;
+
+  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   --gradient-vibrant: linear-gradient(-45deg, #D90429, #7209B7, #4361EE);
+  --gradient-card: linear-gradient(135deg, rgba(99, 102, 241, 0.02) 0%, rgba(168, 85, 247, 0.02) 100%);
   --gradient-glow: none;
 
-  --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.03);
   --shadow-glow: none;
 
   color-scheme: light;
+}
+
+/* Light theme component overrides */
+[data-theme="light"] .header {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+[data-theme="light"] .mobile-menu-btn {
+  background: rgba(79, 70, 229, 0.06) !important;
+  border-color: rgba(79, 70, 229, 0.15) !important;
+  color: #4f46e5 !important;
+}
+
+[data-theme="light"] .theme-toggle {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #334155;
+}
+
+[data-theme="light"] .feed-card,
+[data-theme="light"] .feed-item {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .principle-banner {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(79, 70, 229, 0.12) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
 }
 
 @keyframes holographic {
@@ -289,7 +330,7 @@ body {
 
   .header-right {
     width: 100%;
-    gap: 0.5rem;
+    gap: 0.6rem;
   }
 
   .mobile-hide {
@@ -305,9 +346,9 @@ body {
   }
 
   .theme-toggle {
-    width: 32px;
-    height: 32px;
-    font-size: 0.95rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
   }
 
   .badge {
@@ -1109,10 +1150,10 @@ body {
 /* Mobile wallet button */
 @media (max-width: 700px) {
   .wallet-adapter-button {
-    height: 32px !important;
-    font-size: 0.68rem !important;
-    padding: 0 0.75rem !important;
-    border-radius: 8px !important;
+    height: 36px !important;
+    font-size: 0.72rem !important;
+    padding: 0 0.85rem !important;
+    border-radius: 10px !important;
     min-width: 0 !important;
     white-space: nowrap !important;
   }

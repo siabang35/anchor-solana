@@ -93,9 +93,9 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                     aria-label="Toggle navigation menu"
                     style={{
                         display: 'none', background: 'rgba(99,102,241,0.1)',
-                        border: '1px solid rgba(99,102,241,0.2)', borderRadius: '8px',
-                        padding: '0.3rem', cursor: 'pointer', color: '#818cf8',
-                        fontSize: '1rem', lineHeight: 1, width: '32px', height: '32px',
+                        border: '1px solid rgba(99,102,241,0.2)', borderRadius: '10px',
+                        padding: '0.4rem', cursor: 'pointer', color: '#818cf8',
+                        fontSize: '1.15rem', lineHeight: 1, width: '38px', height: '38px',
                         alignItems: 'center', justifyContent: 'center',
                     }}
                 >
