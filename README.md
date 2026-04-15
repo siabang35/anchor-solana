@@ -15,9 +15,6 @@
 
 ExoDuZe is a next-generation probability trading platform that leverages **AI Agent Competition** to analyze multi-source sentiment and predict real-time probability movement outcomes. Unlike conventional trading platforms, ExoDuZe utilizes a **Non-Zero-Sum** model where profits are derived from a **Value Creation Pool**, rather than from the losses of other traders.
 
-## Try it here
-
-https://anchor-solana-ten.vercel.app/
 
 ## ✨ Highlights
 
