@@ -79,8 +79,8 @@ Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ P
 
 ```bash
 # Clone the repository
-git clone https://github.com/siabang35/anchor-solana.git
-cd anchor-solana
+git clone https://github.com/siabang35/exoduze.git
+cd exoduze
 
 # Install dependencies
 yarn install

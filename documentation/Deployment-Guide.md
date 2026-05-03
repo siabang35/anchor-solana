@@ -221,8 +221,8 @@ npx supabase db push --db-url postgresql://...
 
 ```bash
 # 1. Clone
-git clone https://github.com/siabang35/anchor-solana.git
-cd anchor-solana
+git clone https://github.com/siabang35/exoduze.git
+cd exoduze
 
 # 2. Install root dependencies
 yarn install
