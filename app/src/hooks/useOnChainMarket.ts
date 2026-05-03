@@ -85,21 +85,21 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
 
             // Fetch historical snapshots to populate curve
             const { data: snapshots } = await supabase
-                .from('curve_snapshots')
-                .select('probability, timestamp, reasoning')
+                .from('probability_history')
+                .select('home, draw, away, created_at, narrative')
                 .eq('competition_id', competitionId)
-                .order('timestamp', { ascending: true })
+                .order('created_at', { ascending: true })
                 .limit(50);
 
             let history: ProbabilitySnapshot[] = [];
             
             if (snapshots && snapshots.length > 0) {
                 history = snapshots.map(snap => ({
-                    time: new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                    home: snap.probability * 100,
-                    draw: 0,
-                    away: (1 - snap.probability) * 100,
-                    narrative: snap.reasoning
+                    time: new Date(snap.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    home: snap.home,
+                    draw: snap.draw,
+                    away: snap.away,
+                    narrative: snap.narrative
                 }));
             }
 
