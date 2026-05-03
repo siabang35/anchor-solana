@@ -52,10 +52,9 @@ pub fn handler(ctx: Context<ClaimReward>) -> Result<()> {
     require!(reward <= platform.pool_balance, ExoduzeError::InsufficientPoolFunds);
 
     // Transfer reward from vault to trader
-    let vault_bump = ctx.bumps.vault;
-    let seeds = &[VAULT_SEED, &[vault_bump]];
-    let signer_seeds = &[&seeds[..]];
-
+    // SECURITY NOTE: Uses raw lamport transfer because the vault is a bare PDA AccountInfo
+    // (not a SystemAccount), which is the standard Anchor pattern for SOL vaults.
+    // The vault PDA is program-owned, so only this program can modify its lamports.
     let transfer_amount = reward;
     **ctx.accounts.vault.to_account_info().try_borrow_mut_lamports()? -= transfer_amount;
     **ctx.accounts.trader.to_account_info().try_borrow_mut_lamports()? += transfer_amount;
@@ -70,9 +69,6 @@ pub fn handler(ctx: Context<ClaimReward>) -> Result<()> {
 
     platform.pool_balance = platform.pool_balance.checked_sub(transfer_amount)
         .ok_or(ExoduzeError::MathOverflow)?;
-
-    // Suppress unused variable warning
-    let _ = signer_seeds;
 
     msg!("Reward claimed: {} lamports (correct={})", reward, is_correct_direction);
     Ok(())

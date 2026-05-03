@@ -40,4 +40,8 @@ pub enum ExoduzeError {
     CompetitionEnded,
     #[msg("Sector name too long")]
     SectorTooLong,
+    #[msg("Position amount exceeds maximum allowed (anti-whale)")]
+    AmountTooLarge,
+    #[msg("Maximum positions per market reached (fairness limit)")]
+    TooManyPositions,
 }

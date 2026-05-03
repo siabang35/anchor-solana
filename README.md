@@ -4,7 +4,7 @@
 
 **Non-Zero-Sum · Skill-Based · Transparent Discovery**
 
-[![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/95fmbWqB23YMi5xTEZzwQmgnGUbHDWCA6MR7Es4G6NxN?cluster=devnet)
+[![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
 [![Anchor](https://img.shields.io/badge/Anchor-0.32.1-blue?style=for-the-badge)](https://www.anchor-lang.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
@@ -265,6 +265,74 @@ my-project/
 └── README.md                          # Project documentation
 ```
 
+## ⛓️ On-Chain Information
+
+> **Network:** Solana Devnet
+
+| Property | Value |
+|----------|-------|
+| **Program ID (Devnet)** | `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` |
+| **Program ID (Localnet)** | `Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt` |
+| **Deploy Authority (Wallet)** | `8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN` |
+| **Cluster** | `devnet` (`https://api.devnet.solana.com`) |
+| **Anchor Version** | `0.32.1` |
+
+### 🔗 Explorer Links
+
+| Resource | Link |
+|----------|------|
+| **Program (Devnet)** | [Solana Explorer](https://explorer.solana.com/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet) |
+| **Wallet (Devnet)** | [Solana Explorer](https://explorer.solana.com/address/8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN?cluster=devnet) |
+| **SolScan Program** | [SolScan](https://solscan.io/account/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet) |
+| **SolScan Wallet** | [SolScan](https://solscan.io/account/8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN?cluster=devnet) |
+| **Solana.fm Program** | [Solana.fm](https://solana.fm/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet-solana) |
+
+### 🔑 Key Files
+
+| File | Description |
+|------|-------------|
+| `~/.config/solana/id.json` | Deploy authority keypair (wallet) |
+| `target/deploy/exoduze-keypair.json` | Program keypair |
+| `Anchor.toml` | Cluster & program configuration |
+| `app/src/lib/idl/exoduze.json` | Anchor IDL (frontend) |
+| `app/src/lib/solana.ts` | Frontend program ID constant |
+| `programs/smart-contract/src/lib.rs` | On-chain `declare_id!` |
+
+### 🏗️ PDA Seeds (Program Derived Addresses)
+
+| PDA | Seed | Purpose |
+|-----|------|---------|
+| **Platform** | `b"platform"` | Core platform state & pool balance |
+| **Market** | `b"market"` | Individual competition/market state |
+| **Position** | `b"position"` + `trader` + `index` | User's trading position |
+| **Vault** | `b"vault"` | SOL custody (Value Creation Pool) |
+| **Agent** | `b"agent"` | AI agent on-chain registration |
+| **Agent Registry** | `b"agent_registry"` | Per-user agent quota tracking |
+| **Leaderboard** | `b"leaderboard"` | Competition leaderboard state |
+
+### 💻 Quick CLI Commands
+
+```bash
+# Check your wallet address
+solana address
+
+# Check your wallet balance
+solana balance
+
+# View program account
+solana account 56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7 --url devnet
+
+# Airdrop SOL for testing (devnet only)
+solana airdrop 2 --url devnet
+
+# View program logs
+solana logs 56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7 --url devnet
+
+# Sync Anchor keys after build
+anchor keys sync
+anchor keys list
+```
+
 ## 📄 Smart Contract Instructions
 
 **Program ID:** `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` *(Devnet)*
@@ -283,3 +351,4 @@ my-project/
 ## 📜 License
 
 [ISC License](LICENSE)
+

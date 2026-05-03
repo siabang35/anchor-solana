@@ -62,8 +62,24 @@ async function bootstrap() {
 
     // ===================
     // CORS Configuration
+    // SECURITY: Requires explicit CORS_ORIGINS env var in production
     // ===================
-    const corsOrigins = configService.get<string>('CORS_ORIGINS', '*'); //add tunnell link for publish & safe from CORS
+    const corsOriginsRaw = configService.get<string>('CORS_ORIGINS');
+    const isProduction = nodeEnv === 'production';
+    
+    // In production, CORS_ORIGINS MUST be explicitly set (no wildcard)
+    if (isProduction && (!corsOriginsRaw || corsOriginsRaw === '*')) {
+        logger.error('🔴 SECURITY: CORS_ORIGINS must be explicitly set in production (cannot be "*")');
+        logger.error('   Set CORS_ORIGINS to your frontend domain, e.g.: https://app.exoduze.io');
+        process.exit(1);
+    }
+    
+    // Development fallback: allow localhost origins
+    const corsOrigins = corsOriginsRaw || 'http://localhost:3000,http://localhost:3001';
+    if (corsOrigins === '*') {
+        logger.warn('⚠️  CORS is set to wildcard "*" — this is NOT safe for production');
+    }
+    
     app.enableCors({
         origin: corsOrigins === '*' ? '*' : corsOrigins.split(',').map(origin => origin.trim()),
         credentials: true,
@@ -197,8 +213,9 @@ async function bootstrap() {
 
     // ===================
     // Swagger Documentation
+    // SECURITY: Only available in explicit development mode
     // ===================
-    if (nodeEnv !== 'production') {
+    if (nodeEnv === 'development') {
         const config = new DocumentBuilder()
             .setTitle('ExoDuZe API')
             .setDescription('The ExoDuZe API documentation')
@@ -207,6 +224,9 @@ async function bootstrap() {
             .build();
         const document = SwaggerModule.createDocument(app, config);
         SwaggerModule.setup('docs', app, document);
+        logger.log('📚 Swagger UI enabled (development mode only)');
+    } else {
+        logger.log('📚 Swagger UI disabled (non-development environment)');
     }
 
     // ===================

@@ -11,6 +11,7 @@ pub fn handler(
     amount: u64,
 ) -> Result<()> {
     require!(amount >= MIN_POSITION_AMOUNT, ExoduzeError::AmountTooSmall);
+    require!(amount <= MAX_POSITION_AMOUNT, ExoduzeError::AmountTooLarge);
     require!(outcome < MAX_OUTCOMES as u8, ExoduzeError::InvalidOutcome);
     require!(direction <= 1, ExoduzeError::InvalidDirection);
 

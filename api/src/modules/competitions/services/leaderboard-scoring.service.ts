@@ -57,11 +57,22 @@ export interface WeightedLeaderboardEntry {
 export class LeaderboardScoringService {
     private readonly logger = new Logger(LeaderboardScoringService.name);
 
-    // Server-side secret for HMAC chain (should come from env in production)
+    // Server-side secret for HMAC score integrity chain (MUST be set in env)
     private readonly HMAC_SECRET: string;
 
     constructor(private readonly supabaseService: SupabaseService) {
-        this.HMAC_SECRET = process.env.LEADERBOARD_HMAC_SECRET || 'exoduze-leaderboard-hmac-default-key-changeme';
+        const secret = process.env.LEADERBOARD_HMAC_SECRET;
+        if (!secret || secret.length < 32) {
+            const fallback = require('crypto').randomBytes(32).toString('hex');
+            console.warn(
+                '⚠️  LEADERBOARD_HMAC_SECRET is not set or too short. ' +
+                'Using random key — score chain will NOT be verifiable across restarts. ' +
+                'Set a persistent 32+ char secret in production.'
+            );
+            this.HMAC_SECRET = fallback;
+        } else {
+            this.HMAC_SECRET = secret;
+        }
     }
 
     // ========================

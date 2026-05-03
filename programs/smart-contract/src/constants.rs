@@ -16,6 +16,8 @@ pub const PROBABILITY_DECIMALS: u64 = 10_000; // 100.00% = 10000
 pub const POOL_MULTIPLIER: u64 = 150; // 1.5x multiplier (divide by 100)
 pub const PLATFORM_FEE_BPS: u64 = 200; // 2% fee in basis points
 pub const MIN_POSITION_AMOUNT: u64 = 10_000_000; // 0.01 SOL in lamports
+pub const MAX_POSITION_AMOUNT: u64 = 10_000_000_000; // 10 SOL max per position (anti-whale)
+pub const MAX_POSITIONS_PER_MARKET: u64 = 50; // Max positions per user per market (fairness)
 pub const MAX_OUTCOMES: usize = 3; // Home, Draw, Away
 
 // Agent Deploy Limits
