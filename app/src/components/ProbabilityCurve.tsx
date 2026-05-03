@@ -111,13 +111,13 @@ function buildRealAgentCurve(
             }
         }
     }
-    
+
     // Sort points by time
     predPoints.sort((a, b) => a.sec - b.sec);
 
     // 3. Build the chart array by matching chartLabel seconds to closest prediction seconds
     const result: (number | null)[] = chartLabels.map(() => null);
-    
+
     // Map each chart column to its seconds value
     const chartTimeMap = chartLabels.map(lbl => parseTimeToSeconds(lbl));
 
@@ -127,8 +127,8 @@ function buildRealAgentCurve(
     // For each known prediction point, find the absolute closest chart time 
     for (const pt of predPoints) {
         let bestIdx = -1;
-        let minDiff = Infinity; 
-        
+        let minDiff = Infinity;
+
         for (let i = 0; i < chartTimeMap.length; i++) {
             const diff = Math.abs(chartTimeMap[i] - pt.sec);
             if (diff < minDiff) {
@@ -136,7 +136,7 @@ function buildRealAgentCurve(
                 bestIdx = i;
             }
         }
-        
+
         if (bestIdx !== -1) {
             result[bestIdx] = pt.prob;
             if (firstPredIdx === -1 || bestIdx < firstPredIdx) firstPredIdx = bestIdx;
@@ -207,7 +207,7 @@ function buildTrueAgentCurve(
             }
         }
     }
-    
+
     predPoints.sort((a, b) => a.sec - b.sec);
 
     const result: (number | null)[] = chartLabels.map(() => null);
@@ -216,7 +216,7 @@ function buildTrueAgentCurve(
     for (const pt of predPoints) {
         let bestIdx = -1;
         let minDiff = Infinity;
-        
+
         for (let i = 0; i < chartTimeMap.length; i++) {
             const diff = Math.abs(chartTimeMap[i] - pt.sec);
             if (diff < minDiff) {
@@ -224,7 +224,7 @@ function buildTrueAgentCurve(
                 bestIdx = i;
             }
         }
-        
+
         if (bestIdx !== -1) {
             result[bestIdx] = pt.prob;
         }
@@ -292,7 +292,7 @@ export default function ProbabilityCurve({
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
 
     // ── Apply Exponential Moving Average (EMA) for Smoothing ─────
-    const EMA_ALPHA = 0.08; // 0.08 provides a very smooth, professional curve that still tracks the data
+    const EMA_ALPHA = 0.12; // Adjusted for better responsiveness
     const smoothedHomeData: number[] = [];
     const smoothedDrawData: number[] = [];
     const smoothedAwayData: number[] = [];
@@ -302,9 +302,15 @@ export default function ProbabilityCurve({
         let currDraw = data[0].draw;
         let currAway = data[0].away;
         for (let i = 0; i < data.length; i++) {
-            currHome = currHome + EMA_ALPHA * (data[i].home - currHome);
-            currDraw = currDraw + EMA_ALPHA * (data[i].draw - currDraw);
-            currAway = currAway + EMA_ALPHA * (data[i].away - currAway);
+            // Dynamic alpha: progressively trust the real data more towards the end
+            // This prevents the smoothed curve from visibly lagging behind the live probability badge
+            const progress = data.length > 5 ? i / (data.length - 1) : 1;
+            const dynamicAlpha = progress > 0.85 ? EMA_ALPHA + ((progress - 0.85) * (1 / 0.15)) * (1 - EMA_ALPHA) : EMA_ALPHA;
+
+            currHome = currHome + dynamicAlpha * (data[i].home - currHome);
+            currDraw = currDraw + dynamicAlpha * (data[i].draw - currDraw);
+            currAway = currAway + dynamicAlpha * (data[i].away - currAway);
+            
             smoothedHomeData.push(currHome);
             smoothedDrawData.push(currDraw);
             smoothedAwayData.push(currAway);
@@ -392,18 +398,18 @@ export default function ProbabilityCurve({
     const chartLabels = data.map(d => d.time);
     if (data.length > 0 && competition) {
         let lastTimeSec = parseTimeToSeconds(chartLabels[chartLabels.length - 1]);
-        
+
         // Find seconds remaining in the competition
         const endSec = Math.floor(new Date(competition.competition_end).getTime() / 1000);
         const nowSec = Math.floor(Date.now() / 1000);
-        
+
         // Ensure a continuous high-resolution timeline (15s steps) projecting up to 30 minutes into the future.
         // This prevents the category axis from warping and visually swallowing short-term predictions.
         let remSec = Math.max(120, endSec - nowSec);
         remSec = Math.min(remSec, 1800); // hard cap at 30 minutes forward look
-        
+
         const step = 15; // strict 15-second intervals
-        
+
         for (let offset = step; offset <= remSec; offset += step) {
             const fTime = lastTimeSec + offset;
             const d = new Date();
@@ -418,7 +424,7 @@ export default function ProbabilityCurve({
         // Generate a distinct neon color from the agent's ID hash for infinite scale
         const h = Math.abs(hashString(agent.id));
         const color = `hsl(${h % 360}, 85%, 65%)`;
-        
+
         const isPaused = agent.status === 'paused' || agent.status === 'exhausted';
         const isMassive = visibleAgents.length > 15; // Enable performance scaling
 
@@ -474,36 +480,39 @@ export default function ProbabilityCurve({
     if (data.length > 0 && chartLabels.length > data.length) {
         const rootIdx = data.length - 1;
         const currentProb = data[rootIdx].home;
-        
+
         let slopePerStep = 0;
         let label = "Status Quo Baseline";
         let isPositive = true;
 
         if (data.length >= 3) {
-            const p1 = data[data.length - 3].home;
+            const lookback = Math.min(data.length, 5);
+            const p1 = data[data.length - lookback].home;
             const p2 = currentProb;
-            const slope = (p2 - p1) / 2;
-            slopePerStep = slope * 0.25;
+            const slope = (p2 - p1) / (lookback - 1);
+            slopePerStep = slope * 0.5; // Initial momentum force
             label = "🚀 Market Momentum";
             isPositive = slope >= 0;
         }
-        
+
         const momentumData = chartLabels.map(() => null as number | null);
         momentumData[rootIdx] = currentProb;
-        
+
+        let projectedValue = currentProb;
         for (let i = rootIdx + 1; i < chartLabels.length; i++) {
-            const steps = i - rootIdx;
-            const projectedRaw = currentProb + (slopePerStep * steps);
-            momentumData[i] = Math.max(1, Math.min(99, projectedRaw));
+            // Apply exponential decay to the slope to create a natural asymptotic curve
+            slopePerStep *= 0.90; 
+            projectedValue += slopePerStep;
+            momentumData[i] = Math.max(1, Math.min(99, projectedValue));
         }
-        
+
         momentumDataset.push({
             label: label,
             data: momentumData,
-            borderColor: isPositive ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)',
+            borderColor: isPositive ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)',
             borderWidth: 2,
-            borderDash: data.length >= 3 ? [5, 5] : [2, 4],
-            tension: 0,
+            borderDash: data.length >= 3 ? [6, 4] : [2, 4],
+            tension: 0.4, // give it some curve tension instead of rigid straight lines
             pointRadius: 0,
             fill: false,
             order: 2,
@@ -521,14 +530,22 @@ export default function ProbabilityCurve({
                         if (!ctx.p0 || !ctx.p1) return '#8b5cf6'; // Default fallback
                         const prev = ctx.p0.parsed.y;
                         const curr = ctx.p1.parsed.y;
-                        // Muted neon green for uptrend, muted neon red for downtrend
-                        return curr >= prev ? '#10b981' : '#ef4444';
+                        // Add a small threshold to avoid rapid flickering on flat trends
+                        if (Math.abs(curr - prev) < 0.1) return '#8b5cf6'; 
+                        return curr > prev ? '#10b981' : '#ef4444';
                     }
                 },
-                backgroundColor: 'transparent',
-                borderWidth: 2.5,
-                tension: 0.45,
-                fill: false,
+                backgroundColor: (context: ScriptableContext<'line'>) => {
+                    const ctx = context.chart.ctx;
+                    const gradient = ctx.createLinearGradient(0, 0, 0, 350);
+                    gradient.addColorStop(0, 'rgba(139, 92, 246, 0.25)'); // Primary brand color
+                    gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.05)');
+                    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
+                    return gradient;
+                },
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 5,
                 pointHoverBackgroundColor: '#818cf8',
@@ -716,12 +733,20 @@ export default function ProbabilityCurve({
             </div>
 
             {/* Match Title */}
-            <div style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.25rem', padding: '0 1rem' }}>
+                <div style={{ 
+                    fontSize: '1.35rem', 
+                    fontWeight: 800, 
+                    letterSpacing: '-0.02em',
+                    background: 'linear-gradient(to right, #fff, #a5b4fc)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    marginBottom: '0.2rem'
+                }}>
                     {teamHome && teamAway ? `${teamHome} vs ${teamAway}` : title}
                 </div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                    {sector.charAt(0).toUpperCase() + sector.slice(1)} · {competition?.status === 'active' ? '● Live' : competition?.status === 'settled' ? '✓ Ended' : 'Upcoming'} · Realtime Analysis
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.02em' }}>
+                    {sector.charAt(0).toUpperCase() + sector.slice(1)} <span style={{opacity: 0.5}}>•</span> {competition?.status === 'active' ? 'Live' : competition?.status === 'settled' ? 'Ended' : 'Upcoming'} <span style={{opacity: 0.5}}>•</span> Realtime Analysis
                 </div>
             </div>
 
@@ -804,11 +829,13 @@ export default function ProbabilityCurve({
 
                         {/* Status + Info */}
                         <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.4rem', fontSize: '0.55rem', flexWrap: 'wrap' }}>
-                            {(() => { const b = statusBadge(popover.agent.status); return (
-                                <span style={{ padding: '2px 7px', borderRadius: '9999px', background: b.bg, color: b.color, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                    {b.icon} {b.label}
-                                </span>
-                            ); })()}
+                            {(() => {
+                                const b = statusBadge(popover.agent.status); return (
+                                    <span style={{ padding: '2px 7px', borderRadius: '9999px', background: b.bg, color: b.color, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                        {b.icon} {b.label}
+                                    </span>
+                                );
+                            })()}
                             <span style={{ padding: '2px 7px', borderRadius: '9999px', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' }}>
                                 {popover.agent.prompts_used}/{popover.agent.max_free_prompts} prompts
                             </span>
