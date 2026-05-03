@@ -290,7 +290,28 @@ export default function ProbabilityCurve({
     );
 
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
-    const baseHomeData = data.map(d => d.home);
+
+    // ── Apply Exponential Moving Average (EMA) for Smoothing ─────
+    const EMA_ALPHA = 0.08; // 0.08 provides a very smooth, professional curve that still tracks the data
+    const smoothedHomeData: number[] = [];
+    const smoothedDrawData: number[] = [];
+    const smoothedAwayData: number[] = [];
+
+    if (data.length > 0) {
+        let currHome = data[0].home;
+        let currDraw = data[0].draw;
+        let currAway = data[0].away;
+        for (let i = 0; i < data.length; i++) {
+            currHome = currHome + EMA_ALPHA * (data[i].home - currHome);
+            currDraw = currDraw + EMA_ALPHA * (data[i].draw - currDraw);
+            currAway = currAway + EMA_ALPHA * (data[i].away - currAway);
+            smoothedHomeData.push(currHome);
+            smoothedDrawData.push(currDraw);
+            smoothedAwayData.push(currAway);
+        }
+    }
+
+    const baseHomeData = smoothedHomeData.length > 0 ? smoothedHomeData : data.map(d => d.home);
 
     // ── Action handlers ──────────────────────────────────────────
     const handleAction = useCallback(async (agentId: string, action: 'pause' | 'resume' | 'stop' | 'delete') => {
@@ -494,19 +515,20 @@ export default function ProbabilityCurve({
         datasets: [
             {
                 label: outcomes[0] || 'Home Win',
-                data: chartLabels.map((_, i) => i < data.length ? data[i].home : null),
-                borderColor: '#818cf8',
-                backgroundColor: (context: ScriptableContext<'line'>) => {
-                    const ctx = context.chart.ctx;
-                    const gradient = ctx.createLinearGradient(0, 0, 0, 320);
-                    gradient.addColorStop(0, 'rgba(129, 140, 248, 0.20)');
-                    gradient.addColorStop(0.5, 'rgba(129, 140, 248, 0.05)');
-                    gradient.addColorStop(1, 'rgba(129, 140, 248, 0.0)');
-                    return gradient;
+                data: chartLabels.map((_, i) => i < data.length ? smoothedHomeData[i] : null),
+                segment: {
+                    borderColor: (ctx: any) => {
+                        if (!ctx.p0 || !ctx.p1) return '#8b5cf6'; // Default fallback
+                        const prev = ctx.p0.parsed.y;
+                        const curr = ctx.p1.parsed.y;
+                        // Muted neon green for uptrend, muted neon red for downtrend
+                        return curr >= prev ? '#10b981' : '#ef4444';
+                    }
                 },
+                backgroundColor: 'transparent',
                 borderWidth: 2.5,
                 tension: 0.45,
-                fill: true,
+                fill: false,
                 pointRadius: 0,
                 pointHoverRadius: 5,
                 pointHoverBackgroundColor: '#818cf8',
@@ -517,7 +539,7 @@ export default function ProbabilityCurve({
             ...momentumDataset,
             ...(outcomes.length > 2 ? [{
                 label: outcomes[1] || 'Draw',
-                data: chartLabels.map((_, i) => i < data.length ? data[i].draw : null),
+                data: chartLabels.map((_, i) => i < data.length ? smoothedDrawData[i] : null),
                 borderColor: '#f59e0b',
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
@@ -538,7 +560,7 @@ export default function ProbabilityCurve({
             }] : []),
             ...(outcomes.length > 2 ? [{
                 label: outcomes[2] || 'Away Win',
-                data: chartLabels.map((_, i) => i < data.length ? data[i].away : null),
+                data: chartLabels.map((_, i) => i < data.length ? smoothedAwayData[i] : null),
                 borderColor: '#ef4444',
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;

@@ -46,8 +46,12 @@ export default function Performance() {
                     bestTrade: data?.bestTrade || 0,
                     exposureLevel: data?.exposureLevel || 0,
                 });
-            } catch (err) {
-                console.error('Failed to load performance stats', err);
+            } catch (err: any) {
+                if (err.message && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
+                    // silently handle unauthenticated state
+                } else {
+                    console.error('Failed to load performance stats', err);
+                }
             } finally {
                 setLoading(false);
             }

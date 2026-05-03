@@ -38,7 +38,7 @@ export default function AgentPosition() {
                 // If the user hasn't fully registered/authenticated with a JWT
                 // the dashboard endpoints will return 401 Unauthorized.
                 // We gracefully fallback to an empty portfolio here without crashing.
-                if (err.message && err.message.includes('401')) {
+                if (err.message && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
                     setPositions([]);
                 } else {
                     console.error('Failed to load portfolio positions', err);
