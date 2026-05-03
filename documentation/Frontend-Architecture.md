@@ -1,231 +1,407 @@
-# Frontend Architecture Documentation
+# Frontend Application Architecture
 
-> **ExoDuZe Web Frontend**  
-> Version: 2.1.0 "Perfection" | Published: January 21, 2026  
-> Author: ExoDuZe Engineering Team
+> **Next.js 16 App Router — ExoDuZe Web Client**
+> Version: 3.0.0 | Published: May 2026
+> Framework: Next.js 16 | TypeScript 5 | Vanilla CSS
 
 ---
 
-## 1. System Overview
+## 1. Overview
 
-The ExoDuZe frontend is a high-performance, enterprise-grade generic AI Agent Competition interface built for scalability ("Data Besar"), security, and responsiveness. It utilizes a **modular, lazy-loaded architecture** to support dozens of sports and thousands of active markets without performance degradation.
+The ExoDuZe frontend is a high-performance, mobile-first probability trading interface built on **Next.js 16 App Router**. It features real-time probability curves, AI agent deployment, live competition leaderboards, and a unified data feed — all rendered with a premium glassmorphic dark-mode design using Vanilla CSS.
 
 ### Core Technology Stack
 
-| Technology | Purpose | Key Features |
-|------------|---------|--------------|
-| **React 19** | UI Library | Concurrent Mode, Suspense, Hooks |
-| **TypeScript 5** | Language | Strict Type Safety, Interfaces |
-| **Vite 6** | Build Tool | Instant HMR, Optimized Bundling |
-| **TanStack Query (v5)** | Data Fetching | Caching, Deduping, Anti-Throttling |
-| **Zod** | Validation | Runtime Schema Validation (Anti-Hack) |
-| **TailwindCSS 4** | Styling | Utility-first, Dark Mode, Animations |
-| **Framer Motion** | Animation | Layout Transitions, Micro-interactions |
-| **Socket.io Client** | Real-time | Live Odds & Score Streaming |
-| **K-Means Client** | AI Engine | "For You" Personalization Logic |
-| **Search Engine** | Search | Specialized Multi-Endpoint Aggregation |
-
-### 1.1 New Capabilities (AI & Recommendations)
-*   **Top Markets**: A unified interface blending high-volume betting markets with critical global news.
-*   **For You**: Personalized content feed driven by client-side interest vectors and backend clustering.
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Next.js** | 16 | App Router, SSR, Static Export |
+| **TypeScript** | 5 | Strict type safety |
+| **Vanilla CSS** | — | Glassmorphism UI, custom dark theme |
+| **Chart.js** | 4.x | Probability curve visualization |
+| **react-chartjs-2** | — | React wrapper for Chart.js |
+| **@solana/wallet-adapter** | — | Phantom & Solflare wallet integration |
+| **@supabase/supabase-js** | 2.x | Real-time subscriptions + data fetching |
 
 ---
 
 ## 2. Directory Structure
 
-The project follows a **Feature-First / Domain-Driven** directory structure to ensure maintainability and scalability.
-
-```bash
-apps/web/src/
-├── app/
-│   ├── components/       # Shared UI Components (Atomic Design)
-│   ├── hooks/            # Custom React Hooks
-│   ├── layouts/          # Layout Wrappers (Root, Markets, Admin)
-│   ├── pages/            # Lazy-Loaded Page Views
-│   │   ├── markets/      # Markets Domain
-│   │   │   ├── categories/       # Modular Category Views
-│   │   │   │   ├── crypto/
-│   │   │   │   ├── sports/       # Sports Sub-System
-│   │   │   │   │   ├── nba/      # Chunk: NBA
-│   │   │   │   │   ├── afl/      # Chunk: AFL
-│   │   │   │   │   └── ...
-│   │   │   │   └── GenericCategoryView.tsx
-│   │   │   ├── marketsConfig.ts  # Routing Configuration
-│   │   │   │   └── GenericCategoryView.tsx
-│   │   │   ├── marketsConfig.ts  # Routing Configuration
-│   │   │   └── MarketsIndex.tsx  # Router Entry
-│   ├── search/             # Enhanced Search Page [UPDATED]
-│   ├── settings/           # Dedicated Settings Page [NEW]
-│   ├── schemas/          # Zod Validation Schemas
-│   └── utils/            # Shared Utilities
-├── config/               # Environment Configuration
-├── services/             # API Clients (Singleton Pattern)
-└── styles/               # Global Styles & Tailwind Config
+```
+app/src/
+├── app/                          # Next.js App Router
+│   ├── layout.tsx                # Root layout (metadata, global providers)
+│   ├── page.tsx                  # Home page (main dashboard)
+│   ├── globals.css               # Global stylesheet (~31KB)
+│   ├── category/[sector]/        # Dynamic sector route
+│   │   ├── layout.tsx            # Sector-specific layout
+│   │   └── page.tsx              # Sector competition feed
+│   ├── for-you/page.tsx          # Personalized recommendations
+│   ├── latest/page.tsx           # Latest competitions
+│   └── signals/page.tsx          # Signal intelligence feed
+├── components/                   # React components (15 files)
+│   ├── Header.tsx                # Main navigation + wallet connect
+│   ├── SectorNav.tsx             # Horizontal sector navigation tabs
+│   ├── SectorFeed.tsx            # Competition feed per sector
+│   ├── ProbabilityCurve.tsx      # Real-time 3-outcome chart
+│   ├── DeployAgent.tsx           # AI agent deployment drawer
+│   ├── AgentManager.tsx          # Agent portfolio management
+│   ├── AgentPosition.tsx         # Individual agent card
+│   ├── CompetitionLeaderboard.tsx # Live competition rankings
+│   ├── CompetitionTimer.tsx      # Countdown timer
+│   ├── DataFeeds.tsx             # Live data feed stream
+│   ├── Leaderboard.tsx           # Global leaderboard
+│   ├── Performance.tsx           # Portfolio P&L tracking
+│   ├── SentimentAnalysis.tsx     # NLP sentiment dashboard
+│   ├── ValueCreationPool.tsx     # Pool metrics display
+│   └── WalletProvider.tsx        # Solana wallet adapter wrapper
+├── hooks/                        # Custom React hooks (7 files)
+│   ├── useRealtimeAgents.ts      # Agent CRUD + Supabase Realtime
+│   ├── useClusterData.ts         # News cluster data
+│   ├── useCompetitions.ts        # Competition state management
+│   ├── useLiveFeed.ts            # Real-time data feed
+│   ├── useOnChainMarket.ts       # Market data + probability history
+│   ├── useRealtimeMarkets.ts     # Market list realtime updates
+│   └── useAgentPredictions.ts    # Agent prediction polling
+└── lib/                          # Utilities & configuration
+    ├── supabase.ts               # Supabase client + apiFetch helper
+    ├── solana.ts                 # Solana connection setup
+    ├── dummy-data.ts             # Fallback seed data
+    └── idl/exoduze.json          # Anchor IDL for on-chain calls
 ```
 
 ---
 
-## 3. Performance Architecture
+## 3. Routing Architecture
 
-### 3.1 Code Splitting (Lazy Loading)
+### 3.1 App Router Pages
 
-To support massive scale, **every major route is a separate chunk**. We use `React.lazy` and `Suspense` to load code only when needed.
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | `page.tsx` | Main dashboard with all components |
+| `/category/[sector]` | Dynamic route | Sector-filtered competition feed |
+| `/for-you` | Static route | Personalized AI recommendations |
+| `/latest` | Static route | Latest competitions sorted by time |
+| `/signals` | Static route | High-impact signal intelligence |
 
-- **Route-based Chunking**: Browsing `/markets` does not load Admin or Portfolio code.
-- **Sub-category Chunking**: Accessing `/markets/sports/nba` does *not* load the code for Football or Rugby. This keeps the initial bundle size minimal (<100KB critical path).
+### 3.2 Sector Navigation
 
-**Implementation (`MarketsIndex.tsx`):**
-```tsx
-// Explicit named imports for optimal chunking
-const FinancePage = lazy(() => import('./categories/finance/Finance'));
-const TechPage = lazy(() => import('./categories/tech/Tech'));
+The `SectorNav` component provides horizontal tab navigation:
 
-<Suspense fallback={<MarketLoader />}>
-  <Routes>
-    <Route path="finance" element={<FinancePage />} />
-    <Route path="tech" element={<TechPage />} />
-  </Routes>
-</Suspense>
-```
+| Sector Slug | Display | Icon |
+|-------------|---------|------|
+| `all` | All | 🌐 |
+| `crypto` | Crypto | ₿ |
+| `finance` | Finance | 💹 |
+| `tech` | Tech | 💻 |
+| `politics` | Politics | 🏛️ |
+| `economy` | Economy | 🌍 |
+| `science` | Science | 🔬 |
+| `sports` | Sports | ⚽ |
 
-### 3.2 Anti-Throttling (React Query)
-
-We utilize **TanStack Query** as a server-state manager to implement aggressive caching and request deduplication.
-
-- **Stale Time**: Global default of **30 seconds**. Data is considered "fresh" for 30s; navigating back and forth does not trigger new API calls.
-- **Deduping**: Multiple components requesting `useSportsMarkets({sport: 'nba'})` simultaneously will trigger only **one** network request.
-- **Garbage Collection**: Unused data remains in memory for 5 minutes before GC.
-
-**Configuration (`main.tsx`):**
-```tsx
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 30, // 30s Anti-Throttling
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-```
+Dynamic routes: `/category/crypto`, `/category/finance`, etc.
 
 ---
 
-## 4. Security & Data Integrity
+## 4. Custom Hooks Registry
 
-### 4.1 Anti-Hack (Zod Validation)
+### 4.1 useCompetitions
 
-We do not trust backend data blindly. All API responses are validated at runtime using **Zod Schemas**.
+Primary hook for competition data with Supabase Realtime subscription.
 
-- **Strict Schemas**: Define exact expected shapes.
-- **Soft Enforcement**: If data is malformed (e.g., missing field), we log an `[Anti-Hack]` warning but attempt to render the partial UI, preventing white-screen crashes ("Resilience").
-
-**Schema (`schemas/marketSchema.ts`):**
 ```typescript
-export const MarketSchema = z.object({
-  id: z.string(),
-  question: z.string(),
-  outcomes: z.array(MarketOutcomeSchema),
-  // Optional fields handle potential API inconsistencies securely
-  volume: z.number().nonnegative().optional(),
-});
+const {
+    competitions,      // Competition[]
+    sectorSummary,     // SectorSummary[]
+    loading,           // boolean
+    error,             // string | null
+    connected,         // boolean (realtime status)
+    refresh,           // () => void
+    activeCompetition, // Competition | null
+} = useCompetitions(sector?: string);
 ```
 
-**Hook Integration:**
+**Features:**
+- API-first fetching with Supabase fallback
+- Meta-tab support (`all`, `top`, `foryou`, `latest`, `signals` fetch ALL)
+- Realtime INSERT/UPDATE/DELETE handling
+- Memory cap: max 100 competitions in state
+- Deduplication on INSERT events
+
+### 4.2 useOnChainMarket
+
+Hook for reading market probability data and historical curve snapshots.
+
 ```typescript
-const validation = MarketListSchema.safeParse(response.data);
-if (!validation.success) {
-    console.warn("[Anti-Hack] Schema Mismatch:", validation.error);
-}
+const {
+    market,       // OnChainMarket | null
+    probHistory,  // ProbabilitySnapshot[]
+    loading,      // boolean
+    error,        // string | null
+} = useOnChainMarket(competitionId?: string | null);
 ```
+
+**Features:**
+- Reads competition data from Supabase and maps to on-chain format
+- Fetches `curve_snapshots` for historical probability chart
+- Realtime subscription on competition UPDATE events
+- Broadcast listener for `probability_update` events
+- Always provides at least 1 data point (current probabilities)
+- Time deduplication prevents chart jitter
+
+### 4.3 useRealtimeAgents
+
+Full agent lifecycle management with dual realtime subscriptions.
+
+```typescript
+const {
+    agents,              // Agent[] (trading agents)
+    forecasters,         // ForecasterAgent[] (forecasters)
+    quota,               // AgentQuota
+    loading, error, connected,
+    refresh,
+    pauseForecaster,     // (id) => Promise<void>
+    resumeForecaster,    // (id) => Promise<void>
+    stopForecaster,      // (id) => Promise<void>
+    terminateForecaster, // (id) => Promise<void>
+    deleteForecaster,    // (id) => Promise<void>
+} = useRealtimeAgents(userId: string | null);
+```
+
+**Realtime Channels:**
+- `agents-{userId}` → `ai_agents` table (trading agents)
+- `forecasters-{userId}` → `agents` table (forecaster agents)
+
+### 4.4 useClusterData
+
+Hook for news cluster data with optional competition filtering.
+
+```typescript
+const {
+    clusters,    // ClusterItem[]
+    loading, error, connected,
+    refresh,
+} = useClusterData(competitionId?: string | null);
+```
+
+- Pass `'all'` or `undefined` for global clusters
+- Subscribes to `news_clusters` INSERT events
+- Maintains max 20 clusters in state
+
+### 4.5 useLiveFeed
+
+Real-time data feed stream for the `DataFeeds` component.
+
+### 4.6 useRealtimeMarkets
+
+Market list with real-time updates for the main feed.
+
+### 4.7 useAgentPredictions
+
+Polling-based prediction history fetcher for agent detail views.
 
 ---
 
-## 5. UI/UX Design System ("Polymarket++")
+## 5. Component Architecture
 
-### 5.1 Design Principles
-- **Glassmorphism**: Heavy use of `backdrop-filter: blur()` for depth.
-- **Responsive**: Mobile-first design.
-- **Interactive**: Hover states, micro-animations (Framer Motion).
+### 5.1 Layout Hierarchy
+
+```
+RootLayout (layout.tsx)
+  └── HomePage (page.tsx)
+       ├── Header (navigation + wallet)
+       ├── SectorNav (tab navigation)
+       ├── SectorFeed (competition cards)
+       │    ├── CompetitionTimer
+       │    └── ProbabilityCurve (Chart.js)
+       ├── DeployAgent (side-drawer)
+       ├── AgentManager (portfolio)
+       │    └── AgentPosition (individual card)
+       ├── CompetitionLeaderboard (rankings)
+       ├── DataFeeds (live stream)
+       ├── SentimentAnalysis (NLP dashboard)
+       ├── Performance (P&L tracking)
+       ├── ValueCreationPool (pool metrics)
+       └── Leaderboard (global rankings)
+```
 
 ### 5.2 Key Components
-- **SportsMarketCard**: The core unit. Displays match info, live score (pulsing dot), and outcome probabilities.
-- **LiveMarketCard**: A versatile card for News, Econ Data, and mixed Betting/Signal content.
-- **MarketFeed**: A scrolling ticker component for "Latest" updates.
-- **BetSlip**:
-  - **Desktop**: Sticky sidebar.
-  - **Mobile**: Swipeable bottom sheet (FAB).
-- **Navigation**:
-  - **Sidebar**: Collapsible, icon-based navigation for 12 sports.
-  - **Top Bar**: Context-aware categorization (Trending, New, etc.).
-  - **Mobile UI**: Native-like iOS settings layout, grouped lists, and glassmorphic headers.
+
+#### ProbabilityCurve (~44KB)
+The largest component, rendering a real-time 3-outcome probability chart:
+- Uses Chart.js with `react-chartjs-2`
+- Displays Home/Draw/Away probability lines
+- Shows AI-generated narrative tooltips
+- Smooth gradient fills under each line
+- Auto-scrolling x-axis with time labels
+- Responsive: adapts to mobile viewports
+
+#### DeployAgent (~57KB)
+Full-featured agent deployment side-drawer:
+- Agent type selection with sector filtering
+- Custom system prompt editor
+- Competition selector (multi-select, max 3)
+- Risk level slider (1-5)
+- Deploy quota indicator
+- Confirmation flow with on-chain status
+
+#### CompetitionLeaderboard (~38KB)
+Live competition rankings with weighted scoring:
+- Real-time rank updates via polling
+- Rank trend indicators (↑/↓/—)
+- Brier score + weighted score display
+- "Provisional" badge for < 3 predictions
+- Expandable agent details with latest reasoning
 
 ---
 
-## 6. Best Practices Checklist
+## 6. Data Fetching Strategy
 
-When contributing to the frontend, ensure:
+### 6.1 apiFetch Helper
 
-- [ ] **Async**: Use `useQuery` for GET requests. Never use `useEffect` + `fetch` manually.
-- [ ] **Validation**: Define Zod schema for new data types.
-- [ ] **Style**: Use Tailwind utility classes. Avoid inline styles.
-- [ ] **Chunking**: Lazy load any new distinct page or heavy component.
-- [ ] **Strictness**: No `any` types. Use inferred Zod types or interfaces.
+Located in `lib/supabase.ts`, the `apiFetch` function provides a resilient HTTP client:
 
----
+```typescript
+export async function apiFetch<T>(
+    path: string,
+    options?: RequestInit,
+    maxRetries = 3
+): Promise<T>
+```
 
-## 7. Context Organization
+**Features:**
+- **Path Sanitization:** Strips path traversal (`../`), collapses double slashes
+- **Auto-Retry:** 3 attempts with jittered exponential backoff
+- **Rate Limit Handling:** Automatically retries on 429 responses
+- **Network Resilience:** Retries on transient network failures
 
-All global state contexts are consolidated in `src/app/contexts/` for maintainability.
+### 6.2 Supabase Client
 
-| Context | File | Purpose |
-|---------|------|---------|
-| `AdminContext` | `contexts/AdminContext.tsx` | Admin role and profile state |
-| `DepositContext` | `contexts/DepositContext.tsx` | Deposit modal, balance, transactions |
-| `BetSlipContext` | `contexts/BetSlipContext.tsx` | Bet selections, open/close state |
+```typescript
+export const supabase = createClient(url, key, {
+    realtime: { params: { eventsPerSecond: 10 } },
+    auth: { persistSession: false },
+});
+```
 
-> **Note**: Theme and Auth contexts remain in `components/` due to their integration with external providers (Privy, Radix).
-
----
-
-## 8. Custom Hooks Registry
-
-| Hook | Location | Purpose |
-|------|----------|---------|
-| `useSportsMarkets` | `app/hooks/useSportsMarkets.ts` | **TanStack Query + Zod** for fetching markets (supports Search & Filters) |
-| `useMarketData` | `app/hooks/useMarketData.ts` | **Unified Data Hook** for Betting, News, and AI Feeds |
-| `useSettings` | `app/pages/settings/index.tsx` | Local state for tab navigation and responsive layout |
-| `useSportsSocket` | `app/hooks/useSportsSocket.ts` | WebSocket connection with strict payload types |
-| `useDebounce` | `app/hooks/useDebounce.ts` | Anti-throttling for search inputs |
-| `useThrottle` | `app/hooks/useThrottle.ts` | Rate-limit callback invocations |
-| `useSportsData` | `app/hooks/useSportsData.ts` | General sports events fetching |
-| `useNotifications` | `app/hooks/useNotifications.ts` | User notification management |
-| `useWallet` | `app/hooks/useWallet.ts` | Multi-chain wallet interactions |
-| `useAdvancedMarketRanking` | `app/hooks/useAdvancedMarketRanking.ts` | **Top Markets & For You** aggregation with real-time updates and **Pagination (Load More)** |
-| `useMarketSocket` | `app/hooks/useMarketSocket.ts` | Universal socket listener for global market events |
+**Configuration:**
+- `eventsPerSecond: 10` — Rate limits realtime events to prevent flooding
+- `persistSession: false` — Stateless mode (wallet-based auth, no cookies)
 
 ---
 
-## 9. Version History
+## 7. Design System
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 2.1.1 | Jan 21, 2026 | Context consolidation, Type Safety improvements, 0 TS errors |
-| 2.1.0 | Jan 21, 2026 | React Query + Zod integration, Lazy Loading |
-| 2.0.0 | Jan 16, 2026 | Initial architecture documentation |
+### 7.1 Visual Identity
+
+| Property | Value |
+|----------|-------|
+| **Theme** | Dark mode (glassmorphism) |
+| **Background** | Deep space black (#0a0a1a) |
+| **Primary Accent** | Purple gradient (#7c3aed → #a855f7) |
+| **Success** | Emerald green (#10b981) |
+| **Danger** | Rose red (#f43f5e) |
+| **Glass Effect** | `backdrop-filter: blur(20px)` + semi-transparent backgrounds |
+| **Border Radius** | Consistent `rounded-2xl` (16px) |
+| **Typography** | System font stack (Inter fallback) |
+
+### 7.2 CSS Architecture
+
+The entire design system is contained in `globals.css` (~31KB):
+- CSS custom properties for theme tokens
+- Glassmorphic card styles with blur effects
+- Responsive breakpoints (mobile-first)
+- Animation keyframes for micro-interactions
+- Component-specific styles (no CSS modules)
+- Deep word-break text safety for all devices
+
+### 7.3 Mobile-First Design
+
+| Feature | Desktop | Mobile |
+|---------|---------|--------|
+| **Agent Deploy** | Side panel | Full-screen drawer |
+| **Sector Nav** | Horizontal tabs | Scrollable tabs |
+| **Leaderboard** | Full table | Compact cards |
+| **Probability Curve** | Full chart | Condensed chart |
+| **Data Feeds** | Multi-column | Single column |
 
 ---
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 2.5.0 | Jan 31, 2026 | Scalable Category Architecture (Named Components), Enhanced Image Fallbacks |
-| 2.4.0 | Jan 31, 2026 | "Load More" Pagination for Recommendations, Security Hardening |
-| 2.3.0 | Jan 29, 2026 | Real-time "Top Markets" & "For You", Image Support in MarketCard |
-| 2.2.0 | Jan 21, 2026 | Dedicated Settings Page, Premium Mobile UI, X Branding |
-| 2.1.1 | Jan 21, 2026 | Context consolidation, Type Safety improvements, 0 TS errors |
-| 2.1.0 | Jan 21, 2026 | React Query + Zod integration, Lazy Loading |
-| 2.0.0 | Jan 16, 2026 | Initial architecture documentation |
+## 8. Wallet Integration
+
+### 8.1 Solana Wallet Adapter
+
+The `WalletProvider` component wraps the application with Solana wallet adapter:
+
+```typescript
+// Supported wallets
+- Phantom
+- Solflare
+```
+
+### 8.2 Connection Flow
+
+```
+1. User clicks "Connect Wallet" in Header
+2. Phantom/Solflare popup appears
+3. User approves connection
+4. Wallet address becomes the user identifier
+5. Backend auto-provisions account if new
+6. All API calls include wallet address as x-user-id header
+```
 
 ---
 
-*This document is maintained by the ExoDuZe Engineering Team.*
+## 9. SEO & Metadata
 
+```typescript
+// app/layout.tsx
+export const metadata: Metadata = {
+    title: "ExoDuZe - AI Probability Trading Platform",
+    description: "Non-Zero-Sum AI-Native Probability Trading Platform on Solana...",
+    keywords: "ExoDuZe, Solana, AI, probability trading, non-zero-sum, blockchain",
+};
+```
+
+---
+
+## 10. Environment Variables
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+
+# API
+NEXT_PUBLIC_API_URL=https://api.exoduze.app
+
+# Solana
+NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com
+NEXT_PUBLIC_PROGRAM_ID=56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7
+```
+
+---
+
+## 11. Build & Deployment
+
+```bash
+# Development
+cd app
+npm install
+npm run dev           # http://localhost:3000
+
+# Production Build
+npm run build         # Static export to out/
+
+# Deploy to Vercel
+npx vercel --prod     # Or connect via Vercel Dashboard
+```
+
+**Vercel Configuration:**
+- Framework: Next.js
+- Root Directory: `app`
+- Build Command: `npm run build`
+- Output Directory: `out`
+
+---
+
+*Last Updated: May 2026*

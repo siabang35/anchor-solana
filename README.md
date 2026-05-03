@@ -142,31 +142,127 @@ Or connect the `app/` directory to the Vercel dashboard:
 
 ```text
 my-project/
-├── programs/my-project/src/     # Solana smart contract (Anchor/Rust)
-│   ├── lib.rs                   # Program entry points (7 instructions)
-│   ├── state.rs                 # Account structs
-│   ├── constants.rs             # PDA seeds & constants
-│   ├── error.rs                 # Custom error codes
-│   └── instructions/            # Instruction handlers
+├── programs/smart-contract/src/       # Solana smart contract (Anchor/Rust)
+│   ├── lib.rs                         # Program entry point (8 instructions)
+│   ├── state.rs                       # Account structs (PlatformState, Market, Position, Agent)
+│   ├── constants.rs                   # PDA seeds & constants
+│   ├── error.rs                       # Custom error codes
+│   ├── instructions.rs                # Instruction module declarations
+│   └── instructions/                  # Instruction handlers
 │       ├── initialize.rs
 │       ├── create_market.rs
 │       ├── take_position.rs
+│       ├── register_agent_user.rs
 │       ├── deploy_agent.rs
 │       ├── update_probabilities.rs
 │       ├── settle_market.rs
 │       └── claim_reward.rs
-├── app/                         # Next.js 16 frontend
-│   └── src/
-│       ├── app/                 # Pages, Layouts, & Global CSS
-│       ├── components/          # React components (DeployAgent, DataFeeds, etc.)
-│       ├── hooks/               # Custom React hooks
-│       └── lib/                 # Utilities, Supabase client
-├── api/                         # NestJS Backend Service
-│   ├── src/                     # Controllers, Services, Auth Guards
-│   └── supabase/migrations/     # PostgreSQL Migrations & RLS policies
-├── tests/                       # Anchor tests
-├── Anchor.toml                  # Anchor deployment configuration
-└── README.md                    # Project documentation
+├── app/                               # Next.js 16 frontend
+│   ├── public/images/                 # Static image assets
+│   ├── src/
+│   │   ├── app/                       # App Router pages & layouts
+│   │   │   ├── layout.tsx             # Root layout (wallet providers, fonts)
+│   │   │   ├── page.tsx               # Home page (main dashboard)
+│   │   │   ├── globals.css            # Global stylesheet
+│   │   │   ├── category/[sector]/     # Dynamic sector pages (Finance, Crypto, etc.)
+│   │   │   ├── for-you/              # Personalized feed page
+│   │   │   ├── latest/               # Latest competitions page
+│   │   │   └── signals/              # Signals feed page
+│   │   ├── components/                # React components
+│   │   │   ├── Header.tsx             # Navigation & wallet connect
+│   │   │   ├── SectorNav.tsx          # Sector category navigation
+│   │   │   ├── SectorFeed.tsx         # Competition feed per sector
+│   │   │   ├── ProbabilityCurve.tsx   # Real-time 3-outcome probability chart
+│   │   │   ├── DeployAgent.tsx        # AI agent deployment side-drawer
+│   │   │   ├── AgentManager.tsx       # Agent portfolio management
+│   │   │   ├── AgentPosition.tsx      # Individual agent position view
+│   │   │   ├── CompetitionLeaderboard.tsx  # Live competition rankings
+│   │   │   ├── CompetitionTimer.tsx   # Countdown timer for competitions
+│   │   │   ├── DataFeeds.tsx          # Live data feed stream
+│   │   │   ├── Leaderboard.tsx        # Global leaderboard
+│   │   │   ├── Performance.tsx        # Portfolio P&L tracking
+│   │   │   ├── SentimentAnalysis.tsx  # NLP sentiment dashboard
+│   │   │   ├── ValueCreationPool.tsx  # Pool metrics display
+│   │   │   └── WalletProvider.tsx     # Solana wallet adapter wrapper
+│   │   ├── hooks/                     # Custom React hooks
+│   │   │   ├── useAgentPredictions.ts # Agent prediction polling
+│   │   │   ├── useClusterData.ts      # News cluster data fetching
+│   │   │   ├── useCompetitions.ts     # Competition state management
+│   │   │   ├── useLiveFeed.ts         # Real-time data feed stream
+│   │   │   ├── useOnChainMarket.ts    # On-chain market data via Anchor
+│   │   │   ├── useRealtimeAgents.ts   # Real-time agent updates
+│   │   │   └── useRealtimeMarkets.ts  # Real-time market updates
+│   │   └── lib/                       # Utilities & clients
+│   │       ├── supabase.ts            # Supabase client configuration
+│   │       ├── solana.ts              # Solana connection setup
+│   │       ├── dummy-data.ts          # Fallback/seed data
+│   │       └── idl/exoduze.json       # Anchor IDL for on-chain interactions
+│   ├── next.config.ts                 # Next.js configuration
+│   ├── vercel.json                    # Vercel deployment config
+│   └── package.json
+├── api/                               # NestJS Backend Service
+│   ├── src/
+│   │   ├── main.ts                    # Application bootstrap & CORS config
+│   │   ├── app.module.ts              # Root module (all feature modules)
+│   │   ├── root.controller.ts         # Health check endpoint
+│   │   ├── health.controller.ts       # Detailed health controller
+│   │   ├── common/                    # Shared infrastructure
+│   │   │   ├── guards/               # JWT & role-based auth guards
+│   │   │   ├── middleware/            # Rate-limiting & anti-chunking
+│   │   │   ├── interceptors/         # Response transformation
+│   │   │   ├── filters/              # Exception filters
+│   │   │   ├── decorators/           # Custom param decorators
+│   │   │   ├── services/             # Shared services (Supabase, etc.)
+│   │   │   ├── idl/                  # Anchor IDL (backend copy)
+│   │   │   └── utils/                # Helper utilities
+│   │   ├── config/                    # Environment validation
+│   │   ├── database/                  # Database module & Supabase service
+│   │   ├── modules/                   # Feature modules
+│   │   │   ├── admin/                # Admin dashboard & management
+│   │   │   ├── agents/               # AI agent CRUD & predictions
+│   │   │   ├── auth/                 # Authentication (JWT, OAuth, Wallet)
+│   │   │   ├── competitions/         # Competition lifecycle management
+│   │   │   ├── dashboard/            # Dashboard analytics
+│   │   │   ├── deposits/             # Deposit processing
+│   │   │   ├── email/                # Email & OTP verification
+│   │   │   ├── markets/              # Market data & clustering engine
+│   │   │   ├── notifications/        # Push notification service
+│   │   │   ├── orders/               # Order management
+│   │   │   ├── referrals/            # Referral system
+│   │   │   ├── security/             # Security monitoring & audit
+│   │   │   ├── settings/             # User settings
+│   │   │   ├── sports/               # Sports data integration
+│   │   │   ├── transactions/         # Transaction history
+│   │   │   └── users/                # User profile management
+│   │   └── scripts/                   # Debug & maintenance scripts
+│   ├── scripts/                       # Admin scripts (seed, cleanup, etc.)
+│   ├── supabase/migrations/           # PostgreSQL migrations & RLS policies (68 files)
+│   ├── render.yaml                    # Render deployment config
+│   └── package.json
+├── documentation/                     # Project documentation library
+│   ├── Doc.md                         # Master documentation
+│   ├── API-Integration.md            # REST API reference
+│   ├── Market-System-Architecture.md # Probability engine design
+│   ├── Security-Architecture.md      # Security hardening docs
+│   ├── Real-Time-Data-Architecture.md # Real-time data pipeline
+│   ├── AI-Recommendations-System.md  # AI agent system design
+│   ├── RabbitMQ-Integration.md       # Message queue architecture
+│   ├── Sports-System.md             # Sports data integration
+│   ├── Wallet-Authentication-System.md # Wallet auth flow
+│   ├── Google-OAuth-Integration.md   # OAuth2 integration
+│   ├── Email-Verification-System.md  # Email OTP system
+│   ├── Withdrawal-System.md         # Withdrawal processing
+│   ├── Frontend-Architecture.md      # Frontend design patterns
+│   ├── Admin-Features.md            # Admin dashboard features
+│   ├── Asset-Management.md          # Asset & image management
+│   ├── Image-Scraping-ETL.md        # ETL pipeline for images
+│   └── Guidelines.md                # Development guidelines
+├── Anchor.toml                        # Anchor deployment configuration
+├── Cargo.toml                         # Rust workspace configuration
+├── rust-toolchain.toml                # Rust toolchain version pinning
+├── doc.md                             # Quick reference documentation
+├── system.md                          # System architecture overview
+└── README.md                          # Project documentation
 ```
 
 ## 📄 Smart Contract Instructions
@@ -176,9 +272,10 @@ my-project/
 | Instruction | Description |
 |---|---|
 | `initialize_platform` | Initializes the core platform states and the Value Creation Pool vault. |
-| `create_market` | Creates a 3-way probability market based on an underlying asset or event. |
-| `take_position` | Allows users to take an UP/DOWN position on an outcome probability. |
-| `deploy_agent` | Registers an AI agent on-chain with its strategy prompt. |
+| `create_market` | Creates a 3-way probability market with sector, competition timing, and bonding curve. |
+| `take_position` | Takes a Long/Short position on a market outcome with bonding curve pricing. |
+| `register_agent_user` | Registers user for AI agent deployment by creating a quota PDA. |
+| `deploy_agent` | Deploys an AI agent on-chain with a custom strategy prompt (checks quota). |
 | `update_probabilities` | Updates market probabilities based on Oracle/Engine data (admin only). |
 | `settle_market` | Settles the market declaring the winning outcome. |
 | `claim_reward` | Processes reward claims from the Value Creation Pool. |

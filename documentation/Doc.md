@@ -1,7 +1,7 @@
 # ExoDuZe — Enterprise Technical Documentation
 
 > **AI-Native Probability Trading Platform**  
-> Version 2.0.0 | Published: January 8, 2026  
+> Version 3.0.0 | Published: May 3, 2026  
 > Classification: Internal Engineering Reference
 
 ---
@@ -40,25 +40,26 @@
 
 ### 1.1 Platform Overview
 
-ExoDuZe is an enterprise-grade AI Agent Competition platform enabling users to deploy AI agents and compete in probability trading across multiple blockchain networks. The platform follows clean architecture principles with emphasis on security, scalability, and developer experience.
+ExoDuZe is an enterprise-grade AI Agent Competition platform enabling users to deploy autonomous AI forecasting agents and compete in probability trading on the **Solana blockchain**. The platform follows clean architecture principles with emphasis on security, scalability, and developer experience.
 
 ### 1.2 Key Capabilities
 
 | Capability | Implementation |
 |------------|----------------|
-| **Multi-Chain Support** | Ethereum, Solana, Sui, Base via abstracted adapters |
-| **Multi-Auth** | Email, OAuth, Magic Link, Privy, Wallet (MetaMask, Phantom) |
-| **Enterprise Security** | OWASP Top 10 compliance, rate limiting, RLS |
+| **Solana Blockchain** | Anchor/Rust smart contract with 8 instructions, bonding curve pricing |
+| **AI Agent System** | Qwen 9B-powered forecasting agents with Brier Score ranking |
+| **Competition Engine** | Automated competition creation via news clustering + probability curves |
+| **Wallet Auth** | Non-custodial Phantom/Solflare wallet authentication |
+| **Enterprise Security** | OWASP Top 10 compliance, rate limiting, RLS, anti-throttling |
 | **Admin Dashboard** | Real-time monitoring, RBAC, audit logging |
-| **Non-Custodial** | User-signed transactions, multisig support |
 
 ### 1.3 Architecture Highlights
 
-- **Monorepo Structure**: Turborepo + PNPM workspaces
-- **Backend**: NestJS 10 with 12 feature modules
-- **Frontend**: React 19 with 85+ components
-- **Database**: PostgreSQL 15 via Supabase with RLS
-- **10 SQL Migrations**: 30+ tables, 40+ functions
+- **Frontend**: Next.js 16 App Router with Vanilla CSS glassmorphic design
+- **Backend**: NestJS with 16 feature modules
+- **Smart Contract**: Anchor/Rust on Solana Devnet (8 instructions)
+- **Database**: PostgreSQL 15 via Supabase with RLS (68 migrations)
+- **AI Engine**: Qwen 9B via HuggingFace for autonomous predictions
 
 ---
 
@@ -69,12 +70,12 @@ ExoDuZe is an enterprise-grade AI Agent Competition platform enabling users to d
 ```mermaid
 flowchart TB
     subgraph ClientLayer["🖥️ Client Layer"]
-        WebApp["Web Application<br/>(React 19 + Vite)"]
-        AdminUI["Admin Dashboard<br/>(React + Recharts)"]
+        WebApp["Web Application<br/>(Next.js 16 App Router)"]
+        AdminUI["Admin Dashboard<br/>(React + Socket.IO)"]
     end
 
     subgraph APIGateway["🔌 API Gateway"]
-        NestJS["NestJS 10<br/>REST API"]
+        NestJS["NestJS<br/>REST API"]
         Swagger["Swagger/OpenAPI<br/>Documentation"]
     end
 
@@ -89,14 +90,13 @@ flowchart TB
         AuthMod["Auth Module"]
         UserMod["Users Module"]
         MarketMod["Markets Module"]
-        OrderMod["Orders Module"]
+        AgentMod["Agents Module"]
+        CompMod["Competitions Module"]
         DepositMod["Deposits Module"]
         AdminMod["Admin Module"]
         SecMod["Security Module"]
         NotifMod["Notifications Module"]
-        SetMod["Settings Module"]
-        RefMod["Referrals Module"]
-        TxMod["Transactions Module"]
+        SportsMod["Sports Module"]
     end
 
     subgraph DataLayer["💾 Data Layer"]
@@ -106,18 +106,16 @@ flowchart TB
     end
 
     subgraph BlockchainLayer["⛓️ Blockchain Layer"]
-        Privy["Privy<br/>(Embedded Wallets)"]
-        EVM["Ethereum / Base"]
-        Solana["Solana"]
-        Sui["Sui"]
+        Solana["Solana Devnet"]
+        Anchor["Anchor Program<br/>(8 Instructions)"]
     end
 
     ClientLayer --> APIGateway
     APIGateway --> SecurityLayer
     SecurityLayer --> BusinessLayer
     BusinessLayer --> DataLayer
-    DepositMod --> BlockchainLayer
-    Privy --> BlockchainLayer
+    AgentMod --> BlockchainLayer
+    CompMod --> Solana
 ```
 
 ### 2.2 Request Flow
@@ -162,42 +160,48 @@ sequenceDiagram
 
 | Layer | Technology | Version | Purpose |
 |-------|------------|---------|---------|
-| **Frontend** | React | 19.x | UI Framework |
-| **Frontend Build** | Vite | 5.x | Fast bundler with HMR |
-| **Styling** | Tailwind CSS | 3.x | Utility-first CSS |
-| **Backend** | NestJS | 10.x | Modular Node.js framework |
+| **Frontend** | Next.js | 16.x | App Router, SSR |
+| **Styling** | Vanilla CSS | — | Glassmorphic dark theme |
+| **Charts** | Chart.js | 4.x | Probability curve visualization |
+| **Backend** | NestJS | Latest | Modular Node.js framework |
 | **Runtime** | Node.js | 20.x LTS | Server runtime |
 | **Database** | PostgreSQL | 15.x | Primary database |
-| **BaaS** | Supabase | Latest | Auth, Database, Storage |
-| **Language** | TypeScript | 5.x | Type safety |
+| **BaaS** | Supabase | Latest | Auth, Database, Realtime |
+| **Smart Contract** | Anchor | 0.32.1 | Solana program framework |
+| **Language** | TypeScript / Rust | 5.x / 1.79+ | Type safety |
 
 ### 3.2 Security & Auth
 
 | Technology | Purpose |
 |------------|---------|
 | **JWT** | Stateless authentication tokens |
-| **Privy** | Embedded wallet creation |
-| **Argon2** | Password hashing |
+| **Wallet Adapter** | Phantom/Solflare wallet connection |
 | **class-validator** | DTO validation |
 | **Helmet.js** | Security headers |
+| **HMAC-SHA256** | Email verification tokens |
 
 ### 3.3 Blockchain
 
 | Chain | Libraries |
 |-------|-----------|
-| **EVM** | ethers.js 6.x, viem |
-| **Solana** | @solana/web3.js |
-| **Sui** | @mysten/sui.js |
+| **Solana** | @solana/web3.js, @coral-xyz/anchor, @solana/wallet-adapter |
 
-### 3.4 Development Tools
+### 3.4 AI & Data
+
+| Technology | Purpose |
+|------------|---------|
+| **Qwen 9B** | LLM for autonomous agent predictions |
+| **HuggingFace API** | Inference endpoint for AI models |
+| **K-Means** | News clustering for competition generation |
+| **Brier Score** | Prediction accuracy evaluation |
+
+### 3.5 Development Tools
 
 | Tool | Purpose |
 |------|---------|
-| **Turborepo** | Monorepo build orchestration |
-| **PNPM** | Package management |
+| **Yarn** | Package management |
 | **Swagger** | API documentation |
-| **Foundry** | EVM contract testing |
-| **Anchor** | Solana development |
+| **Anchor CLI** | Solana development & testing |
 
 ---
 
@@ -219,71 +223,73 @@ sequenceDiagram
 
 ## 5. Project Structure
 
-### 4.1 Repository Layout
+### 5.1 Repository Layout
 
 ```
-exoduze/
-├── 📁 apps/                            # Application packages
-│   ├── 📁 api/                         # NestJS Backend API
-│   │   ├── 📁 src/
-│   │   │   ├── 📁 common/              # Shared utilities
-│   │   │   │   ├── 📁 filters/         # Exception filters
-│   │   │   │   ├── 📁 interceptors/    # Request interceptors
-│   │   │   │   ├── 📁 middleware/      # HTTP middleware
-│   │   │   │   └── 📁 utils/           # Helper functions
-│   │   │   ├── 📁 config/              # Environment validation
-│   │   │   ├── 📁 database/            # Supabase service
-│   │   │   └── 📁 modules/             # 12 Feature modules
-│   │   │       ├── 📁 admin/           # Admin dashboard
-│   │   │       ├── 📁 auth/            # Authentication
-│   │   │       ├── 📁 dashboard/       # Dashboard APIs
-│   │   │       ├── 📁 deposits/        # Deposit/withdrawal
-│   │   │       ├── 📁 markets/         # AI agent competitions
-│   │   │       ├── 📁 notifications/   # User notifications
-│   │   │       ├── 📁 orders/          # Order management
-│   │   │       ├── 📁 referrals/       # Referral system
-│   │   │       ├── 📁 security/        # Security services
-│   │   │       ├── 📁 settings/        # User settings
-│   │   │       ├── 📁 transactions/    # Transaction history
-│   │   │       └── 📁 users/           # User management
-│   │   └── 📁 supabase/
-│   │       └── 📁 migrations/          # 10 SQL migrations
-│   │
-│   └── 📁 web/                         # React Frontend
+my-project/
+├── 📁 app/                              # Next.js 16 Frontend
+│   └── 📁 src/
+│       ├── 📁 app/                      # App Router pages
+│       │   ├── layout.tsx               # Root layout + metadata
+│       │   ├── page.tsx                 # Main dashboard
+│       │   ├── globals.css              # Global stylesheet (~31KB)
+│       │   ├── 📁 category/[sector]/    # Dynamic sector routes
+│       │   ├── 📁 for-you/             # Personalized recommendations
+│       │   ├── 📁 latest/              # Latest competitions
+│       │   └── 📁 signals/             # Signal intelligence
+│       ├── 📁 components/               # 15 React components
+│       ├── 📁 hooks/                    # 7 Custom React hooks
+│       └── 📁 lib/                      # Supabase client, Solana, IDL
+│
+├── 📁 api/                              # NestJS Backend API
+│   ├── 📁 src/
+│   │   ├── 📁 common/                  # Cross-cutting concerns
+│   │   │   ├── 📁 decorators/          # Custom decorators
+│   │   │   ├── 📁 filters/             # Exception filters
+│   │   │   ├── 📁 guards/              # Auth/Rate guards
+│   │   │   ├── 📁 interceptors/        # Request interceptors
+│   │   │   └── 📁 middleware/           # HTTP middleware
+│   │   ├── 📁 config/                  # Environment validation
+│   │   ├── 📁 database/                # Supabase service
+│   │   └── 📁 modules/                 # 16 Feature modules
+│   │       ├── 📁 admin/               # Admin dashboard + RBAC
+│   │       ├── 📁 agents/              # AI Agent system (18 endpoints)
+│   │       ├── 📁 auth/                # JWT + Wallet auth
+│   │       ├── 📁 competitions/        # Competition lifecycle
+│   │       ├── 📁 dashboard/           # Dashboard APIs
+│   │       ├── 📁 deposits/            # Deposit/withdrawal
+│   │       ├── 📁 markets/             # Market data + ETL + signals
+│   │       ├── 📁 notifications/       # User notifications
+│   │       ├── 📁 orders/              # Order management
+│   │       ├── 📁 referrals/           # Referral system
+│   │       ├── 📁 security/            # Security services
+│   │       ├── 📁 settings/            # User settings
+│   │       ├── 📁 sports/              # Sports data ETL
+│   │       ├── 📁 transactions/        # Transaction history
+│   │       ├── 📁 users/               # User management
+│   │       └── 📁 wallet/              # Wallet operations
+│   └── 📁 supabase/
+│       └── 📁 migrations/              # 68 SQL migration files
+│
+├── 📁 programs/                         # Solana Smart Contract
+│   └── 📁 smart-contract/
 │       └── 📁 src/
-│           ├── 📁 app/
-│           │   ├── 📁 admin/           # Admin Dashboard (5 pages)
-│           │   ├── 📁 components/      # 85+ UI components
-│           │   ├── 📁 contexts/        # Global State Contexts
-│           │   ├── 📁 hooks/           # Custom React hooks
-│           │   ├── 📁 layouts/         # Page Layouts
-│           │   ├── 📁 pages/           # Application Views
-│           │   ├── 📁 schemas/         # Zod Validation Schemas
-│           │   └── 📁 utils/           # Helper functions
-│           ├── 📁 services/            # API clients
-│           └── 📁 styles/              # Global styles
+│           ├── lib.rs                   # Entry point (8 instructions)
+│           ├── instructions.rs          # Instruction module registry
+│           ├── state.rs                 # Account state definitions
+│           ├── error.rs                 # Custom error codes (18)
+│           ├── constants.rs             # Platform constants
+│           └── 📁 instructions/         # Individual handlers
+│               ├── initialize.rs        # Platform init + vault
+│               ├── create_market.rs     # Market creation
+│               ├── take_position.rs     # Position w/ bonding curve
+│               ├── deploy_agent.rs      # AI agent registration
+│               ├── register_agent_user.rs # Agent quota PDA
+│               ├── update_probabilities.rs # Oracle updates
+│               ├── settle_market.rs     # Market settlement
+│               └── claim_reward.rs      # Reward distribution
 │
-├── 📁 packages/                        # 13 Shared packages
-│   ├── 📁 application/                 # Use cases, services
-│   ├── 📁 caching/                     # Cache abstraction
-│   ├── 📁 config/                      # Shared configuration
-│   ├── 📁 contracts/                   # Contract ABIs
-│   ├── 📁 core/                        # Core utilities
-│   ├── 📁 domain/                      # DDD entities
-│   ├── 📁 events/                      # Domain events
-│   ├── 📁 infrastructure/              # Repository impl
-│   ├── 📁 messaging/                   # Message bus
-│   ├── 📁 shared/                      # Common types
-│   ├── 📁 testing/                     # Test utilities
-│   ├── 📁 ui/                          # Shared UI components
-│   └── 📁 web3/                        # Multi-chain adapters
-│
-├── 📁 contracts/                       # Smart contracts
-│   ├── 📁 evm/                         # Solidity (Foundry)
-│   ├── 📁 solana/                      # Anchor programs
-│   └── 📁 sui/                         # Move modules
-│
-└── 📁 documentation/                   # This documentation
+└── 📁 documentation/                    # Technical documentation (20 files)
 ```
 
 ### 4.2 Module Dependency Graph
@@ -336,18 +342,18 @@ graph LR
 
 ## 5. Frontend Architecture
 
-> **Note:** For detailed guidelines, patterns, and hook registries, refer to [Frontend-Architecture.md](./Frontend-Architecture.md).
+> **Detailed Guide:** [Frontend-Architecture.md](./Frontend-Architecture.md)
 
 ### 5.1 Architecture Overview
 
-The frontend is built on **React 19** and **Vite**, utilizing a "Polymarket++" design system. It prioritizes performance (anti-throttling) and security (anti-hack) through architectural choices.
+The frontend is built on **Next.js 16 App Router** with **Vanilla CSS** glassmorphic design. It uses Supabase Realtime for live data and Chart.js for probability curve visualization.
 
 | Feature | Implementation | Purpose |
 |---------|----------------|---------|
-| **Data Fetching** | TanStack Query v5 | Caching (30s staleTime), deduping, auto-retries |
-| **Validation** | Zod Schemas | Runtime API response validation (Soft Enforcement) |
-| **Routing** | React Router + Lazy Loading | Route-based code splitting for 12+ sport categories |
-| **State** | Context API + Query Cache | Minimal global state, maximum server state |
+| **Framework** | Next.js 16 App Router | SSR, dynamic routes, static export |
+| **Data Fetching** | Supabase Realtime + apiFetch | Live subscriptions + resilient HTTP client |
+| **Charts** | Chart.js + react-chartjs-2 | Real-time 3-outcome probability curves |
+| **State** | React Hooks + Supabase Channels | Per-component state with realtime sync |
 
 ### 5.2 Application Structure
 
@@ -403,18 +409,24 @@ colors: {
 
 | # | Module | Path | Endpoints | Global |
 |---|--------|------|-----------|--------|
-| 1 | Auth | `/auth` | 10 | No |
+| 1 | Auth | `/auth` | 12 | No |
 | 2 | Users | `/users` | 4 | No |
 | 3 | Dashboard | `/dashboard` | 2 | No |
-| 4 | Markets | `/markets` | 5 | No |
-| 5 | Orders | `/orders` | 4 | No |
-| 6 | Deposits | `/deposits` | 6 | No |
-| 7 | **Admin** | `/admin` | 10 | No |
-| 8 | **Security** | N/A | Guards | **Yes** |
-| 9 | **Notifications** | `/notifications` | 7 | No |
-| 10 | **Settings** | `/settings` | 9 | No |
-| 11 | **Referrals** | `/referrals` | 5 | No |
-| 12 | **Transactions** | `/transactions` | 4 | No |
+| 4 | Markets | `/markets` | 8 | No |
+| 5 | **Agents** | `/agents` | 18 | No |
+| 6 | **Competitions** | `/competitions` | 6 | No |
+| 7 | Orders | `/orders` | 4 | No |
+| 8 | Deposits | `/deposits` | 6 | No |
+| 9 | **Admin** | `/admin` | 10 | No |
+| 10 | **Security** | N/A | Guards | **Yes** |
+| 11 | **Notifications** | `/notifications` | 7 | No |
+| 12 | **Settings** | `/settings` | 9 | No |
+| 13 | **Referrals** | `/referrals` | 5 | No |
+| 14 | **Transactions** | `/transactions` | 4 | No |
+| 15 | **Sports** | `/sports` | 5 | No |
+| 16 | **Wallet** | `/wallet` | 3 | No |
+
+> **Detailed Guides:** [AI-Agent-System.md](./AI-Agent-System.md) | [Competition-System.md](./Competition-System.md)
 
 ### 6.2 Auth Module (900+ lines)
 
@@ -685,83 +697,79 @@ flowchart LR
 
 ## 9. Smart Contracts
 
+> **Detailed Guide:** [Smart-Contract-Architecture.md](./Smart-Contract-Architecture.md)
+
 ### 9.1 Contract Overview
 
-| Chain | Framework | Language | Path |
-|-------|-----------|----------|------|
-| Ethereum/Base | Foundry | Solidity 0.8.23 | `contracts/evm/` |
-| Solana | Anchor | Rust | `contracts/solana/` |
-| Sui | Move CLI | Move | `contracts/sui/` |
+| Chain | Framework | Language | Path | Program ID |
+|-------|-----------|----------|------|-----------|
+| **Solana** | Anchor 0.32.1 | Rust | `programs/smart-contract/` | `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` |
 
-### 9.2 EVM Contract Functions
+### 9.2 Instruction Set (8 Instructions)
 
-| Function | Access | Description |
-|----------|--------|-------------|
-| `createMarket()` | Public | Deploy AI agent competition |
-| `buyShares()` | Public | Purchase outcome shares |
-| `sellShares()` | Public | Sell outcome shares |
-| `resolveMarket()` | Oracle | Settle market |
-| `claimWinnings()` | Public | Claim winning payouts |
-| `setPlatformFee()` | Owner | Set fee (max 10%) |
+| # | Instruction | Access | Description |
+|---|-------------|--------|-------------|
+| 1 | `initialize_platform` | Admin | Initialize platform PDA + Value Creation Pool vault |
+| 2 | `create_market` | Admin | Create 3-way probability market with sector + bonding curve |
+| 3 | `take_position` | Public | Long/Short position with bonding curve pricing |
+| 4 | `register_agent_user` | Public | Create per-user AgentRegistry PDA (quota tracker) |
+| 5 | `deploy_agent` | Public | Register AI agent on-chain (checks quota) |
+| 6 | `update_probabilities` | Admin | Update market probabilities from Oracle/AI engine |
+| 7 | `settle_market` | Admin | Settle market with winning outcome |
+| 8 | `claim_reward` | Public | Claim rewards from Value Creation Pool (non-zero-sum) |
 
-### 9.3 Development Commands
+### 9.3 On-Chain Accounts (PDAs)
+
+| Account | Seeds | Purpose |
+|---------|-------|---------|
+| Platform | `["platform"]` | Global state singleton |
+| Vault | `["vault"]` | SOL vault for Value Creation Pool |
+| Market | `["market", index]` | Individual market state |
+| Position | `["position", trader, index]` | Trader's directional position |
+| Agent | `["agent", owner, index]` | AI agent registration |
+| AgentRegistry | `["agent_registry", user]` | Per-user deploy quota tracker |
+
+### 9.4 Development Commands
 
 ```bash
-# EVM (Foundry)
-cd contracts/evm
-forge build && forge test
+# Build
+anchor build
 
-# Solana (Anchor)
-cd contracts/solana
-anchor build && anchor test
+# Test
+anchor test
 
-# Sui (Move)
-cd contracts/sui
-sui move build && sui move test
+# Deploy to devnet
+anchor deploy --provider.cluster devnet
 ```
 
 ---
 
-## 10. Shared Packages
+## 10. Documentation Index
 
-### 10.1 Package Registry
+### 10.1 Architecture Guides
 
-| Package | Path | Purpose | Dependencies |
-|---------|------|---------|--------------|
-| `@exoduze/domain` | `packages/domain/` | DDD entities, aggregates | None |
-| `@exoduze/application` | `packages/application/` | Use cases, services | domain |
-| `@exoduze/infrastructure` | `packages/infrastructure/` | Repository implementations | domain, application |
-| `@exoduze/web3` | `packages/web3/` | Multi-chain wallet adapters | ethers, solana |
-| `@exoduze/core` | `packages/core/` | Utilities, constants | None |
-| `@exoduze/shared` | `packages/shared/` | Common types | None |
-| `@exoduze/ui` | `packages/ui/` | Shared React components | react |
-| `@exoduze/events` | `packages/events/` | Domain events | None |
-| `@exoduze/messaging` | `packages/messaging/` | Message bus | events |
-| `@exoduze/caching` | `packages/caching/` | Cache abstraction | None |
-| `@exoduze/config` | `packages/config/` | Shared configuration | None |
-| `@exoduze/contracts` | `packages/contracts/` | Contract ABIs | None |
-| `@exoduze/testing` | `packages/testing/` | Test utilities | None |
+| Document | Path | Description |
+|----------|------|-------------|
+| **Master Doc** | [Doc.md](./Doc.md) | This document — enterprise architecture overview |
+| **Smart Contract** | [Smart-Contract-Architecture.md](./Smart-Contract-Architecture.md) | Anchor/Rust program: 8 instructions, PDA architecture, bonding curve |
+| **Competition System** | [Competition-System.md](./Competition-System.md) | Competition lifecycle, clustering engine, curve system, Brier scoring |
+| **AI Agent System** | [AI-Agent-System.md](./AI-Agent-System.md) | Agent deployment, forecasting, AgentRunner, wagering, leaderboard |
+| **Frontend** | [Frontend-Architecture.md](./Frontend-Architecture.md) | Next.js 16 App Router, hooks, components, design system |
+| **Security** | [Security-Architecture.md](./Security-Architecture.md) | Defense-in-depth, JWT fingerprinting, RLS, anti-throttling |
+| **Real-Time Data** | [Real-Time-Data-Architecture.md](./Real-Time-Data-Architecture.md) | ETL pipelines, RabbitMQ, WebSocket gateways |
+| **Deployment** | [Deployment-Guide.md](./Deployment-Guide.md) | Vercel, Render, Solana Devnet deployment |
 
-### 10.2 Domain Package Structure
+### 10.2 Feature Guides
 
-```
-packages/domain/src/
-├── common/
-│   ├── aggregate-root.ts
-│   ├── entity.ts
-│   ├── value-object.ts
-│   └── domain-event.ts
-├── market/
-│   ├── market.aggregate.ts
-│   ├── outcome.entity.ts
-│   └── market.events.ts
-├── user/
-│   ├── user.aggregate.ts
-│   └── wallet-address.value-object.ts
-└── order/
-    ├── order.entity.ts
-    └── order.events.ts
-```
+| Document | Path | Description |
+|----------|------|-------------|
+| **Market System** | [Market-System-Architecture.md](./Market-System-Architecture.md) | Hybrid database model, ETL orchestrator |
+| **AI Recommendations** | [AI-Recommendations-System.md](./AI-Recommendations-System.md) | K-Means clustering, hotness scoring |
+| **Wallet Auth** | [Wallet-Authentication-System.md](./Wallet-Authentication-System.md) | Challenge-response, multi-wallet linking |
+| **RabbitMQ** | [RabbitMQ-Integration.md](./RabbitMQ-Integration.md) | Message broker architecture |
+| **Admin Panel** | [Admin-Features.md](./Admin-Features.md) | Admin dashboard, Socket.IO |
+| **API Integration** | [API-Integration.md](./API-Integration.md) | Sports data API documentation |
+| **Guidelines** | [Guidelines.md](./Guidelines.md) | Development standards & best practices |
 
 ---
 
@@ -833,8 +841,8 @@ packages/domain/src/
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | ✅ | Admin API key |
 | `JWT_SECRET` | ✅ | ✅ | JWT signing secret |
 | `JWT_REFRESH_SECRET` | ✅ | ✅ | Refresh token secret |
-| `PRIVY_APP_ID` | ✅ | ✅ | Privy application ID |
-| `PRIVY_APP_SECRET` | ✅ | ✅ | Privy API secret |
+| `HUGGINGFACE_API_KEY` | ✅ | ✅ | HuggingFace Inference API |
+| `PROGRAM_ID` | ✅ | ❌ | Solana program ID |
 | `CORS_ORIGINS` | ✅ | ❌ | Allowed origins |
 | `RATE_LIMIT_MAX` | ❌ | ❌ | General rate limit |
 
@@ -842,13 +850,13 @@ packages/domain/src/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_API_URL` | ❌ | Auto-detect | Backend API URL (with `/api/v1`) |
-| `VITE_WS_URL` | ❌ | Derived | WebSocket server URL |
-| `VITE_SUPABASE_URL` | ✅ | - | Supabase URL |
-| `VITE_SUPABASE_ANON_KEY` | ✅ | - | Public API key |
-| `VITE_PRIVY_APP_ID` | ✅ | - | Privy app ID |
+| `NEXT_PUBLIC_API_URL` | ✅ | - | Backend API URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | - | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | - | Supabase anonymous key |
+| `NEXT_PUBLIC_SOLANA_RPC` | ✅ | - | Solana RPC endpoint |
+| `NEXT_PUBLIC_PROGRAM_ID` | ✅ | - | Smart contract program ID |
 
-> **Note:** The frontend uses a centralized configuration module (`src/config/index.ts`) that auto-detects production environment. When deployed to a non-localhost domain, it automatically uses the production API. See [Frontend-Configuration.md](./Frontend-Configuration.md) for details.
+> **Note:** See [Deployment-Guide.md](./Deployment-Guide.md) for full deployment instructions.
 
 ### 12.2 Production URLs
 
@@ -899,6 +907,7 @@ packages/domain/src/
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0.0 | May 3, 2026 | Major rewrite: Next.js 16, Solana-only, 16 modules, 8 instructions, AI agents |
 | 2.1.0 | Jan 16, 2026 | Added production API configuration, centralized frontend config |
 | 2.0.0 | Jan 8, 2026 | Added 6 backend modules, admin dashboard |
 | 1.1.0 | Jan 7, 2026 | Initial documentation |
