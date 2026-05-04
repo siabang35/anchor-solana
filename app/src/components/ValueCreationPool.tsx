@@ -3,9 +3,9 @@
 import React from 'react';
 import { useCompetitions } from '@/hooks/useCompetitions';
 
-export default function ValueCreationPool() {
-    // Fetch all active/upcoming competitions to aggregate global metrics
-    const { competitions, loading } = useCompetitions('all');
+export default function ValueCreationPool({ sector = 'all' }: { sector?: string }) {
+    // Fetch all active/upcoming competitions to aggregate metrics for the pool
+    const { competitions, loading } = useCompetitions(sector);
 
     // Aggregate values across all markets
     // Added small base values so it doesn't look empty if there are few markets
@@ -30,7 +30,9 @@ export default function ValueCreationPool() {
     return (
         <div className="glass-card card-body animate-in">
             <div className="section-header">
-                <h3 className="section-title"><span className="icon">🏦</span> Value Creation Pool</h3>
+                <h3 className="section-title">
+                    <span className="icon">🏦</span> {sector && sector !== 'all' && sector !== 'top' ? `${sector.charAt(0).toUpperCase() + sector.slice(1)} Value Pool` : 'Value Creation Pool'}
+                </h3>
             </div>
 
             {loading ? (

@@ -20,6 +20,7 @@ const ValueCreationPool = dynamic(() => import('@/components/ValueCreationPool')
 const Performance = dynamic(() => import('@/components/Performance'), { ssr: false });
 const Leaderboard = dynamic(() => import('@/components/Leaderboard'), { ssr: false });
 const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), { ssr: false });
+const GlobalPoolWinners = dynamic(() => import('@/components/GlobalPoolWinners'), { ssr: false });
 
 function HomeInner() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -153,11 +154,16 @@ function HomeInner() {
           <DeployAgent initialCategory={activeSector} />
         </div>
 
-        {/* Value Pool + Performance + Leaderboard */}
+        {/* Global Pool & Champions + Value Pool + Leaderboard */}
         <div className="grid-3">
           <ValueCreationPool />
-          <Performance />
+          <GlobalPoolWinners limit={4} />
           <Leaderboard />
+        </div>
+
+        {/* Performance Analytics */}
+        <div style={{ marginTop: '0.75rem' }}>
+          <Performance />
         </div>
       </main>
     </>

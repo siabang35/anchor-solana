@@ -82,4 +82,14 @@ pub mod exoduze {
     pub fn claim_reward(ctx: Context<ClaimReward>) -> Result<()> {
         instructions::claim_reward::handler(ctx)
     }
+
+    /// Stake SOL into a competition's prize pool (anti-whale protected)
+    pub fn stake_pool(ctx: Context<StakePool>, amount: u64) -> Result<()> {
+        instructions::stake_pool::stake_pool_handler(ctx, amount)
+    }
+
+    /// Claim prize from a settled competition pool
+    pub fn claim_pool_prize(ctx: Context<ClaimPoolPrize>) -> Result<()> {
+        instructions::claim_pool_prize::claim_pool_prize_handler(ctx)
+    }
 }

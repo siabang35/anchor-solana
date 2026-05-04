@@ -19,7 +19,12 @@ interface LeaderboardEntry {
     deployed_at?: string;
 }
 
-export default function Leaderboard() {
+interface Props {
+    sector?: string;
+    limit?: number;
+}
+
+export default function Leaderboard({ sector = 'all', limit = 10 }: Props = {}) {
     const [players, setPlayers] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRealtime, setIsRealtime] = useState(false);
@@ -28,7 +33,10 @@ export default function Leaderboard() {
     useEffect(() => {
         const fetchLeaderboard = async () => {
             try {
-                const data = await apiFetch<any>('/agents/leaderboard?limit=10');
+                const url = sector && sector !== 'all' && sector !== 'top'
+                    ? `/agents/leaderboard?sector=${sector}&limit=${limit}`
+                    : `/agents/leaderboard?limit=${limit}`;
+                const data = await apiFetch<any>(url);
                 setPlayers(Array.isArray(data) ? data : (data?.entries || []));
             } catch (err) {
                 console.error('Failed to load leaderboard', err);
@@ -123,7 +131,9 @@ export default function Leaderboard() {
     return (
         <div className="glass-card card-body animate-in">
             <div className="section-header">
-                <h3 className="section-title"><span className="icon">🏆</span> Live Leaderboard</h3>
+                <h3 className="section-title">
+                    <span className="icon">🏆</span> {sector && sector !== 'all' && sector !== 'top' ? `${sector.charAt(0).toUpperCase() + sector.slice(1)} Leaderboard` : 'Live Leaderboard'}
+                </h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span style={{
                         fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px', borderRadius: '9999px',

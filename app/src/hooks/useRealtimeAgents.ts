@@ -48,6 +48,14 @@ export interface ForecasterAgent {
         title?: string;
         sector?: string;
     }>;
+    pool_stakes?: Array<{
+        stake_amount: number;
+        onchain_tx: string | null;
+    }>;
+    pool_winners?: Array<{
+        prize_amount: number;
+        disburse_tx: string | null;
+    }>;
 }
 
 export interface AgentQuota {

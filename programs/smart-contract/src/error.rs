@@ -44,4 +44,8 @@ pub enum ExoduzeError {
     AmountTooLarge,
     #[msg("Maximum positions per market reached (fairness limit)")]
     TooManyPositions,
+    #[msg("Pool is already settled")]
+    PoolAlreadySettled,
+    #[msg("Pool has not been settled yet")]
+    PoolNotSettled,
 }

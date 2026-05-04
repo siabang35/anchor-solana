@@ -17,11 +17,12 @@
  * IMPORTANT: This is the ONLY service that creates competitions.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SupabaseService } from '../../../database/supabase.service.js';
 import { CompetitionManagerService, HORIZON_TIERS, getRefreshConfig, type HorizonTier } from './competition-manager.service.js';
 import { computeTfIdf, kMeansClustering } from '../../../common/utils/clustering.util.js';
+import { PoolService } from '../../pool/pool.service.js';
 
 /** How many unique competitions to maintain PER CATEGORY (one per horizon tier) */
 const TARGET_COMPETITIONS_PER_CATEGORY = 4;
@@ -70,6 +71,7 @@ export class RealtimeCompetitionSeederService {
     constructor(
         private readonly supabaseService: SupabaseService,
         private readonly compManager: CompetitionManagerService,
+        @Optional() private readonly poolService?: PoolService,
     ) {}
 
     async onModuleInit() {
@@ -630,18 +632,49 @@ export class RealtimeCompetitionSeederService {
             const supabase = this.supabaseService.getAdminClient();
             const { data: expired, error } = await supabase
                 .from('competitions')
-                .select('id, title, sector, time_horizon')
+                .select('id, title, sector, time_horizon, outcomes')
                 .eq('status', 'active')
                 .lt('competition_end', new Date().toISOString());
 
             if (error || !expired || expired.length === 0) return;
 
             for (const comp of expired) {
+                // Determine a random winning outcome if available
+                let winningOutcome = 0;
+                if (comp.outcomes && Array.isArray(comp.outcomes) && comp.outcomes.length > 0) {
+                    winningOutcome = Math.floor(Math.random() * comp.outcomes.length);
+                }
+
                 await supabase
                     .from('competitions')
-                    .update({ status: 'settled' })
+                    .update({ status: 'settled', winning_outcome: winningOutcome })
                     .eq('id', comp.id);
+                    
+                // Automatically settle the pool, determine winners, disburse prizes on-chain
+                try {
+                    if (this.poolService) {
+                        // Use PoolService which handles DB settlement + on-chain disbursement
+                        await this.poolService.settlePool(comp.id, 'system_cron');
+                        this.logger.log(`🏆 Pool settled + prizes disbursed on-chain for ${comp.id} (${comp.title})`);
+                    } else {
+                        // Fallback: DB-only settlement
+                        const { error: settleErr } = await supabase.rpc('settle_competition_pool', {
+                            p_competition_id: comp.id,
+                            p_settled_by: 'system_cron'
+                        });
+                        if (settleErr) {
+                            this.logger.error(`Failed to settle pool for ${comp.id}: ${settleErr.message}`);
+                        } else {
+                            this.logger.log(`Pool DB-settled for expired competition ${comp.id}`);
+                        }
+                    }
+                } catch (e: any) {
+                    this.logger.error(`Exception settling pool for ${comp.id}: ${e.message}`);
+                }
             }
+            
+            // Refresh global leaderboard after automatic settlements
+            try { await supabase.rpc('refresh_global_leaderboard'); } catch (e) {}
 
             await supabase
                 .from('competitions')

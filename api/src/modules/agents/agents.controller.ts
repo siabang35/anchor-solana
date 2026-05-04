@@ -114,7 +114,7 @@ export class AgentsController {
     @Post('wager')
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({ summary: 'Create a wager on your agent (50% refund on loss)' })
-    async createWager(@Body() body: { agent_id: string; competition_id: string; wager_amount: number }, @Req() req: any) {
+    async createWager(@Body() body: { agent_id: string; competition_id: string; wager_amount: number, onchain_tx?: string }, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.createWager(userId, body);
     }
@@ -144,10 +144,12 @@ export class AgentsController {
     @ApiOperation({ summary: 'Get agent competition leaderboard (ranked by weighted score)' })
     async getLeaderboard(
         @Query('competition_id') competitionId?: string,
+        @Query('sector') sector?: string,
         @Query('limit') limit?: string,
     ) {
         return this.agentsService.getLeaderboard(
             competitionId,
+            sector,
             limit ? parseInt(limit, 10) : 20,
         );
     }

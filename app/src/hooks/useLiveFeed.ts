@@ -105,35 +105,32 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
         try {
             // Try backend API first
             const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
-            const url = isCategoryValid
-                ? `${API_BASE_URL}/markets/feed?category=${category}&limit=${limit}`
-                : `${API_BASE_URL}/markets/feed?limit=${limit}`;
+            const path = isCategoryValid
+                ? `/markets/feed?category=${category}&limit=${limit}`
+                : `/markets/feed?limit=${limit}`;
 
-            const res = await fetch(url, {
-                headers: { 'Content-Type': 'application/json' },
-            });
-
-            if (res.ok) {
-                const responseData = await res.json();
+            const responseData = await apiFetch<any>(path);
+            
+            if (responseData) {
                 const itemsList = Array.isArray(responseData) ? responseData : (responseData?.items || responseData?.data || []);
                 const items = itemsList.map(mapToFeedItem);
                 
-                setFeeds(items);
-                setLoading(false);
-                return;
+                if (items.length > 0) {
+                    setFeeds(items);
+                    setLoading(false);
+                    return;
+                }
             }
-        } catch {
-            // Backend API failed, fallback to Supabase
+        } catch (err: any) {
+            console.warn('Backend API failed for live feed:', err.message);
         }
 
-        // Fallback: fetch directly from Supabase
+        // Fallback: fetch directly from Supabase market_data_items
         try {
             const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('market_data_items')
-                .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags')
-                .eq('is_active', true)
-                .eq('is_duplicate', false);
+                .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags');
 
             if (isCategoryValid) {
                 query = query.eq('category', category);
@@ -143,10 +140,47 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 .order('published_at', { ascending: false })
                 .limit(limit);
 
-            if (sbError) throw sbError;
+            if (!sbError && data && data.length > 0) {
+                const items = data.map(mapToFeedItem);
+                setFeeds(items);
+                setLoading(false);
+                return;
+            }
+        } catch {
+            // Supabase query failed
+        }
 
-            const items = (data || []).map(mapToFeedItem);
-            setFeeds(items);
+        // Fallback 2: Use competitions as feed items
+        try {
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
+            let query = supabase
+                .from('competitions')
+                .select('id, title, description, sector, status, created_at');
+
+            if (isCategoryValid) {
+                query = query.eq('sector', category);
+            }
+
+            const { data: comps } = await query
+                .order('created_at', { ascending: false })
+                .limit(limit);
+
+            if (comps && comps.length > 0) {
+                const items: LiveFeedItem[] = comps.map((c: any) => ({
+                    id: c.id,
+                    source: 'ExoDuZe',
+                    icon: '🎯',
+                    text: c.title || c.description || 'Competition',
+                    impact: 'high' as const,
+                    timestamp: new Date(c.created_at).getTime(),
+                    sentiment: 0,
+                    entity: c.sector || 'General',
+                    category: c.sector,
+                    tags: ['competition', c.status],
+                    url: '',
+                }));
+                setFeeds(items);
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to load live feed');
         } finally {

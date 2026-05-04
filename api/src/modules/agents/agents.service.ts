@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, UnauthorizedException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../database/supabase.service.js';
 import { AgentRunnerService } from './services/agent-runner.service.js';
+import { PoolService } from '../pool/pool.service.js';
 import {
     DeployAgentDto,
     DeployForecastingAgentDto,
@@ -11,6 +12,7 @@ import {
 } from './dto/index.js';
 
 const MAX_FREE_DEPLOYS = 7;
+const DEFAULT_AUTO_STAKE = 0.15; // SOL — default stake per agent deploy
 
 // Anchor program constants (must match programs/my-project/src/constants.rs)
 const PROGRAM_ID = '56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7';
@@ -26,6 +28,7 @@ export class AgentsService {
         private readonly supabaseService: SupabaseService,
         private readonly configService: ConfigService,
         private readonly agentRunnerService: AgentRunnerService,
+        @Optional() private readonly poolService: PoolService,
     ) {}
 
     private async resolveUserId(identifier: string): Promise<string | null> {
@@ -231,6 +234,20 @@ export class AgentsService {
             }));
             
             await supabase.from('agent_competition_entries').insert(entries);
+
+            // ═══ AUTO-STAKE: Create pool_stake with real Solana devnet TX for EACH competition ═══
+            if (this.poolService) {
+                for (const compId of competitionIds) {
+                    try {
+                        const result = await this.poolService.autoStakeWithDevnetTx(
+                            compId, userId, agent.id, DEFAULT_AUTO_STAKE,
+                        );
+                        this.logger.log(`🎰 Auto-stake for agent ${agent.id} in comp ${compId}: TX=${result.onchainTx?.slice(0, 20) || 'pending'}`);
+                    } catch (stakeErr: any) {
+                        this.logger.warn(`Auto-stake failed for comp ${compId} (non-blocking): ${stakeErr.message}`);
+                    }
+                }
+            }
         }
 
         this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
@@ -258,7 +275,7 @@ export class AgentsService {
 
         let query = supabase
             .from('agents')
-            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector))', { count: 'exact' })
+            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx), pool_winners(prize_amount, disburse_tx)', { count: 'exact' })
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -592,13 +609,15 @@ export class AgentsService {
         agent_id: string;
         competition_id: string;
         wager_amount: number;
+        onchain_tx?: string;
     }): Promise<any> {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getClient();
+        const adminSupabase = this.supabaseService.getAdminClient();
 
-        // Verify agent belongs to user
-        const { data: agent } = await supabase
+        // Verify agent belongs to user using admin client to bypass RLS since users use wallet authentication
+        const { data: agent } = await adminSupabase
             .from('agents')
             .select('id')
             .eq('id', data.agent_id)
@@ -610,7 +629,7 @@ export class AgentsService {
         }
 
         // Create wager record
-        const { data: wager, error } = await supabase
+        const { data: wager, error } = await adminSupabase
             .from('agent_wagers')
             .insert({
                 agent_id: data.agent_id,
@@ -628,15 +647,46 @@ export class AgentsService {
             throw new BadRequestException(`Failed to create wager: ${error.message}`);
         }
 
+        // ═══ Also add to competition pool_stakes for prize pool tracking ═══
+        try {
+            // Ensure competition pool exists (auto-created by trigger, but be safe)
+            const { data: pool } = await adminSupabase
+                .from('competition_pools')
+                .select('id')
+                .eq('competition_id', data.competition_id)
+                .single();
+
+            if (pool) {
+                await adminSupabase
+                    .from('pool_stakes')
+                    .insert({
+                        pool_id: pool.id,
+                        competition_id: data.competition_id,
+                        user_id: userId,
+                        agent_id: data.agent_id,
+                        stake_amount: data.wager_amount,
+                        onchain_tx: data.onchain_tx || null,
+                        status: 'active',
+                    })
+                    .select('id')
+                    .single();
+
+                this.logger.log(`Pool stake synced: ${data.wager_amount} SOL → pool ${pool.id}`);
+            }
+        } catch (poolErr: any) {
+            // Non-blocking: wager still works even if pool insert fails
+            this.logger.warn(`Pool stake sync failed (non-blocking): ${poolErr.message}`);
+        }
+
         this.logger.log(`Wager created: ${wager.id} — ${data.wager_amount} SOL on agent ${data.agent_id}`);
         return wager;
     }
 
     /**
-     * Get agent leaderboard for a competition — ranked by weighted_score (lower = better).
+     * Get agent leaderboard for a competition or sector — ranked by weighted_score (lower = better).
      * Falls back to raw brier_score for agents without weighted scores.
      */
-    async getLeaderboard(competitionId?: string, limit: number = 20): Promise<any[]> {
+    async getLeaderboard(competitionId?: string, sector?: string, limit: number = 20): Promise<any[]> {
         const supabase = this.supabaseService.getAdminClient();
 
         // If competition_id provided, use the DB function for weighted ranking
@@ -665,14 +715,23 @@ export class AgentsService {
         }
 
         // Fallback: global leaderboard or no weighted scores yet
+        let selectStr = '*, agents(id, name, user_id, model)';
+        if (sector && sector !== 'all' && sector !== 'top') {
+            selectStr += ', competitions!inner(sector)';
+        }
+
         let query = supabase
             .from('agent_competition_entries')
-            .select('*, agents(id, name, user_id, model)')
+            .select(selectStr)
             .order('weighted_score', { ascending: true, nullsFirst: false })
             .limit(limit);
 
         if (competitionId) {
             query = query.eq('competition_id', competitionId);
+        }
+        
+        if (sector && sector !== 'all' && sector !== 'top') {
+            query = query.eq('competitions.sector', sector);
         }
 
         const { data, error } = await query;

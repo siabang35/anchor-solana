@@ -465,8 +465,67 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                 </div>
                                             </div>
                                         )}
+                                        {agent.pool_stakes && agent.pool_stakes.length > 0 && agent.pool_stakes[0].onchain_tx && (
+                                            <div style={{
+                                                background: 'rgba(20,241,149,0.05)', border: '1px solid rgba(20,241,149,0.2)',
+                                                borderRadius: '8px', padding: '0.5rem', marginBottom: '0.75rem',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                                            }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                    <span style={{ fontSize: '0.55rem', color: '#14f195', textTransform: 'uppercase', fontWeight: 700 }}>
+                                                        🔗 On-Chain Stake
+                                                    </span>
+                                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                                                        {agent.pool_stakes[0].stake_amount} SOL Staked
+                                                    </span>
+                                                </div>
+                                                <a 
+                                                    href={`https://solscan.io/tx/${agent.pool_stakes[0].onchain_tx}?cluster=devnet`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{
+                                                        fontSize: '0.65rem', color: '#14f195', textDecoration: 'none',
+                                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                                        padding: '4px 8px', background: 'rgba(20,241,149,0.1)', borderRadius: '4px'
+                                                    }}
+                                                >
+                                                    View Stake ↗
+                                                </a>
+                                            </div>
+                                        )}
 
-
+                                        {/* On-Chain Disbursed Prize */}
+                                        {agent.pool_winners && agent.pool_winners.length > 0 && agent.pool_winners[0].disburse_tx && (
+                                            <div className="animate-in" style={{
+                                                background: 'linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
+                                                border: '1px solid rgba(251,191,36,0.3)',
+                                                borderRadius: '8px', padding: '0.6rem', marginBottom: '0.75rem',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                boxShadow: '0 2px 10px rgba(251,191,36,0.1)'
+                                            }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                    <span style={{ fontSize: '0.55rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                        <span>🏆</span> Prize Won & Settled
+                                                    </span>
+                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                        +{Number(agent.pool_winners[0].prize_amount).toFixed(4)} SOL
+                                                    </span>
+                                                </div>
+                                                <a 
+                                                    href={`https://solscan.io/tx/${agent.pool_winners[0].disburse_tx}?cluster=devnet`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{
+                                                        fontSize: '0.65rem', color: '#f59e0b', textDecoration: 'none',
+                                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                                        padding: '5px 10px', background: 'rgba(251,191,36,0.15)', borderRadius: '6px',
+                                                        fontWeight: 600, transition: 'all 0.2s', border: '1px solid rgba(251,191,36,0.2)'
+                                                    }}
+                                                >
+                                                    View Payout TX ↗
+                                                </a>
+                                            </div>
+                                        )}
 
                                         {/* Performance / History */}
                                         <div style={{ marginBottom: '0.8rem' }}>

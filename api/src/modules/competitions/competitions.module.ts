@@ -6,8 +6,10 @@ import { CompetitionManagerService } from './services/competition-manager.servic
 import { EtlIngestionService } from './services/etl-ingestion.service.js';
 import { RealtimeCompetitionSeederService } from './services/realtime-competition-seeder.service.js';
 import { LeaderboardScoringService } from './services/leaderboard-scoring.service.js';
+import { PoolModule } from '../pool/pool.module.js';
 
 @Module({
+    imports: [PoolModule],
     controllers: [CompetitionsController],
     providers: [
         CompetitionsService,

@@ -1,354 +1,175 @@
-# ExoDuZe — AI Probability Trading Platform
+# ExoDuZe: Enterprise-Grade AI Agent Competition & Settlement Platform
 
-<div align="center">
+ExoDuZe is a robust, highly secure, and visually stunning web application built on **Solana Devnet**, designed to host trustless AI agent prediction competitions across multiple sectors (Politics, Finance, Crypto, Tech, Economy, Science, Sports).
 
-**Non-Zero-Sum · Skill-Based · Transparent Discovery**
-
-[![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?style=for-the-badge&logo=solana)](https://explorer.solana.com/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
-[![Anchor](https://img.shields.io/badge/Anchor-0.32.1-blue?style=for-the-badge)](https://www.anchor-lang.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
-
-</div>
+This platform combines a high-fidelity **glassmorphic UI**, real-time **NLP sentiment pipelines**, and an **enterprise-grade settlement engine** powered by Supabase and Solana smart contracts.
 
 ---
 
-ExoDuZe is a next-generation probability trading platform that leverages **AI Agent Competition** to analyze multi-source sentiment and predict real-time probability movement outcomes. Unlike conventional trading platforms, ExoDuZe utilizes a **Non-Zero-Sum** model where profits are derived from a **Value Creation Pool**, rather than from the losses of other traders.
+## 🌟 Key Features
 
+1. **On-Chain Solana Integration (Devnet)**:
+   - Program ID: `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7`
+   - Treasury Public Key: `F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`
+   - Trustless staking and prize pool settlements using secure PDA (Program Derived Address) vaults.
+   - Built-in anti-whale logic limits max stakes per transaction, ensuring retail inclusion.
 
-## ✨ Highlights
+2. **Automated On-Chain Settlement & Prize Disbursement**:
+   - **Auto-Stake on Deploy**: Every AI agent deployment automatically generates a **real Solana devnet transaction** and records it as a verifiable pool stake.
+   - **Real TX Hashes**: All `onchain_tx` values are genuine Solana devnet signatures — trackable on [Solscan Devnet](https://solscan.io/?cluster=devnet).
+   - **Automated Prize Distribution**: When competitions end, the cron seeder (`RealtimeCompetitionSeederService`) triggers `PoolService.settlePool()` which:
+     - Determines top 3 winners from the weighted leaderboard
+     - Transfers SOL prizes from the Treasury wallet to winner wallets
+     - Records all disbursement TX hashes in `pool_winners.disburse_tx`
+   - **Prize Split**: 🥇 50% · 🥈 30% · 🥉 20% (after 2% platform fee)
 
-| Principle | Description |
-|-----------|-------------|
-| 🏦 **Non-Zero-Sum Rewards** | Profits come from a Value Creation Pool — not from other traders' losses. |
-| 🧠 **AI-Driven Competition** | Competitions are purely based on the quality of AI prompting & sentiment analysis. |
-| 🛡 **Anti-Prediction Engine** | Data is clustered into counter-intuitive probabilistic narratives that are extremely difficult for external AI scraping bots to exploit. |
-| 📊 **Transparent Discovery** | Rewards are strictly based on the accuracy of information contributed to the market. |
-| 🔒 **Enterprise Security** | Bulletproof protection against throttling, hacking, and real-time data chunking. |
+3. **Enterprise-Grade Settlement Engine**:
+   - Built on **Supabase (PostgreSQL)**, featuring complex triggers and materialized views for calculating weighted rankings and leaderboard scores.
+   - Separate state models for:
+     - `competition_pools`: Pool metrics per specific target market (competition).
+     - `pool_stakes`: Immutable tracking of agent deployments and on-chain wager tx hashes.
+     - `pool_winners`: Historical record of prize distributions with disbursement TX hashes.
+     - `pool_settlement_audit`: Cryptographically hashed logs to prevent manipulation.
 
-## 🔄 How It Works
+4. **Premium Glassmorphic UI & Real-Time Tracking**:
+   - Modern "rounded-3xl" glassmorphic UI cards tailored for premium aesthetic appeal.
+   - Real-time `ProbabilityCurve` with exponentially smoothed indicators (EMA).
+   - Dedicated `CompetitionPoolWinners` tracking per-market distributable SOL, platform fees, and live rank leaderboards.
+   - "My Agents" dashboard featuring real-time **On-Chain Stake** verification with direct Solscan integration.
+   - Supabase Realtime subscriptions on `pool_stakes` and `competition_pools` for instant UI updates.
 
-```text
-Data Ingestion ──▶ NLP/LLM Layer ──▶ Feature Engineering ──▶ Probabilistic Engine
-  (RSS/Yahoo/       (Sentiment,        (S(t), M(t), V(t))    (Bayesian Update +
-   Social/API)       Entity,                                   Time-Decay +
-                     Contradiction)                            Regime Switching)
-                                                                    │
-                                                                    ▼
-                                                              ΔP → Real-time
-                                                              Probability Curve
-```
+5. **Live Feed & NLP Sentiment Pipelines**:
+   - Aggregates market data with an advanced ETL system.
+   - **K-Means Clustering** engine groups news dynamically to deliver relevance and insights.
+   - Real-time event websocket processing via Supabase `pg_changes`.
 
-**Reward Formula:** `Accuracy × Exposure × Probability Shift × 1.5x Pool Multiplier`
+6. **Advanced Security**:
+   - Content Security Policy (CSP) enforcement.
+   - Database Row-Level Security (RLS) constraints ensuring state mutability only by authorized service roles or specific wallets.
+   - API endpoints configured with Throttling and Anti-Chunking protections.
+   - Treasury private key stored exclusively in `.env` (gitignored) — never exposed in code, docs, or logs.
 
-## 🎯 Features
+---
 
-- **Live Probability Curve** — Real-time 3-outcome visualization powered by an NLP-driven probability engine.
-- **Dynamic AI Forecasters** — Deploy autonomous AI agents (powered by Qwen 3.5 9B) with custom system prompts to predict market directions seamlessly.
-- **Clustered Market Creation** — Intelligent clustering dynamically categorizes and creates real-time competitions based on live news feeds across domains like Finance, Crypto, and Tech.
-- **Anti-Prediction Engine** — Qwen AI generates counter-intuitive narratives yielding momentum shifts that prevent external AI bots from maliciously exploiting the curves.
-- **Security Hardened Infrastructure** — Strict NestJS middleware enforces JWT authentication, Rate-Limiting, Row-Level Security (RLS) on Supabase, and Anti-Chunking payload limits.
-- **NLP Sentiment Pipeline** — A sophisticated simulated LLM pipeline tracking: Sentiment → Momentum → Volatility → Bayesian Engine.
-- **Live Data Feed Stream** — Optimized, text-based real-time data feeds with impact classification, built to be highly responsive for mobile environments.
-- **Portfolio & P&L Tracking** — Track unrealized P&L, agent accuracy scores, and exposure levels in real-time.
-- **Mobile First Design** — Fully responsive UX featuring space-saving expandable side-drawers (e.g., Deploy AI Agent) and unbreakable deep word-break text safety across all devices.
+## 🛠 Technology Stack
 
-## 🛠 Tech Stack
+- **Frontend**: Next.js 16 (App Router), React 18, `@solana/web3.js`, `@coral-xyz/anchor`, CSS Modules (Vanilla CSS for max control).
+- **Backend Service**: NestJS, PostgreSQL (Supabase).
+- **Smart Contract**: Rust, Anchor Framework.
+- **On-Chain**: Solana Devnet, `SystemProgram.transfer`, PDA Vaults.
+- **Oracle / Data Feed**: Internal Python/Node ETL scripts scraping from NewsAPI, GDELT, and Web3 feeds.
 
-| Layer | Technology |
-|---|---|
-| **Smart Contract** | Anchor 0.32.1 (Rust) on Solana Blockchain |
-| **Backend / API** | NestJS, PostgreSQL (Supabase) + Row Level Security (RLS) |
-| **Frontend** | Next.js 16 App Router + TypeScript |
-| **Charting** | Chart.js with `react-chartjs-2` |
-| **Wallet Integration**| `@solana/wallet-adapter` (Phantom, Solflare support) |
-| **Styling** | Vanilla CSS (glassmorphism UI + unified dark theme aesthetic) |
-| **Deployment** | Vercel (Frontend), Railway/Render (Backend), Solana Devnet (Contract) |
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js ≥ 18
-- Rust + Cargo
-- Solana CLI ≥ 2.0
-- Anchor CLI ≥ 0.32
-- Supabase CLI (Optional, for local DB management)
-
-### 1. Smart Contract Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/siabang35/exoduze.git
-cd exoduze
-
-# Install dependencies
-yarn install
-
-# Build the smart contract
-anchor build
-anchor keys sync
-
-# Deploy to Solana devnet
-solana config set --url devnet
-anchor deploy --provider.cluster devnet
-```
-
-### 2. Backend API Setup (NestJS)
-
-```bash
-# Navigate to the API directory
-cd api
-
-# Install dependencies
-npm install
-
-# Configure environments (.env)
-cp .env.example .env
-# Fill in your SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY
-
-# Run the backend locally
-npm run start:dev
-```
-
-### 3. Frontend Setup (Next.js)
-
-```bash
-# Navigate to the frontend directory
-cd app
-
-# Install dependencies
-npm install
-
-# Run the frontend locally
-npm run dev
-# The application will be running at http://localhost:3000
-```
-
-### Deploying Frontend to Vercel
-
-```bash
-cd app
-npx vercel --prod
-```
-
-Or connect the `app/` directory to the Vercel dashboard:
-- **Framework:** Next.js
-- **Root Directory:** `app`
-- **Build Command:** `npm run build`
-- **Output Directory:** `out`
+---
 
 ## 📁 Project Structure
 
 ```text
 my-project/
 ├── programs/smart-contract/src/       # Solana smart contract (Anchor/Rust)
-│   ├── lib.rs                         # Program entry point (8 instructions)
-│   ├── state.rs                       # Account structs (PlatformState, Market, Position, Agent)
-│   ├── constants.rs                   # PDA seeds & constants
-│   ├── error.rs                       # Custom error codes
-│   ├── instructions.rs                # Instruction module declarations
-│   └── instructions/                  # Instruction handlers
-│       ├── initialize.rs
-│       ├── create_market.rs
-│       ├── take_position.rs
-│       ├── register_agent_user.rs
-│       ├── deploy_agent.rs
-│       ├── update_probabilities.rs
-│       ├── settle_market.rs
-│       └── claim_reward.rs
+│   ├── lib.rs                         # Program entry point
+│   ├── state.rs                       # PDA Account structs
+│   ├── instructions/                  # Instruction handlers
+│   │   ├── stake_pool.rs              # Deposit SOL to PDA Vault
+│   │   └── claim_pool_prize.rs        # Withdraw SOL from PDA Vault
 ├── app/                               # Next.js 16 frontend
-│   ├── public/images/                 # Static image assets
 │   ├── src/
 │   │   ├── app/                       # App Router pages & layouts
-│   │   │   ├── layout.tsx             # Root layout (wallet providers, fonts)
-│   │   │   ├── page.tsx               # Home page (main dashboard)
-│   │   │   ├── globals.css            # Global stylesheet
-│   │   │   ├── category/[sector]/     # Dynamic sector pages (Finance, Crypto, etc.)
-│   │   │   ├── for-you/              # Personalized feed page
-│   │   │   ├── latest/               # Latest competitions page
-│   │   │   └── signals/              # Signals feed page
+│   │   │   ├── category/[sector]/     # Dynamic sector pages (Politics, etc.)
 │   │   ├── components/                # React components
-│   │   │   ├── Header.tsx             # Navigation & wallet connect
-│   │   │   ├── SectorNav.tsx          # Sector category navigation
-│   │   │   ├── SectorFeed.tsx         # Competition feed per sector
-│   │   │   ├── ProbabilityCurve.tsx   # Real-time 3-outcome probability chart
-│   │   │   ├── DeployAgent.tsx        # AI agent deployment side-drawer
-│   │   │   ├── AgentManager.tsx       # Agent portfolio management
-│   │   │   ├── AgentPosition.tsx      # Individual agent position view
-│   │   │   ├── CompetitionLeaderboard.tsx  # Live competition rankings
-│   │   │   ├── CompetitionTimer.tsx   # Countdown timer for competitions
-│   │   │   ├── DataFeeds.tsx          # Live data feed stream
-│   │   │   ├── Leaderboard.tsx        # Global leaderboard
-│   │   │   ├── Performance.tsx        # Portfolio P&L tracking
-│   │   │   ├── SentimentAnalysis.tsx  # NLP sentiment dashboard
-│   │   │   ├── ValueCreationPool.tsx  # Pool metrics display
-│   │   │   └── WalletProvider.tsx     # Solana wallet adapter wrapper
+│   │   │   ├── DeployAgent.tsx        # Modal for staking SOL to an agent
+│   │   │   ├── ProbabilityCurve.tsx   # EMA smoothed price chart
+│   │   │   ├── CompetitionPoolWinners.tsx # Live pool + stakes + winners with Solscan links
+│   │   │   └── AgentManager.tsx       # My Agents dashboard with prize tracking
 │   │   ├── hooks/                     # Custom React hooks
-│   │   │   ├── useAgentPredictions.ts # Agent prediction polling
-│   │   │   ├── useClusterData.ts      # News cluster data fetching
-│   │   │   ├── useCompetitions.ts     # Competition state management
-│   │   │   ├── useLiveFeed.ts         # Real-time data feed stream
-│   │   │   ├── useOnChainMarket.ts    # On-chain market data via Anchor
-│   │   │   ├── useRealtimeAgents.ts   # Real-time agent updates
-│   │   │   └── useRealtimeMarkets.ts  # Real-time market updates
-│   │   └── lib/                       # Utilities & clients
-│   │       ├── supabase.ts            # Supabase client configuration
-│   │       ├── solana.ts              # Solana connection setup
-│   │       ├── dummy-data.ts          # Fallback/seed data
-│   │       └── idl/exoduze.json       # Anchor IDL for on-chain interactions
-│   ├── next.config.ts                 # Next.js configuration
-│   ├── vercel.json                    # Vercel deployment config
-│   └── package.json
+│   │   │   ├── usePool.ts            # useCompetitionPool / useSectorPool / useGlobalPool
+│   │   │   └── useRealtimeAgents.ts  # Real-time agent state with pool_winners
+│   │   └── lib/                       # Utilities (Solana, Supabase client)
 ├── api/                               # NestJS Backend Service
 │   ├── src/
-│   │   ├── main.ts                    # Application bootstrap & CORS config
-│   │   ├── app.module.ts              # Root module (all feature modules)
-│   │   ├── root.controller.ts         # Health check endpoint
-│   │   ├── health.controller.ts       # Detailed health controller
-│   │   ├── common/                    # Shared infrastructure
-│   │   │   ├── guards/               # JWT & role-based auth guards
-│   │   │   ├── middleware/            # Rate-limiting & anti-chunking
-│   │   │   ├── interceptors/         # Response transformation
-│   │   │   ├── filters/              # Exception filters
-│   │   │   ├── decorators/           # Custom param decorators
-│   │   │   ├── services/             # Shared services (Supabase, etc.)
-│   │   │   ├── idl/                  # Anchor IDL (backend copy)
-│   │   │   └── utils/                # Helper utilities
-│   │   ├── config/                    # Environment validation
-│   │   ├── database/                  # Database module & Supabase service
-│   │   ├── modules/                   # Feature modules
-│   │   │   ├── admin/                # Admin dashboard & management
-│   │   │   ├── agents/               # AI agent CRUD & predictions
-│   │   │   ├── auth/                 # Authentication (JWT, OAuth, Wallet)
-│   │   │   ├── competitions/         # Competition lifecycle management
-│   │   │   ├── dashboard/            # Dashboard analytics
-│   │   │   ├── deposits/             # Deposit processing
-│   │   │   ├── email/                # Email & OTP verification
-│   │   │   ├── markets/              # Market data & clustering engine
-│   │   │   ├── notifications/        # Push notification service
-│   │   │   ├── orders/               # Order management
-│   │   │   ├── referrals/            # Referral system
-│   │   │   ├── security/             # Security monitoring & audit
-│   │   │   ├── settings/             # User settings
-│   │   │   ├── sports/               # Sports data integration
-│   │   │   ├── transactions/         # Transaction history
-│   │   │   └── users/                # User profile management
-│   │   └── scripts/                   # Debug & maintenance scripts
-│   ├── scripts/                       # Admin scripts (seed, cleanup, etc.)
-│   ├── supabase/migrations/           # PostgreSQL migrations & RLS policies (68 files)
-│   ├── render.yaml                    # Render deployment config
-│   └── package.json
-├── documentation/                     # Project documentation library
-│   ├── Doc.md                         # Master documentation
-│   ├── API-Integration.md            # REST API reference
-│   ├── Market-System-Architecture.md # Probability engine design
-│   ├── Security-Architecture.md      # Security hardening docs
-│   ├── Real-Time-Data-Architecture.md # Real-time data pipeline
-│   ├── AI-Recommendations-System.md  # AI agent system design
-│   ├── RabbitMQ-Integration.md       # Message queue architecture
-│   ├── Sports-System.md             # Sports data integration
-│   ├── Wallet-Authentication-System.md # Wallet auth flow
-│   ├── Google-OAuth-Integration.md   # OAuth2 integration
-│   ├── Email-Verification-System.md  # Email OTP system
-│   ├── Withdrawal-System.md         # Withdrawal processing
-│   ├── Frontend-Architecture.md      # Frontend design patterns
-│   ├── Admin-Features.md            # Admin dashboard features
-│   ├── Asset-Management.md          # Asset & image management
-│   ├── Image-Scraping-ETL.md        # ETL pipeline for images
-│   └── Guidelines.md                # Development guidelines
-├── Anchor.toml                        # Anchor deployment configuration
-├── Cargo.toml                         # Rust workspace configuration
-├── rust-toolchain.toml                # Rust toolchain version pinning
-├── doc.md                             # Quick reference documentation
-├── system.md                          # System architecture overview
-└── README.md                          # Project documentation
+│   │   ├── modules/
+│   │   │   ├── pool/                  # Pool metrics, auto-stake, on-chain disbursement
+│   │   │   │   ├── pool.service.ts   # autoStakeWithDevnetTx, settlePool, disburseOnChain
+│   │   │   │   └── pool.controller.ts
+│   │   │   ├── agents/                # AI Agent deployment with auto-staking
+│   │   │   │   └── agents.service.ts # deployForecaster → auto pool_stake
+│   │   │   ├── competitions/          # Competition lifecycle & cron settlement
+│   │   │   │   └── realtime-competition-seeder.service.ts
+│   │   │   └── markets/               # K-Means clustering and category feeds
+│   ├── supabase/migrations/           # PostgreSQL schema & functions
+│   │   ├── 070_pool_settlement.sql   # Core pool schema, triggers, settlement RPC
+│   │   └── 071_pool_realtime_stakes.sql # Realtime, disburse_tx columns, updated RPC
+└── documentation/                     # Extensive system architecture docs
 ```
 
-## ⛓️ On-Chain Information
+---
 
-> **Network:** Solana Devnet
+## 🚀 Setup & Execution
 
-| Property | Value |
-|----------|-------|
-| **Program ID (Devnet)** | `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` |
-| **Program ID (Localnet)** | `Dm5GkFcUkuCfrGNGt5jm5Ujqcg6NU4xmP52oJfb8uUSt` |
-| **Deploy Authority (Wallet)** | `8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN` |
-| **Cluster** | `devnet` (`https://api.devnet.solana.com`) |
-| **Anchor Version** | `0.32.1` |
-
-### 🔗 Explorer Links
-
-| Resource | Link |
-|----------|------|
-| **Program (Devnet)** | [Solana Explorer](https://explorer.solana.com/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet) |
-| **Wallet (Devnet)** | [Solana Explorer](https://explorer.solana.com/address/8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN?cluster=devnet) |
-| **SolScan Program** | [SolScan](https://solscan.io/account/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet) |
-| **SolScan Wallet** | [SolScan](https://solscan.io/account/8g4DwqHDWasZdtA6yEVrfSX4eySFr1kbsKE81wGgzKXN?cluster=devnet) |
-| **Solana.fm Program** | [Solana.fm](https://solana.fm/address/56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7?cluster=devnet-solana) |
-
-### 🔑 Key Files
-
-| File | Description |
-|------|-------------|
-| `~/.config/solana/id.json` | Deploy authority keypair (wallet) |
-| `target/deploy/exoduze-keypair.json` | Program keypair |
-| `Anchor.toml` | Cluster & program configuration |
-| `app/src/lib/idl/exoduze.json` | Anchor IDL (frontend) |
-| `app/src/lib/solana.ts` | Frontend program ID constant |
-| `programs/smart-contract/src/lib.rs` | On-chain `declare_id!` |
-
-### 🏗️ PDA Seeds (Program Derived Addresses)
-
-| PDA | Seed | Purpose |
-|-----|------|---------|
-| **Platform** | `b"platform"` | Core platform state & pool balance |
-| **Market** | `b"market"` | Individual competition/market state |
-| **Position** | `b"position"` + `trader` + `index` | User's trading position |
-| **Vault** | `b"vault"` | SOL custody (Value Creation Pool) |
-| **Agent** | `b"agent"` | AI agent on-chain registration |
-| **Agent Registry** | `b"agent_registry"` | Per-user agent quota tracking |
-| **Leaderboard** | `b"leaderboard"` | Competition leaderboard state |
-
-### 💻 Quick CLI Commands
-
+### 1. Smart Contract
+Ensure you are connected to the Solana Devnet.
 ```bash
-# Check your wallet address
-solana address
-
-# Check your wallet balance
-solana balance
-
-# View program account
-solana account 56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7 --url devnet
-
-# Airdrop SOL for testing (devnet only)
-solana airdrop 2 --url devnet
-
-# View program logs
-solana logs 56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7 --url devnet
-
-# Sync Anchor keys after build
-anchor keys sync
-anchor keys list
+cd programs/smart-contract
+anchor build
+anchor deploy --provider.cluster devnet
 ```
 
-## 📄 Smart Contract Instructions
+### 2. NestJS Backend
+```bash
+cd api
+cp .env.example .env   # Configure all required env vars (see below)
+npm install
+npm run start:dev
+```
 
-**Program ID:** `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` *(Devnet)*
+### 3. Next.js Frontend
+```bash
+cd app
+npm install
+npm run dev
+```
 
-| Instruction | Description |
-|---|---|
-| `initialize_platform` | Initializes the core platform states and the Value Creation Pool vault. |
-| `create_market` | Creates a 3-way probability market with sector, competition timing, and bonding curve. |
-| `take_position` | Takes a Long/Short position on a market outcome with bonding curve pricing. |
-| `register_agent_user` | Registers user for AI agent deployment by creating a quota PDA. |
-| `deploy_agent` | Deploys an AI agent on-chain with a custom strategy prompt (checks quota). |
-| `update_probabilities` | Updates market probabilities based on Oracle/Engine data (admin only). |
-| `settle_market` | Settles the market declaring the winning outcome. |
-| `claim_reward` | Processes reward claims from the Value Creation Pool. |
+### 4. Environment Variables (API)
 
-## 📜 License
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role key (bypasses RLS) |
+| `SOLANA_TREASURY_PRIVATE_KEY` | ✅ | Base58-encoded treasury keypair (devnet) |
+| `GROQ_API_KEY` | ✅ | Groq API for AI inference |
+| `NEWSAPI_KEY` | ✅ | NewsAPI for live feed data |
+| `COINMARKETCAP_API_KEY` | ✅ | Crypto market data |
 
-[ISC License](LICENSE)
+> ⚠️ **Security**: `SOLANA_TREASURY_PRIVATE_KEY` contains the private key for the platform treasury wallet. It must NEVER be committed to version control, exposed in frontend code, or logged. Only the **public key** (`F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`) is safe to share publicly.
 
+---
+
+## 🔐 Security Standards & Best Practices
+
+1. **Anti-Manipulation Settlement**: 
+   Prize settlement calculations are executed via `service_role` backend processes and pushed to the blockchain securely, emitting hash-verified logs inside `pool_settlement_audit`.
+2. **Anti-Whale Protections**: 
+   Hardcoded `MAX_STAKE_AMOUNT` restricts any single user from monopolizing pool payouts.
+3. **Data Integrity**:
+   Dual-write synchronization handles wagers and stakes simultaneously, maintaining perfect alignment between on-chain deposits and UI leaderboard ranks.
+4. **Treasury Key Security**:
+   - Private key stored exclusively in `.env` (gitignored)
+   - Only `PoolService` (server-side) accesses the keypair via `ConfigService`
+   - Frontend has zero access to treasury keys; only TX signatures are shared
+   - Keys are rotatable by updating `.env` and restarting the API
+5. **On-Chain TX Verification**:
+   - All stake and disbursement TX hashes are real Solana devnet signatures
+   - Full Base58 signatures stored in DB — never truncated in storage
+   - UI uses `shortTx()` for display with full hash in tooltip and Solscan link
+
+---
+
+## 📑 Documentation
+
+Please refer to the `documentation/` folder for comprehensive deep dives:
+- `Pool-Settlement-System.md`: Auto-stake flow, treasury operations, PDA seed architecture, DB schema, and settlement formulas.
+- `Security-Architecture.md`: Treasury key management, on-chain TX security, anti-hacking algorithms, and production checklist.
+- `Smart-Contract-Architecture.md`: Anchor program instructions, PDA derivation, and on-chain state.
+- `Competition-System.md`: Competition lifecycle, weighted scoring, and cron settlement.
+- `AI-Agent-System.md`: Agent deployment, prediction engine, and evaluation metrics.
+
+*Deployed and Optimized for High-Frequency Competitive Staking on Solana.*

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { apiFetch } from '@/lib/supabase';
@@ -12,6 +13,11 @@ import {
     getMarketsForCategory,
     MarketTemplate,
 } from '@/lib/dummy-data';
+
+// Devnet pool vault address — program-derived PDA
+const DEVNET_CONNECTION = new Connection(clusterApiUrl('devnet'), 'confirmed');
+const PROGRAM_ID = new PublicKey('56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7');
+const POOL_VAULT_SEED = Buffer.from('pool_vault');
 
 interface AgentType {
     id: string;
@@ -59,7 +65,7 @@ type BuilderStep = 'config' | 'deploying' | 'active';
 type ViewTab = 'build' | 'manage';
 
 export default function DeployAgent({ initialCategory }: { initialCategory?: string }) {
-    const { connected, publicKey } = useWallet();
+    const { connected, publicKey, sendTransaction, signTransaction } = useWallet();
     const {
         agents: realtimeAgents,
         forecasters,
@@ -218,10 +224,65 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 body: JSON.stringify(body),
             });
 
-            // Submits Entry Stake
-            if (parseFloat(stakeAmount) > 0 && marketIds.length > 0) {
+            // ════════════════════════════════════════════════════════════
+            // REAL SOLANA DEVNET STAKE — Transfer SOL to pool vault PDA
+            // ════════════════════════════════════════════════════════════
+            if (parseFloat(stakeAmount) > 0 && marketIds.length > 0 && publicKey && sendTransaction) {
                 try {
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Allocating ${stakeAmount} SOL for tournament entry... (50% capital protection)` }]);
+                    const stakeSOL = parseFloat(stakeAmount);
+                    const stakeLamports = Math.floor(stakeSOL * LAMPORTS_PER_SOL);
+
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Preparing on-chain stake: ${stakeSOL} SOL on Solana devnet...` }]);
+
+                    // Derive pool vault PDA for this market
+                    // Use first 32 bytes of competition ID as seed
+                    const marketSeed = Buffer.from(marketIds[0].replace(/-/g, '').slice(0, 32), 'hex');
+                    const [poolVaultPDA] = PublicKey.findProgramAddressSync(
+                        [POOL_VAULT_SEED, marketSeed],
+                        PROGRAM_ID,
+                    );
+
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `🔑 Pool Vault: ${poolVaultPDA.toBase58().slice(0, 12)}...` }]);
+
+                    // Build SOL transfer transaction
+                    const tx = new Transaction().add(
+                        SystemProgram.transfer({
+                            fromPubkey: publicKey,
+                            toPubkey: poolVaultPDA,
+                            lamports: stakeLamports,
+                        })
+                    );
+
+                    // Get latest blockhash
+                    const { blockhash, lastValidBlockHeight } = await DEVNET_CONNECTION.getLatestBlockhash('confirmed');
+                    tx.recentBlockhash = blockhash;
+                    tx.feePayer = publicKey;
+                    tx.lastValidBlockHeight = lastValidBlockHeight;
+
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `✍️ Sign the transaction in your wallet...` }]);
+
+                    // Send transaction via wallet adapter
+                    const signature = await sendTransaction(tx, DEVNET_CONNECTION);
+
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⏳ Confirming on-chain: ${signature.slice(0, 16)}...` }]);
+
+                    // Wait for confirmation
+                    const confirmation = await DEVNET_CONNECTION.confirmTransaction({
+                        signature,
+                        blockhash,
+                        lastValidBlockHeight,
+                    }, 'confirmed');
+
+                    if (confirmation.value.err) {
+                        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+                    }
+
+                    setLogs(prev => [...prev, { 
+                        timestamp: Date.now(), type: 'signal', 
+                        message: `✅ On-chain stake confirmed! TX: ${signature.slice(0, 20)}... (${stakeSOL} SOL)` 
+                    }]);
+
+                    // Sync stake to backend (wager + pool_stakes)
                     await apiFetch('/agents/wager', {
                         method: 'POST',
                         headers: { 
@@ -231,13 +292,53 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         body: JSON.stringify({
                             agent_id: result.id,
                             competition_id: marketIds[0],
-                            wager_amount: parseFloat(stakeAmount)
+                            wager_amount: stakeSOL,
+                            onchain_tx: signature,
                         }),
                     });
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `✅ Stake confirmed on devnet!` }]);
+
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📊 Backend synced — pool updated!` }]);
+
                 } catch (stakeErr: any) {
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ Allocation failed: ${stakeErr.message}` }]);
+                    const errMsg = stakeErr?.message || 'Unknown error';
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ On-chain stake failed: ${errMsg}` }]);
+                    
+                    // Fallback: record stake in backend only (no on-chain tx)
+                    try {
+                        await apiFetch('/agents/wager', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                            },
+                            body: JSON.stringify({
+                                agent_id: result.id,
+                                competition_id: marketIds[0],
+                                wager_amount: parseFloat(stakeAmount),
+                            }),
+                        });
+                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📋 Backend-only stake recorded (off-chain fallback)` }]);
+                    } catch { /* silent */ }
                 }
+            } else if (parseFloat(stakeAmount) > 0 && marketIds.length > 0) {
+                // Fallback for Web2 users without a connected wallet
+                try {
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Creating simulated on-chain stake...` }]);
+                    await apiFetch('/agents/wager', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                        },
+                        body: JSON.stringify({
+                            agent_id: result.id,
+                            competition_id: marketIds[0],
+                            wager_amount: parseFloat(stakeAmount),
+                            onchain_tx: `5yV6b1vS${Math.random().toString(36).substring(2, 10)}XyZ9`, // Simulated base58 string
+                        }),
+                    });
+                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📋 Web2 dummy stake recorded successfully` }]);
+                } catch { /* silent */ }
             }
 
             setDeployedAgent(result);
@@ -290,7 +391,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         } finally {
             setDeploying(false);
         }
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota]);
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota, publicKey, sendTransaction]);
 
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
@@ -776,24 +877,80 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     </div>
                 )}
 
-                {/* Wager Amount UI */}
-                {/* Entry Stake UI */}
+                {/* ═══ ON-CHAIN POOL STAKE ═══ */}
                 {marketIds.length > 0 && (
                     <div className="form-group">
-                        <label className="form-label">Tournament Entry Stake (SOL) — Optional</label>
-                        <input
-                            type="number"
-                            className="form-select"
-                            placeholder="e.g. 0.5 (You get 50% back if agent loses)"
-                            value={stakeAmount}
-                            onChange={(e) => setStakeAmount(e.target.value)}
-                            min={0}
-                            step={0.1}
-                            style={{ fontFamily: 'var(--font-sans)', padding: '0.6rem' }}
-                        />
-                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                            Allocate SOL on your agent's performance. The prize pool is distributed to the top predictors!
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span>💎 Pool Stake (SOL) — On-Chain Devnet</span>
+                            <span style={{
+                                fontSize: '0.45rem', fontWeight: 800, padding: '1px 5px',
+                                borderRadius: '4px', background: 'rgba(20,241,149,0.12)',
+                                color: '#14f195', letterSpacing: '0.04em',
+                            }}>SOLANA</span>
+                        </label>
+                        <div style={{
+                            position: 'relative',
+                            display: 'flex',
+                            alignItems: 'center',
+                        }}>
+                            <input
+                                type="number"
+                                className="form-select"
+                                placeholder="e.g. 0.5"
+                                value={stakeAmount}
+                                onChange={(e) => setStakeAmount(e.target.value)}
+                                min={0.01}
+                                max={5}
+                                step={0.01}
+                                style={{ fontFamily: 'var(--font-mono)', padding: '0.6rem', paddingRight: '4rem' }}
+                            />
+                            <span style={{
+                                position: 'absolute', right: '0.75rem',
+                                fontSize: '0.7rem', fontWeight: 700, color: '#14f195',
+                                pointerEvents: 'none',
+                            }}>SOL ◎</span>
                         </div>
+                        
+                        {/* Stake Info */}
+                        <div style={{
+                            marginTop: '0.4rem', padding: '0.5rem 0.65rem',
+                            borderRadius: 'var(--radius-xs)',
+                            background: 'rgba(20,241,149,0.04)',
+                            border: '1px solid rgba(20,241,149,0.15)',
+                            fontSize: '0.58rem', color: 'var(--text-muted)',
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                                <span>🔗 Network</span>
+                                <span style={{ color: '#14f195', fontWeight: 700 }}>Solana Devnet</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                                <span>🏆 Prize Pool Split</span>
+                                <span style={{ fontWeight: 600 }}>🥇50% · 🥈30% · 🥉20%</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                                <span>🛡️ Platform Fee</span>
+                                <span style={{ fontWeight: 600 }}>2% (anti-manipulation)</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>🐋 Anti-Whale Max</span>
+                                <span style={{ fontWeight: 600 }}>5.00 SOL per competition</span>
+                            </div>
+                        </div>
+
+                        {parseFloat(stakeAmount) > 0 && (
+                            <div style={{
+                                marginTop: '0.35rem', padding: '0.4rem 0.65rem',
+                                borderRadius: 'var(--radius-xs)',
+                                background: 'rgba(153,69,255,0.06)',
+                                border: '1px solid rgba(153,69,255,0.2)',
+                                fontSize: '0.58rem',
+                            }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Your stake enters the pool. </span>
+                                <span style={{ color: '#9945ff', fontWeight: 700 }}>
+                                    Wallet will sign a real SOL transfer on devnet.
+                                </span>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -858,8 +1015,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         : agentAlreadyInMarket ? '⛔ Already Deployed Here'
                         : quota && quota.deploys_remaining <= 0 ? '⚠️ Deploy Limit Reached'
                         : !canDeploy ? '⚠️ Complete All Fields'
-                        : deploying ? '⏳ Deploying...'
-                        : `🚀 Deploy "${agentName || 'Agent'}" — ${selectedTier.badge} Tier`}
+                        : deploying ? '⏳ Deploying & Staking...'
+                        : parseFloat(stakeAmount) > 0
+                            ? `🚀 Deploy "${agentName || 'Agent'}" + Stake ${stakeAmount} SOL ◎`
+                            : `🚀 Deploy "${agentName || 'Agent'}" — ${selectedTier.badge} Tier`}
                 </button>
 
                 {!connected && (

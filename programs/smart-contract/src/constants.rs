@@ -6,6 +6,8 @@ pub const AGENT_SEED: &[u8] = b"agent";
 pub const LEADERBOARD_SEED: &[u8] = b"leaderboard";
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const AGENT_REGISTRY_SEED: &[u8] = b"agent_registry";
+pub const POOL_SEED: &[u8] = b"competition_pool";
+pub const POOL_VAULT_SEED: &[u8] = b"pool_vault";
 
 // Platform Constants
 pub const MAX_TITLE_LENGTH: usize = 64;

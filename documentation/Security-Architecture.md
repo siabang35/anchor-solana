@@ -115,3 +115,61 @@ A dedicated `SecurityEventService` logs high-risk actions (e.g., failed login at
 
 ### 6.2 Safe Logger
 The middleware logger (`LoggerMiddleware`) includes safeguards to prevent crashing on `null`/`undefined` bodies and automatically masks sensitive fields (password, token, secret) before writing to stdout.
+
+---
+
+## 7. Treasury Key Management & On-Chain Security
+
+### 7.1 Treasury Keypair Handling
+
+The platform uses a **Solana Devnet Treasury Keypair** for automated on-chain operations (stake registration, prize disbursement). Security best practices are strictly enforced:
+
+| Rule | Implementation |
+|------|----------------|
+| **Storage** | Private key stored ONLY in API `.env` file |
+| **Git Protection** | `.env` is listed in `.gitignore` — never committed to VCS |
+| **Documentation** | Only the **public key** is documented; private key is NEVER referenced |
+| **Access** | Only `PoolService` (backend, server-side) can access the keypair via `ConfigService` |
+| **Frontend Isolation** | Frontend code has ZERO access to treasury keys; only TX signatures are shared |
+| **Rotation** | Keys can be rotated by updating `.env` and restarting the API service |
+
+> ⚠️ **Critical Rule**: The `SOLANA_TREASURY_PRIVATE_KEY` environment variable must NEVER appear in:
+> - README, documentation, or code comments
+> - Frontend bundles or client-side code
+> - API response payloads or log output
+> - Git history or CI/CD pipeline logs
+
+### 7.2 On-Chain Transaction Security
+
+| Mechanism | Description |
+|-----------|-------------|
+| **Self-Transfer Pattern** | Auto-stakes use treasury self-transfers (tiny lamport amounts) to generate verifiable TXs without moving funds to unknown addresses |
+| **Confirmed Commitment** | All TXs use `'confirmed'` commitment level before recording signatures |
+| **Signature Integrity** | Full Base58 TX signatures are stored in DB — never truncated in storage |
+| **UI Truncation** | Display-only truncation (`shortTx()`) with full hash in `title` attribute and `href` |
+| **Fallback Chain** | Treasury TX → Devnet Airdrop → `null` (graceful degradation) |
+
+### 7.3 Prize Disbursement Security
+
+| Control | Description |
+|---------|-------------|
+| **Server-Side Only** | Disbursement triggered exclusively by `RealtimeCompetitionSeederService` (cron) |
+| **Double-Spend Prevention** | Pool status transitions `pending → settling → settled` with PostgreSQL row-level locking |
+| **Audit Trail** | Every disbursement TX is recorded in `pool_winners.disburse_tx` and `pool_settlement_audit` |
+| **Wallet Resolution** | Winner wallets resolved from authenticated user profiles — never from client input |
+| **Amount Validation** | Prize amounts calculated server-side from `distributable_pool × share_bps / 10000` |
+
+---
+
+## 8. Environment Variable Security Checklist
+
+Before deploying to production, verify:
+
+- [ ] `SOLANA_TREASURY_PRIVATE_KEY` is set and the wallet is funded
+- [ ] `.env` is in `.gitignore` and NOT committed
+- [ ] `NODE_ENV=production` (disables debug logging of sensitive data)
+- [ ] `COOKIE_SECURE=true` (HTTPS only)
+- [ ] `CORS_ORIGINS` contains only production domains
+- [ ] All API keys and secrets are unique, strong, and rotated periodically
+- [ ] Database uses connection pooler (port 6543) for production
+

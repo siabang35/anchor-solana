@@ -17,6 +17,7 @@ import { SportsModule } from './modules/sports/sports.module.js';
 import { EmailModule } from './modules/email/email.module.js';
 import { AgentsModule } from './modules/agents/agents.module.js';
 import { CompetitionsModule } from './modules/competitions/competitions.module.js';
+import { PoolModule } from './modules/pool/pool.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthController } from './health.controller.js';
 import { RootController } from './root.controller.js';
@@ -63,6 +64,7 @@ import { AuditLogInterceptor } from './common/interceptors/index.js';
         EmailModule,
         AgentsModule,
         CompetitionsModule,
+        PoolModule,
 
         // Scheduling
         ScheduleModule.forRoot(),

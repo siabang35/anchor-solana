@@ -11,6 +11,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useAgentPredictions } from '@/hooks/useAgentPredictions';
 import { apiFetch } from '@/lib/supabase';
+import CompetitionPoolWinners from '@/components/CompetitionPoolWinners';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
@@ -20,6 +21,9 @@ const CompetitionLeaderboard = dynamic(() => import('@/components/CompetitionLea
 const DataFeeds = dynamic(() => import('@/components/DataFeeds'), { ssr: false });
 const DeployAgent = dynamic(() => import('@/components/DeployAgent'), { ssr: false });
 const SentimentAnalysis = dynamic(() => import('@/components/SentimentAnalysis'), { ssr: false });
+const ValueCreationPool = dynamic(() => import('@/components/ValueCreationPool'), { ssr: false });
+const Leaderboard = dynamic(() => import('@/components/Leaderboard'), { ssr: false });
+const CategoryPoolWinners = dynamic(() => import('@/components/CategoryPoolWinners'), { ssr: false });
 
 // ── Allowed sectors (anti-injection allowlist) ──────────────────
 const VALID_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'] as const;
@@ -596,6 +600,21 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                 <div className="grid-2">
                     <SentimentAnalysis />
                     <DeployAgent initialCategory={sector} />
+                </div>
+
+                {/* Target Market Pool & Top 3 Winners */}
+                <div className="grid-2" style={{ marginTop: '0.75rem' }}>
+                    {activeComp ? (
+                        <CompetitionPoolWinners competitionId={activeComp.id} sector={sector} />
+                    ) : (
+                        <CategoryPoolWinners sector={sector} />
+                    )}
+                    <Leaderboard sector={sector} limit={3} />
+                </div>
+
+                {/* Value Creation Pool */}
+                <div style={{ marginTop: '0.75rem' }}>
+                    <ValueCreationPool sector={sector} />
                 </div>
             </main>
         </>

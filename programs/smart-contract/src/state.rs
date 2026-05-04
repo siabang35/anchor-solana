@@ -131,3 +131,38 @@ pub struct LeaderboardEntry {
     pub bump: u8,
 }
 
+/// Competition Pool — on-chain prize pool for a market
+/// Aggregates stakes from participants, distributes to winners after settlement
+#[account]
+#[derive(InitSpace)]
+pub struct CompetitionPool {
+    pub authority: Pubkey,
+    pub market: Pubkey,
+    pub total_staked: u64,
+    pub platform_fee: u64,
+    pub distributable_pool: u64,
+    pub stake_count: u64,
+    pub claims_count: u64,
+    pub max_stake_per_user: u64,
+    pub is_settled: bool,
+    pub settled_at: Option<i64>,
+    pub bump: u8,
+}
+
+impl Default for CompetitionPool {
+    fn default() -> Self {
+        Self {
+            authority: Pubkey::default(),
+            market: Pubkey::default(),
+            total_staked: 0,
+            platform_fee: 0,
+            distributable_pool: 0,
+            stake_count: 0,
+            claims_count: 0,
+            max_stake_per_user: 10_000_000_000, // 10 SOL max default
+            is_settled: false,
+            settled_at: None,
+            bump: 0,
+        }
+    }
+}
