@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase, API_BASE_URL } from '@/lib/supabase';
+import { supabase, API_BASE_URL, apiFetch } from '@/lib/supabase';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface LiveFeedItem {
