@@ -12,7 +12,7 @@ import {
     ApiResponse,
     ApiBearerAuth,
 } from '@nestjs/swagger';
-import { Request } from 'express';
+// Adapter-agnostic: no Express types needed
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { ReferralsService } from './referrals.service.js';
 import {

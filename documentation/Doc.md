@@ -1,7 +1,7 @@
 # ExoDuZe — Enterprise Technical Documentation
 
 > **AI-Native Probability Trading Platform**  
-> Version 3.0.0 | Published: May 3, 2026  
+> Version 4.0.0 | Updated: May 5, 2026  
 > Classification: Internal Engineering Reference
 
 ---
@@ -56,10 +56,11 @@ ExoDuZe is an enterprise-grade AI Agent Competition platform enabling users to d
 ### 1.3 Architecture Highlights
 
 - **Frontend**: Next.js 16 App Router with Vanilla CSS glassmorphic design
-- **Backend**: NestJS with 16 feature modules
+- **Backend**: NestJS 10 + **Fastify 5** (HTTP Engine) with SWC compiler (213 files, ~160ms build)
 - **Smart Contract**: Anchor/Rust on Solana Devnet (8 instructions)
-- **Database**: PostgreSQL 15 via Supabase with RLS (68 migrations)
+- **Database**: PostgreSQL 15 via Supabase with RLS (68+ migrations)
 - **AI Engine**: Qwen 9B via HuggingFace for autonomous predictions
+- **Security**: 12-layer defense-in-depth pipeline (OWASP Top 10 compliant)
 
 ---
 
@@ -75,7 +76,7 @@ flowchart TB
     end
 
     subgraph APIGateway["🔌 API Gateway"]
-        NestJS["NestJS<br/>REST API"]
+        NestJS["NestJS 10 + Fastify 5<br/>REST API | SWC"]
         Swagger["Swagger/OpenAPI<br/>Documentation"]
     end
 
@@ -163,7 +164,9 @@ sequenceDiagram
 | **Frontend** | Next.js | 16.x | App Router, SSR |
 | **Styling** | Vanilla CSS | — | Glassmorphic dark theme |
 | **Charts** | Chart.js | 4.x | Probability curve visualization |
-| **Backend** | NestJS | Latest | Modular Node.js framework |
+| **Backend** | NestJS | 10.x | Modular Node.js framework |
+| **HTTP Engine** | **Fastify** | **5.x** | **High-performance HTTP server (~3x Express)** |
+| **Compiler** | **SWC** | **Latest** | **213 files compiled in ~160ms** |
 | **Runtime** | Node.js | 20.x LTS | Server runtime |
 | **Database** | PostgreSQL | 15.x | Primary database |
 | **BaaS** | Supabase | Latest | Auth, Database, Realtime |
@@ -177,7 +180,11 @@ sequenceDiagram
 | **JWT** | Stateless authentication tokens |
 | **Wallet Adapter** | Phantom/Solflare wallet connection |
 | **class-validator** | DTO validation |
-| **Helmet.js** | Security headers |
+| **@fastify/helmet** | Security headers (Fastify-native) |
+| **@fastify/rate-limit** | Rate limiting (Fastify-native) |
+| **@fastify/cookie** | Secure cookie handling (httpOnly, sameSite) |
+| **@fastify/compress** | Brotli + gzip response compression |
+| **@fastify/multipart** | File upload handling (5MB limit) |
 | **HMAC-SHA256** | Email verification tokens |
 
 ### 3.3 Blockchain
@@ -211,7 +218,7 @@ sequenceDiagram
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **ETL Pipeline** | NestJS + Cron | Aggregates data from 8 categories |
+| **ETL Pipeline** | NestJS + Cron | Aggregates data from 8 categories using API polling, webhooks, and robust **RSS Aggregation** (via `Promise.allSettled` from WSJ, CNBC, FT, etc.) |
 | **Image Enrichment** | ImageScraperUtil | Scrapes og:image, topic-based fallbacks |
 | **Streaming** | RabbitMQ | Topic-based event distribution |
 | **Gateway** | Socket.io | WebSocket broadcasting to clients |
@@ -451,14 +458,19 @@ colors: {
 | `checkAccountLockout()` | Brute force protection |
 | `logLoginAttempt()` | Security logging |
 
-### 6.3 Middleware Stack
+### 6.3 Request Pipeline (Fastify)
 
-| Order | Middleware | Purpose |
-|-------|------------|---------|
-| 1 | `RequestIdMiddleware` | Generate unique request ID |
-| 2 | `SecurityHeadersMiddleware` | Set security headers |
-| 3 | `LoggerMiddleware` | Request/response logging |
-| 4 | `InputSanitizerMiddleware` | XSS/injection prevention |
+> **Note:** Since the migration to Fastify, the legacy Express middleware classes have been superseded by native Fastify lifecycle hooks configured in `main.ts`.
+
+| Order | Layer | Type | Purpose |
+|-------|-------|------|---------|
+| 1 | `@fastify/rate-limit` | Fastify Plugin | 300 req/min global, 5 req/min auth endpoints |
+| 2 | `@fastify/helmet` | Fastify Plugin | CSP, HSTS, Referrer-Policy headers |
+| 3 | `onRequest` hook | Fastify Hook | Security headers (COOP, CORP, X-Frame-Options, Permissions-Policy) |
+| 4 | `@fastify/cookie` | Fastify Plugin | Cookie parsing (httpOnly, secure, sameSite) |
+| 5 | `preHandler` hook | Fastify Hook | Input sanitization (14 XSS/injection patterns) |
+| 6 | `LoggerMiddleware` | NestJS Middleware | Request/response logging with safe body masking |
+| 7 | `ValidationPipe` | NestJS Pipe | DTO validation (whitelist + forbidNonWhitelisted) |
 
 ### 6.4 Guards
 
@@ -475,7 +487,9 @@ colors: {
 
 | Interceptor | Purpose |
 |-------------|---------|
-| `AuditLogInterceptor` | Log all mutations |
+| `TimeoutInterceptor` | Request timeout protection (15s default, 60s for on-chain ops) |
+| `CacheResponseInterceptor` | ETag-based response caching with 304 Not Modified |
+| `AuditLogInterceptor` | Log all mutations with user ID, IP, and timing |
 
 ---
 
@@ -671,15 +685,14 @@ flowchart LR
     L1 --> L2 --> L3 --> L4 --> L5
 ```
 
-### 8.3 Rate Limiting Configuration
+### 8.3 Rate Limiting Configuration (Fastify-Native)
 
-| Endpoint Category | Limit | Window |
-|-------------------|-------|--------|
-| Authentication | 5 req | 60 sec |
-| Standard API | 30 req | 60 sec |
-| Read Operations | 100 req | 60 sec |
-| Admin Operations | 60 req | 60 sec |
-| Exports | 5 req | 300 sec |
+| Endpoint Category | Limit | Window | Engine |
+|-------------------|-------|--------|--------|
+| **Global API** | 300 req | 60 sec | `@fastify/rate-limit` |
+| **Authentication** | 5 req | 60 sec | `@fastify/rate-limit` (separate instance) |
+| **Admin Operations** | 60 req | 60 sec | Guard-level |
+| **Exports** | 5 req | 300 sec | Guard-level |
 
 ### 8.4 Admin Role Matrix
 
@@ -839,12 +852,15 @@ anchor deploy --provider.cluster devnet
 | `PORT` | ✅ | ❌ | Server port (3001) |
 | `SUPABASE_URL` | ✅ | ❌ | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | ✅ | Admin API key |
-| `JWT_SECRET` | ✅ | ✅ | JWT signing secret |
+| `JWT_SECRET` | ✅ | ✅ | JWT signing secret (≥256-bit) |
 | `JWT_REFRESH_SECRET` | ✅ | ✅ | Refresh token secret |
+| `COOKIE_SECRET` | ✅ | ✅ | Fastify cookie signing secret |
 | `HUGGINGFACE_API_KEY` | ✅ | ✅ | HuggingFace Inference API |
+| `GROQ_API_KEY` | ✅ | ✅ | Groq AI inference API |
 | `PROGRAM_ID` | ✅ | ❌ | Solana program ID |
-| `CORS_ORIGINS` | ✅ | ❌ | Allowed origins |
-| `RATE_LIMIT_MAX` | ❌ | ❌ | General rate limit |
+| `SOLANA_TREASURY_PRIVATE_KEY` | ✅ | ✅ | Treasury keypair (never log or expose) |
+| `CORS_ORIGINS` | ✅ | ❌ | Allowed origins (no wildcard in prod) |
+| `RATE_LIMIT_AUTH_MAX` | ❌ | ❌ | Auth rate limit (default: 5/min) |
 
 #### Frontend Environment Variables
 
@@ -876,17 +892,20 @@ anchor deploy --provider.cluster devnet
 
 ### 12.4 Production Checklist
 
-- [ ] `NODE_ENV=production`
+- [ ] `NODE_ENV=production` (disables Swagger UI)
 - [ ] JWT secrets are 256-bit minimum
+- [ ] `COOKIE_SECRET` is strong and unique (not the default)
 - [ ] `COOKIE_SECURE=true`
 - [ ] `COOKIE_SAME_SITE=strict`
-- [ ] CORS limited to production domains
-- [ ] Rate limiting configured
+- [ ] CORS limited to production domains (API refuses to start with wildcard)
+- [ ] Rate limiting configured: global 300/min, auth 5/min
+- [ ] File upload limits enforced (5MB via `@fastify/multipart`)
 - [ ] Database SSL enabled
 - [ ] All RLS policies active
 - [ ] Admin user created
 - [ ] Monitoring configured
 - [ ] Frontend config uses production API
+- [ ] Swagger UI disabled
 
 
 ---
@@ -907,6 +926,7 @@ anchor deploy --provider.cluster devnet
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 4.0.0 | May 5, 2026 | Fastify 5 migration, 12-layer security pipeline, SWC build, hook optimizations |
 | 3.0.0 | May 3, 2026 | Major rewrite: Next.js 16, Solana-only, 16 modules, 8 instructions, AI agents |
 | 2.1.0 | Jan 16, 2026 | Added production API configuration, centralized frontend config |
 | 2.0.0 | Jan 8, 2026 | Added 6 backend modules, admin dashboard |

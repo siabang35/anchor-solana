@@ -60,6 +60,52 @@ export interface PoolWithWinners {
 }
 
 /**
+ * Visibility-aware polling — only poll when tab is visible
+ * Saves bandwidth and prevents unnecessary server load
+ */
+function useVisibilityPolling(callback: () => void, intervalMs: number) {
+    const callbackRef = useRef(callback);
+    callbackRef.current = callback;
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setInterval> | null = null;
+
+        const start = () => {
+            if (!timer) {
+                timer = setInterval(() => callbackRef.current(), intervalMs);
+            }
+        };
+
+        const stop = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                callbackRef.current(); // Immediate refresh on tab focus
+                start();
+            } else {
+                stop(); // Stop polling when tab is hidden
+            }
+        };
+
+        // Start polling if tab is visible
+        if (document.visibilityState === 'visible') {
+            start();
+        }
+
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            stop();
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+        };
+    }, [intervalMs]);
+}
+
+/**
  * Hook to fetch sector pool data + winners
  */
 export function useSectorPool(sector: string): PoolWithWinners {
@@ -71,11 +117,14 @@ export function useSectorPool(sector: string): PoolWithWinners {
     const [stakes, setStakes] = useState<PoolStake[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const fetchCountRef = useRef(0);
 
     const fetchData = useCallback(async () => {
         if (!sector) return;
         try {
-            setLoading(true);
+            fetchCountRef.current += 1;
+            if (fetchCountRef.current === 1) setLoading(true);
+
             const res = await apiFetch<{ pool: PoolData; winners: PoolWinner[] }>(`/pool/sector?sector=${sector}&limit=3`);
             if (res?.pool) setPool(res.pool);
             if (res?.winners) setWinners(res.winners);
@@ -88,13 +137,13 @@ export function useSectorPool(sector: string): PoolWithWinners {
         }
     }, [sector]);
 
-    useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 30_000); // Refresh every 30s
-        return () => clearInterval(interval);
-    }, [fetchData]);
+    // Initial fetch
+    useEffect(() => { fetchData(); }, [fetchData]);
 
-    // Realtime subscription for pool updates
+    // Smart polling: only when tab is visible (30s)
+    useVisibilityPolling(fetchData, 30_000);
+
+    // Realtime subscription — triggers instant refetch (no polling needed)
     useEffect(() => {
         const channel = supabase
             .channel(`sector-pool-${sector}`)
@@ -133,10 +182,13 @@ export function useGlobalPool(limit: number = 4): PoolWithWinners {
     const [stakes, setStakes] = useState<PoolStake[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const fetchCountRef = useRef(0);
 
     const fetchData = useCallback(async () => {
         try {
-            setLoading(true);
+            fetchCountRef.current += 1;
+            if (fetchCountRef.current === 1) setLoading(true);
+
             const res = await apiFetch<{ pool: PoolData; winners: PoolWinner[] }>(`/pool/global?limit=${limit}`);
             if (res?.pool) setPool(res.pool);
             if (res?.winners) setWinners(res.winners);
@@ -149,11 +201,11 @@ export function useGlobalPool(limit: number = 4): PoolWithWinners {
         }
     }, [limit]);
 
-    useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 30_000);
-        return () => clearInterval(interval);
-    }, [fetchData]);
+    // Initial fetch
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Smart polling: only when tab is visible (30s)
+    useVisibilityPolling(fetchData, 30_000);
 
     return { pool, winners, stakes, loading, error, refetch: fetchData };
 }
@@ -196,12 +248,11 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
         }
     }, [competitionId]);
 
-    useEffect(() => {
-        fetchData();
-        // Poll every 15s for fast updates
-        const interval = setInterval(fetchData, 15_000);
-        return () => clearInterval(interval);
-    }, [fetchData]);
+    // Initial fetch
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Smart polling: only when tab is visible (15s for competition-specific)
+    useVisibilityPolling(fetchData, 15_000);
 
     // Realtime subscription for BOTH pool updates AND new stakes
     useEffect(() => {
@@ -215,8 +266,7 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
                 schema: 'public',
                 table: 'competition_pools',
                 filter: `competition_id=eq.${competitionId}`
-            }, (payload) => {
-                console.log('[Pool Realtime] competition_pools changed:', payload.eventType);
+            }, () => {
                 // Immediately refetch to get updated totals
                 fetchData();
             })
@@ -226,8 +276,7 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
                 schema: 'public',
                 table: 'pool_stakes',
                 filter: `competition_id=eq.${competitionId}`
-            }, (payload) => {
-                console.log('[Pool Realtime] New stake!', payload.new);
+            }, () => {
                 // Immediately refetch — the DB trigger will have already updated competition_pools
                 fetchData();
             })
@@ -237,15 +286,10 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
                 schema: 'public',
                 table: 'pool_winners',
                 filter: `competition_id=eq.${competitionId}`
-            }, (payload) => {
-                console.log('[Pool Realtime] Winner determined!', payload.new);
+            }, () => {
                 fetchData();
             })
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log(`[Pool Realtime] Subscribed to competition ${competitionId}`);
-                }
-            });
+            .subscribe();
 
         return () => { supabase.removeChannel(channel); };
     }, [competitionId, fetchData]);

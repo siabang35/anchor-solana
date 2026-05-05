@@ -14,7 +14,7 @@ import {
     ApiBearerAuth,
     ApiQuery,
 } from '@nestjs/swagger';
-import { Request, Response } from 'express';
+// Adapter-agnostic: no Express types needed
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { TransactionsService } from './transactions.service.js';
 import {
@@ -24,8 +24,13 @@ import {
     PnLDataDto,
 } from './dto/index.js';
 
-interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest {
     user: { sub: string };
+    method: string;
+    url: string;
+    headers: Record<string, any>;
+    params: Record<string, any>;
+    query: Record<string, any>;
 }
 
 @ApiTags('Transactions')
@@ -76,7 +81,7 @@ export class TransactionsController {
     async exportTransactions(
         @Query() query: TransactionsQueryDto,
         @Req() req: AuthenticatedRequest,
-        @Res() res: Response,
+        @Res() res: any,
     ) {
         const csv = await this.transactionsService.exportTransactions(req.user.sub, query);
         res.send(csv);

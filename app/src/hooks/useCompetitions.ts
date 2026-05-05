@@ -55,22 +55,35 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
     const [error, setError] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const channelRef = useRef<RealtimeChannel | null>(null);
+    const fetchCountRef = useRef(0);
 
-    // Fetch competitions from API
+    // Fetch competitions from API — OPTIMIZED: parallel fetch
     const fetchCompetitions = useCallback(async () => {
-        setLoading(true);
+        fetchCountRef.current += 1;
+        if (fetchCountRef.current === 1) setLoading(true);
         setError(null);
         try {
-            // Fetch competitions — meta-tabs (top, foryou, latest, signals) fetch ALL competitions
+            // Fetch competitions and sector summary IN PARALLEL
             const META_TABS = ['all', 'top', 'foryou', 'latest', 'signals'];
             const sectorParam = sector && !META_TABS.includes(sector) ? `?sector=${sector}` : '';
-            const result = await apiFetch<Competition[]>(`/competitions${sectorParam}`);
-            setCompetitions(result || []);
 
-            // Fetch sector summary
-            const summary = await apiFetch<SectorSummary[]>('/competitions/sectors/summary');
-            setSectorSummary(summary || []);
-        } catch (err: any) {
+            const [compsResult, summaryResult] = await Promise.allSettled([
+                apiFetch<Competition[]>(`/competitions${sectorParam}`),
+                apiFetch<SectorSummary[]>('/competitions/sectors/summary'),
+            ]);
+
+            if (compsResult.status === 'fulfilled') {
+                setCompetitions(compsResult.value || []);
+            }
+            if (summaryResult.status === 'fulfilled') {
+                setSectorSummary(summaryResult.value || []);
+            }
+
+            // Only set error if both failed
+            if (compsResult.status === 'rejected' && summaryResult.status === 'rejected') {
+                throw compsResult.reason;
+            }
+        } catch {
             // Fallback: fetch directly from Supabase
             try {
                 let query = supabase

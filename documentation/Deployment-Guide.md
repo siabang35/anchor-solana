@@ -1,8 +1,8 @@
 # Deployment Guide
 
 > **ExoDuZe Platform — Multi-Service Deployment Architecture**
-> Version: 1.0.0 | Published: May 2026
-> Environments: Vercel (Frontend) | Render (Backend) | Solana Devnet (Contract)
+> Version: 2.0.0 | Updated: May 2026
+> Environments: Vercel (Frontend) | Render (Backend, Fastify) | Solana Devnet (Contract)
 
 ---
 
@@ -15,7 +15,7 @@ graph LR
     end
 
     subgraph Backend["Backend (Render)"]
-        Nest["NestJS API<br/>Node.js 20"]
+        Nest["NestJS 10 + Fastify 5<br/>Node.js 20 | SWC"]
     end
 
     subgraph Database["Database (Supabase)"]
@@ -94,12 +94,15 @@ services:
     plan: starter
     buildCommand: npm install && npm run build
     startCommand: node dist/main.js
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3001
 ```
+
+> **Note:** The API now uses **Fastify** as the HTTP engine (not Express). The `dist/main.js` entry point bootstraps NestJS with `FastifyAdapter` and listens on `0.0.0.0`.
 
 ### 3.2 Deploy
 
@@ -126,13 +129,14 @@ npm run start:prod
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin operations) |
-| `JWT_SECRET` | JWT signing secret |
+| `JWT_SECRET` | JWT signing secret (≥ 256-bit) |
 | `JWT_EXPIRATION` | Token expiry (e.g., `7d`) |
-| `CORS_ORIGINS` | Allowed origins (comma-separated) |
+| `COOKIE_SECRET` | Fastify cookie signing secret |
+| `CORS_ORIGINS` | Allowed origins (comma-separated, **no wildcard in prod**) |
+| `SOLANA_TREASURY_PRIVATE_KEY` | Base58-encoded treasury keypair |
 | `HUGGINGFACE_API_KEY` | HuggingFace Inference API key |
-| `RABBITMQ_URL` | RabbitMQ connection URL |
-| `THESPORTSDB_API_KEY` | TheSportsDB API key |
-| `APIFOOTBALL_API_KEY` | API-Sports shared key |
+| `GROQ_API_KEY` | Groq AI inference API key |
+| `RATE_LIMIT_AUTH_MAX` | Auth endpoint rate limit (default: 5/min) |
 
 ---
 
@@ -284,15 +288,19 @@ anchor deploy --provider.cluster devnet
 ## 8. Production Checklist
 
 - [ ] All environment variables configured
-- [ ] CORS origins set to production domains only
+- [ ] `NODE_ENV=production` (disables Swagger UI and debug logging)
+- [ ] `CORS_ORIGINS` set to production domains only (no wildcard — API refuses to start otherwise)
+- [ ] `COOKIE_SECRET` is strong and unique (not the default)
 - [ ] Supabase RLS policies verified
 - [ ] JWT secret is cryptographically strong (≥ 256-bit)
-- [ ] Rate limiting configured for all endpoints
+- [ ] Rate limiting configured (global: 300/min, auth: 5/min)
+- [ ] File upload limits enforced (5MB max via `@fastify/multipart`)
 - [ ] Smart contract deployed and initialized
 - [ ] IDL synced between contract and frontend
-- [ ] Database migrations applied
-- [ ] Health check endpoint responding
+- [ ] Database migrations applied (68+ files)
+- [ ] Health check endpoint responding (`/api/v1/health`)
 - [ ] SSL/TLS configured on all services
+- [ ] Swagger UI disabled in production
 
 ---
 

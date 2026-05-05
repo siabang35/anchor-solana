@@ -12,7 +12,7 @@ import { Controller, Get, Query, Logger, HttpCode, HttpStatus, Req, UseGuards, H
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { RecommendationsService } from './recommendations.service.js';
 import { JwtAuthGuard } from '../auth/guards/index.js';
-import { Request } from 'express';
+// Adapter-agnostic: no Express types needed
 
 // Input validation helpers (OWASP compliant)
 const sanitizeLimit = (limit: string | undefined): number => {
@@ -84,8 +84,8 @@ export class RecommendationsController {
     /**
      * Extract client IP from request (proxy-aware)
      */
-    private getClientIp(req: Request): string {
-        const forwarded = req.headers['x-forwarded-for'];
+    private getClientIp(req: any): string {
+        const forwarded = req.headers?.['x-forwarded-for'];
         if (forwarded) {
             const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
             return ips.trim();
@@ -108,7 +108,7 @@ export class RecommendationsController {
     @ApiResponse({ status: 200, description: 'Top markets retrieved successfully' })
     @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
     async getTopMarkets(
-        @Req() req: Request,
+        @Req() req: any,
         @Query('limit') limit?: string,
         @Query('offset') offset?: string
     ) {
@@ -146,7 +146,7 @@ export class RecommendationsController {
     @ApiResponse({ status: 200, description: 'Recommendations retrieved successfully' })
     @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
     async getForYou(
-        @Req() req: Request,
+        @Req() req: any,
         @Query('userId') userId?: string,
         @Query('limit') limit?: string,
         @Query('offset') offset?: string

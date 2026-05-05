@@ -14,7 +14,7 @@ import {
     Ip,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Response, Request } from 'express';
+// Adapter-agnostic types (works with both Express and Fastify)
 import { AuthService } from './auth.service.js';
 import { WalletConnectService } from './services/wallet-connect.service.js';
 import { OtpService } from './services/otp.service.js';
@@ -63,7 +63,7 @@ export class AuthController {
     /**
      * Get client IP address from request
      */
-    private getClientIp(req: Request): string {
+    private getClientIp(req: any): string {
         const forwardedFor = req.headers['x-forwarded-for'];
         if (forwardedFor) {
             const ips = Array.isArray(forwardedFor)
@@ -83,8 +83,8 @@ export class AuthController {
     @HttpCode(HttpStatus.CREATED)
     async signup(
         @Body() dto: SignupDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const result = await this.authService.signup(dto, ipAddress);
@@ -101,8 +101,8 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async login(
         @Body() dto: LoginDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const result = await this.authService.login(dto, ipAddress);
@@ -136,7 +136,7 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async requestSignup(
         @Body() dto: OtpSignupRequestDto,
-        @Req() req: Request,
+        @Req() req: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -158,7 +158,7 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async requestLoginOtp(
         @Body() dto: OtpLoginRequestDto,
-        @Req() req: Request,
+        @Req() req: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -180,8 +180,8 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async verifyLoginOtp(
         @Body() dto: OtpVerifyDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -210,7 +210,7 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async resendOtp(
         @Body() dto: OtpResendDto,
-        @Req() req: Request,
+        @Req() req: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -250,8 +250,8 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async walletVerify(
         @Body() dto: WalletVerifyDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const result = await this.authService.verifyWallet(dto, ipAddress);
@@ -273,7 +273,7 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async walletConnectChallenge(
         @Body() dto: WalletConnectChallengeDto,
-        @Req() req: Request,
+        @Req() req: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -290,8 +290,8 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async walletConnectVerify(
         @Body() dto: WalletConnectVerifyDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -311,8 +311,8 @@ export class AuthController {
     async walletConnectCompleteProfile(
         @CurrentUser('id') userId: string,
         @Body() dto: WalletConnectCompleteProfileDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const result = await this.walletConnectService.completeProfile(userId, dto, ipAddress);
@@ -341,7 +341,7 @@ export class AuthController {
     async linkWallet(
         @CurrentUser('id') userId: string,
         @Body() dto: LinkWalletDto,
-        @Req() req: Request,
+        @Req() req: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const userAgent = req.headers['user-agent'];
@@ -388,7 +388,7 @@ export class AuthController {
      */
     @Public()
     @Get('google')
-    async googleAuth(@Req() req: Request, @Res() res: Response) {
+    async googleAuth(@Req() req: any, @Res() res: any) {
         try {
             const ipAddress = this.getClientIp(req);
             const userAgent = req.headers['user-agent'];
@@ -447,7 +447,7 @@ export class AuthController {
 
             // Set session cookie if needed
             if (!req.cookies?.['session_id']) {
-                res.cookie('session_id', sessionId, {
+                res.setCookie('session_id', sessionId, {
                     httpOnly: true,
                     secure: process.env.NODE_ENV === 'production',
                     sameSite: 'lax',
@@ -471,7 +471,7 @@ export class AuthController {
      */
     @Public()
     @Get('google/callback')
-    async googleCallback(@Req() req: Request, @Res() res: Response) {
+    async googleCallback(@Req() req: any, @Res() res: any) {
         try {
             const { code, state } = req.query;
             const ipAddress = this.getClientIp(req);
@@ -518,8 +518,8 @@ export class AuthController {
     @HttpCode(HttpStatus.OK)
     async refresh(
         @Body() dto: RefreshTokenDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         // Try body first, then cookie
         const refreshToken = dto.refreshToken || (req.cookies?.refresh_token as string);
@@ -543,8 +543,8 @@ export class AuthController {
     async completeGoogleProfile(
         @CurrentUser('id') userId: string,
         @Body() dto: GoogleProfileCompletionDto,
-        @Req() req: Request,
-        @Res({ passthrough: true }) res: Response,
+        @Req() req: any,
+        @Res({ passthrough: true }) res: any,
     ) {
         const ipAddress = this.getClientIp(req);
         const result = await this.authService.completeGoogleProfile(userId, dto, ipAddress);
@@ -559,7 +559,7 @@ export class AuthController {
     @Public()
     @Get('check-username/:username')
     @HttpCode(HttpStatus.OK)
-    async checkUsername(@Req() req: Request) {
+    async checkUsername(@Req() req: any) {
         const username = req.params.username;
         return this.authService.checkUsernameAvailable(username || '');
     }
@@ -570,7 +570,7 @@ export class AuthController {
      */
     @Post('logout')
     @HttpCode(HttpStatus.OK)
-    async logout(@Res({ passthrough: true }) res: Response) {
+    async logout(@Res({ passthrough: true }) res: any) {
         this.clearTokenCookies(res);
         return { message: 'Logged out successfully' };
     }
@@ -588,14 +588,14 @@ export class AuthController {
     /**
      * Set refresh token in HTTP-only cookie
      */
-    private setTokenCookies(res: Response, refreshToken: string) {
+    private setTokenCookies(res: any, refreshToken: string) {
         const isProduction = this.configService.get('NODE_ENV') === 'production';
         // Enforce secure cookies in production, or if explicitly enabled
         const secure = this.configService.get('COOKIE_SECURE') === 'true' || isProduction;
         const sameSite = (this.configService.get('COOKIE_SAME_SITE') as 'strict' | 'lax' | 'none') || 'strict';
         const domain = this.configService.get('COOKIE_DOMAIN');
 
-        res.cookie('refresh_token', refreshToken, {
+        res.setCookie('refresh_token', refreshToken, {
             httpOnly: true, // Prevent XSS access
             secure,         // Send only over HTTPS
             sameSite,       // Prevent CSRF
@@ -608,7 +608,7 @@ export class AuthController {
     /**
      * Clear token cookies
      */
-    private clearTokenCookies(res: Response) {
+    private clearTokenCookies(res: any) {
         res.clearCookie('refresh_token', {
             httpOnly: true,
             path: '/',

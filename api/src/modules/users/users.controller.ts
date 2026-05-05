@@ -6,6 +6,7 @@ import {
     Delete,
     Body,
     Param,
+    Req,
     UseGuards,
     HttpCode,
     HttpStatus,
@@ -13,7 +14,7 @@ import {
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../auth/guards/index.js';
 import { CurrentUser } from '../auth/decorators/index.js';
-import { FileInterceptor } from '@nestjs/platform-express';
+// Fastify-compatible: no FileInterceptor needed — use @fastify/multipart directly
 import { UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator } from '@nestjs/common';
 import { UpdateProfileDto, RequestEmailVerificationDto, VerifyEmailDto } from './dto/index.js';
 
@@ -60,19 +61,45 @@ export class UsersController {
         return result;
     }
 
+    /**
+     * POST /users/avatar
+     * Upload avatar using Fastify multipart (@fastify/multipart)
+     * Replaces Express-based FileInterceptor for Fastify compatibility
+     */
     @Post('avatar')
-    @UseInterceptors(FileInterceptor('file'))
     async uploadAvatar(
         @CurrentUser('id') userId: string,
-        @UploadedFile(
-            new ParseFilePipe({
-                validators: [
-                    new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
-                    new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
-                ],
-            }),
-        ) file: any, // Using any to avoid complex type import issues, service verifies it
+        @Req() req: any,
     ) {
+        // Use Fastify's multipart parsing
+        const data = await req.file();
+        if (!data) {
+            throw new Error('No file uploaded');
+        }
+
+        // Validate file type
+        const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedMimeTypes.includes(data.mimetype)) {
+            throw new Error('Invalid file type. Allowed: jpg, png, webp');
+        }
+
+        // Read file buffer
+        const buffer = await data.toBuffer();
+
+        // Validate file size (5MB max)
+        if (buffer.length > 5 * 1024 * 1024) {
+            throw new Error('File too large. Maximum size: 5MB');
+        }
+
+        const file = {
+            fieldname: 'file',
+            originalname: data.filename,
+            encoding: '7bit',
+            mimetype: data.mimetype,
+            buffer,
+            size: buffer.length,
+        };
+
         const publicUrl = await this.usersService.uploadAvatar(userId, file);
         return { avatarUrl: publicUrl };
     }

@@ -1,5 +1,5 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
-import { Request, Response, NextFunction } from 'express';
+// Adapter-agnostic types (superseded by Fastify preHandler hook in main.ts)
 
 /**
  * Input Sanitizer Middleware
@@ -50,7 +50,7 @@ export class InputSanitizerMiddleware implements NestMiddleware {
         'nonce',
     ];
 
-    use(req: Request, res: Response, next: NextFunction): void {
+    use(req: any, res: any, next: () => void): void {
         if (req.body && typeof req.body === 'object') {
             const sanitizedBody = this.sanitizeObject(req.body, req);
             req.body = sanitizedBody;
@@ -166,7 +166,7 @@ export class InputSanitizerMiddleware implements NestMiddleware {
     /**
      * Get client IP for logging
      */
-    private getClientIp(req: Request): string {
+    private getClientIp(req: any): string {
         const forwardedFor = req.headers['x-forwarded-for'];
         if (forwardedFor) {
             const ips = Array.isArray(forwardedFor)

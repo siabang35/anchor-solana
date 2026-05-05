@@ -93,6 +93,7 @@ export function useRealtimeAgents(userId: string | null): UseRealtimeAgentsResul
     const channelRef = useRef<RealtimeChannel | null>(null);
     const forecasterChannelRef = useRef<RealtimeChannel | null>(null);
 
+    // ── OPTIMIZED: Parallel fetch instead of sequential waterfall ──
     const fetchAgents = useCallback(async () => {
         if (!userId) {
             setLoading(false);
@@ -101,26 +102,33 @@ export function useRealtimeAgents(userId: string | null): UseRealtimeAgentsResul
         setLoading(true);
         setError(null);
         try {
-            // Fetch trading agents from API
-            const result = await apiFetch<{ data: Agent[]; total: number }>(
-                '/agents',
-                { headers: { 'x-user-id': userId } },
-            );
-            setAgents(result?.data || []);
+            const headers = { 'x-user-id': userId };
 
-            // Fetch forecaster agents
-            const forecasterResult = await apiFetch<{ data: ForecasterAgent[]; total: number }>(
-                '/agents/forecasters',
-                { headers: { 'x-user-id': userId } },
-            );
-            setForecasters(forecasterResult?.data || []);
+            // Fire ALL 3 requests in parallel — eliminates waterfall latency
+            const [agentsResult, forecasterResult, quotaResult] = await Promise.allSettled([
+                apiFetch<{ data: Agent[]; total: number }>('/agents', { headers }),
+                apiFetch<{ data: ForecasterAgent[]; total: number }>('/agents/forecasters', { headers }),
+                apiFetch<AgentQuota>('/agents/quota', { headers }),
+            ]);
 
-            // Fetch quota
-            const quotaResult = await apiFetch<AgentQuota>(
-                '/agents/quota',
-                { headers: { 'x-user-id': userId } },
-            );
-            if (quotaResult) setQuota(quotaResult);
+            // Process results independently (one failure doesn't block others)
+            if (agentsResult.status === 'fulfilled') {
+                setAgents(agentsResult.value?.data || []);
+            }
+            if (forecasterResult.status === 'fulfilled') {
+                setForecasters(forecasterResult.value?.data || []);
+            }
+            if (quotaResult.status === 'fulfilled' && quotaResult.value) {
+                setQuota(quotaResult.value);
+            }
+
+            // Only set error if ALL requests failed
+            const allFailed = agentsResult.status === 'rejected'
+                && forecasterResult.status === 'rejected'
+                && quotaResult.status === 'rejected';
+            if (allFailed) {
+                setError('Failed to load agents');
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to load agents');
         } finally {

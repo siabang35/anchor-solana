@@ -1,7 +1,7 @@
 # ExoDuZe — Development Guidelines
 
 > **Engineering Standards & Best Practices**  
-> Version 2.0.0 | Published: January 8, 2026  
+> Version 3.0.0 | Updated: May 5, 2026  
 > Target Audience: Software Engineers, Code Reviewers
 
 ---
@@ -267,10 +267,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 ### 3.5 Styling Guidelines
 
 ```tsx
-// ✅ Use Tailwind utility classes
-<button className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">
-  Submit
-</button>
+// ✅ Use Vanilla CSS with CSS custom properties (globals.css)
+<div className="glass-card">
+  <h2 className="card-title">Market Data</h2>
+</div>
 
 // ✅ Use CSS variables for theme
 <div style={{ background: 'var(--bg-primary)' }}>
@@ -279,7 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 <div style={{ padding: 16, marginTop: 8 }}>
 
 // ❌ Avoid magic numbers
-<div className="p-[17px] mt-[9px]">
+<div style={{ padding: '17px', marginTop: '9px' }}>
 ```
 
 ---
@@ -420,7 +420,7 @@ export class UsersController {
   async updateUser(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: any,  // Adapter-agnostic (Fastify-compatible)
   ): Promise<UserDto> {
     // Authorization check
     if (req.user.sub !== id) {
@@ -430,6 +430,8 @@ export class UsersController {
   }
 }
 ```
+
+> **Important:** All request parameters use `any` type instead of Express-specific `Request`. This ensures compatibility with the Fastify adapter.
 
 ### 4.5 Error Handling
 
@@ -610,8 +612,12 @@ this.logger.log(`Login attempt: ${maskEmail(email)}`);
 ### 6.5 Rate Limiting
 
 ```typescript
-// ✅ Apply global and local limits
-@RateLimit(RateLimits.STRICT) // 10 req/min
+// Rate limiting is handled by @fastify/rate-limit in main.ts
+// Global: 300 req/min, Auth: 5 req/min
+// No per-controller decorators needed — Fastify handles it at the plugin level
+
+// For custom endpoint-specific limits, use a guard:
+@UseGuards(JwtAuthGuard)
 @Post('auth/login')
 async login() {}
 ```
@@ -907,11 +913,13 @@ Brief description of changes
 
 | Issue | Solution |
 |-------|----------|
-| `Module not found` | Run `pnpm install` |
-| CORS errors | Check `CORS_ORIGINS` in backend |
+| `Module not found` | Run `npm install` in the relevant directory |
+| CORS errors | Check `CORS_ORIGINS` in backend `.env` |
 | JWT expired | Implement token refresh in frontend |
-| Rate limited | Wait for window reset |
+| Rate limited (429) | Wait for window reset; check `Retry-After` header |
 | RLS blocking queries | Check Supabase policies |
+| Build errors | Run `npx tsc --noEmit` for detailed type errors |
+| File upload fails | Check `@fastify/multipart` limits (5MB max) |
 
 ### 11.2 Debug Commands
 
@@ -948,6 +956,7 @@ SELECT pg_size_pretty(pg_total_relation_size('users'));
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0.0 | May 5, 2026 | Fastify migration, adapter-agnostic controllers, Vanilla CSS standards |
 | 2.0.0 | Jan 8, 2026 | Complete rewrite with enterprise standards |
 | 1.0.0 | Jan 6, 2026 | Initial guidelines |
 

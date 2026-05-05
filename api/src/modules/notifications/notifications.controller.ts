@@ -17,7 +17,7 @@ import {
     ApiBearerAuth,
     ApiParam,
 } from '@nestjs/swagger';
-import { Request } from 'express';
+// Adapter-agnostic: no Express types needed
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { NotificationsService } from './notifications.service.js';
 import {

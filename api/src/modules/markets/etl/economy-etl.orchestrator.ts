@@ -7,7 +7,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { BaseETLOrchestrator, ETLResult, MarketDataItem } from './base-etl.orchestrator.js';
-import { WorldBankClient, GDELTClient, IMFClient, OECDClient, AlphaVantageClient } from '../clients/index.js';
+import { WorldBankClient, GDELTClient, IMFClient, OECDClient, AlphaVantageClient, RSSClient } from '../clients/index.js';
 import { MarketMessagingService } from '../market-messaging.service.js';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
         private readonly oecd: OECDClient,
         private readonly alphaVantage: AlphaVantageClient,
         private readonly gdelt: GDELTClient,
+        private readonly rss: RSSClient,
         private readonly messagingService: MarketMessagingService
     ) {
         super('EconomyETLOrchestrator', 'economy');
@@ -96,11 +97,23 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             }
 
             // 2. Fetch economic news from GDELT
-            this.logger.debug('Fetching economic news...');
+            this.logger.debug('Fetching economic news from GDELT...');
             const economicNews = await this.fetchEconomicNews();
-            recordsFetched += economicNews.length;
+            
+            // 3. Fetch economic news from RSS Feeds (Free & Robust)
+            this.logger.debug('Fetching economic news from RSS feeds...');
+            const rssNews = await this.rss.fetchAllEconomyFeeds();
+            
+            recordsFetched += economicNews.length + rssNews.length;
 
-            const newsItems = economicNews.map(n => this.transformGDELTToItem(n));
+            const newsItems = [
+                ...economicNews.map(n => this.transformGDELTToItem(n)),
+                ...rssNews.map(n => ({
+                    ...n,
+                    sentiment: this.analyzeSentiment(n.title + ' ' + (n.description || '')).sentiment,
+                    sentimentScore: this.analyzeSentiment(n.title + ' ' + (n.description || '')).score
+                }))
+            ];
 
             // Enrich news items with scraped images
             await this.enrichItemsWithImages(newsItems);

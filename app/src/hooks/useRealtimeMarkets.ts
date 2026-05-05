@@ -39,17 +39,19 @@ export function useRealtimeMarkets(
     const [error, setError] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const channelRef = useRef<RealtimeChannel | null>(null);
+    const fetchCountRef = useRef(0);
 
-    // Initial fetch from API
+    // Initial fetch from API (with Supabase fallback)
     const fetchItems = useCallback(async () => {
-        setLoading(true);
+        fetchCountRef.current += 1;
+        if (fetchCountRef.current === 1) setLoading(true);
         setError(null);
         try {
             const result = await apiFetch<{ data: MarketDataItem[] }>(
                 `/markets/category/${category}?limit=${limit}`,
             );
             setItems(result.data || []);
-        } catch (err: any) {
+        } catch {
             // Fallback: fetch directly from Supabase
             try {
                 const { data, error: sbError } = await supabase

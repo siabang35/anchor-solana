@@ -6,7 +6,6 @@ import {
     HttpStatus,
     Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
 
 interface ErrorResponse {
     statusCode: number;
@@ -19,7 +18,15 @@ interface ErrorResponse {
 
 /**
  * Global HTTP Exception Filter
- * Provides consistent error response format with security considerations
+ *
+ * Provides consistent error response format with security considerations.
+ * Adapter-agnostic: works with both Express and Fastify.
+ *
+ * Security:
+ * - Never exposes internal stack traces in production
+ * - Includes request ID for incident correlation
+ * - Masks detailed error messages in production
+ * - Logs all 4xx/5xx for monitoring and alerting
  */
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -27,10 +34,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     catch(exception: unknown, host: ArgumentsHost) {
         const ctx = host.switchToHttp();
-        const response = ctx.getResponse<Response>();
-        const request = ctx.getRequest<Request>();
+        const response = ctx.getResponse();
+        const request = ctx.getRequest();
 
-        const requestId = (request as any).requestId;
+        // Adapter-agnostic request properties
+        const requestId = request.requestId || request.id || 'unknown';
+        const requestUrl = request.url || request.originalUrl || '/';
+        const requestMethod = request.method || 'UNKNOWN';
 
         let status = HttpStatus.INTERNAL_SERVER_ERROR;
         let message = 'Internal server error';
@@ -68,7 +78,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         if (status >= 400) {
             const logLevel = status >= 500 ? 'error' : 'warn';
             this.logger[logLevel](
-                `[${requestId}] ${request.method} ${request.url} - ${status} ${message}`,
+                `[${requestId}] ${requestMethod} ${requestUrl} - ${status} ${message}`,
             );
         }
 
@@ -77,7 +87,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             message: Array.isArray(message) ? message.join(', ') : message,
             error,
             timestamp: new Date().toISOString(),
-            path: request.url,
+            path: requestUrl,
         };
 
         // Only include requestId in development
@@ -85,6 +95,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             errorResponse.requestId = requestId;
         }
 
-        response.status(status).json(errorResponse);
+        // Adapter-agnostic response
+        // Fastify: response.status(code).send(body)
+        // Express: response.status(code).json(body)
+        if (typeof response.status === 'function') {
+            const result = response.status(status);
+            if (typeof result.send === 'function') {
+                result.send(errorResponse);
+            } else if (typeof result.json === 'function') {
+                result.json(errorResponse);
+            }
+        }
     }
 }
