@@ -310,7 +310,7 @@ export default function ProbabilityCurve({
             currHome = currHome + dynamicAlpha * (data[i].home - currHome);
             currDraw = currDraw + dynamicAlpha * (data[i].draw - currDraw);
             currAway = currAway + dynamicAlpha * (data[i].away - currAway);
-            
+
             smoothedHomeData.push(currHome);
             smoothedDrawData.push(currDraw);
             smoothedAwayData.push(currAway);
@@ -501,7 +501,7 @@ export default function ProbabilityCurve({
         let projectedValue = currentProb;
         for (let i = rootIdx + 1; i < chartLabels.length; i++) {
             // Apply exponential decay to the slope to create a natural asymptotic curve
-            slopePerStep *= 0.90; 
+            slopePerStep *= 0.90;
             projectedValue += slopePerStep;
             momentumData[i] = Math.max(1, Math.min(99, projectedValue));
         }
@@ -531,7 +531,7 @@ export default function ProbabilityCurve({
                         const prev = ctx.p0.parsed.y;
                         const curr = ctx.p1.parsed.y;
                         // Add a small threshold to avoid rapid flickering on flat trends
-                        if (Math.abs(curr - prev) < 0.1) return '#8b5cf6'; 
+                        if (Math.abs(curr - prev) < 0.1) return '#8b5cf6';
                         return curr > prev ? '#10b981' : '#ef4444';
                     }
                 },
@@ -734,9 +734,9 @@ export default function ProbabilityCurve({
 
             {/* Match Title */}
             <div style={{ textAlign: 'center', marginBottom: '1.25rem', padding: '0 1rem' }}>
-                <div style={{ 
-                    fontSize: '1.35rem', 
-                    fontWeight: 800, 
+                <div style={{
+                    fontSize: '1.35rem',
+                    fontWeight: 800,
                     letterSpacing: '-0.02em',
                     background: 'linear-gradient(to right, #fff, #a5b4fc)',
                     WebkitBackgroundClip: 'text',
@@ -746,7 +746,7 @@ export default function ProbabilityCurve({
                     {teamHome && teamAway ? `${teamHome} vs ${teamAway}` : title}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.02em' }}>
-                    {sector.charAt(0).toUpperCase() + sector.slice(1)} <span style={{opacity: 0.5}}>•</span> {competition?.status === 'active' ? 'Live' : competition?.status === 'settled' ? 'Ended' : 'Upcoming'} <span style={{opacity: 0.5}}>•</span> Realtime Analysis
+                    {sector.charAt(0).toUpperCase() + sector.slice(1)} <span style={{ opacity: 0.5 }}>•</span> {competition?.status === 'active' ? 'Live' : competition?.status === 'settled' ? 'Ended' : 'Upcoming'} <span style={{ opacity: 0.5 }}>•</span> Realtime Analysis
                 </div>
             </div>
 

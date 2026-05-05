@@ -26,8 +26,6 @@ export interface ClusterDataResult {
  * Hook to fetch real-time news cluster data
  * Subscribes to Supabase Realtime for live updates
  * Pass 'all' or undefined as competitionId to fetch globally
- *
- * OPTIMIZED: No loading flicker on subsequent fetches
  */
 export function useClusterData(competitionId?: string | null): ClusterDataResult {
     const [clusters, setClusters] = useState<ClusterItem[]>([]);
@@ -35,13 +33,11 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
     const [error, setError] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const channelRef = useRef<RealtimeChannel | null>(null);
-    const fetchCountRef = useRef(0);
 
     const isGlobal = !competitionId || competitionId === 'all';
 
     const fetchClusters = useCallback(async () => {
-        fetchCountRef.current += 1;
-        if (fetchCountRef.current === 1) setLoading(true);
+        setLoading(true);
         setError(null);
 
         try {
@@ -84,11 +80,7 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
                 },
                 (payload) => {
                     const newCluster = payload.new as unknown as ClusterItem;
-                    setClusters((prev) => {
-                        // Dedup guard
-                        if (prev.some(c => c.id === newCluster.id)) return prev;
-                        return [newCluster, ...prev].slice(0, 20);
-                    });
+                    setClusters((prev) => [newCluster, ...prev].slice(0, 20));
                 },
             )
             .subscribe((status: string) => {

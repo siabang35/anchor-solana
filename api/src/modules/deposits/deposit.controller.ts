@@ -22,7 +22,7 @@ import {
     ApiParam,
     ApiHeader,
 } from '@nestjs/swagger';
-// Adapter-agnostic: no Express types needed
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import { DepositService } from './deposit.service.js';
@@ -81,12 +81,12 @@ export class DepositController {
     /**
      * Extract request metadata for audit logging
      */
-    private getAuditMetadata(req: any) {
+    private getAuditMetadata(req: Request) {
         return {
-            ipAddress: req.ip || req.headers?.['x-forwarded-for']?.toString() || 'unknown',
-            userAgent: req.headers?.['user-agent'] || 'unknown',
-            deviceFingerprint: req.headers?.['x-device-fingerprint']?.toString(),
-            requestId: req.headers?.['x-request-id']?.toString() || req.id,
+            ipAddress: req.ip || req.headers['x-forwarded-for']?.toString() || 'unknown',
+            userAgent: req.headers['user-agent'] || 'unknown',
+            deviceFingerprint: req.headers['x-device-fingerprint']?.toString(),
+            requestId: req.headers['x-request-id']?.toString(),
         };
     }
 
@@ -142,7 +142,7 @@ export class DepositController {
     async generateWallet(
         @CurrentUser('id') userId: string,
         @Body() body: { chain?: string; privyUserId?: string },
-        @Req() req: any,
+        @Req() req: Request,
     ): Promise<WalletResponseDto> {
         const chain = (body.chain || 'base') as string;
 
@@ -227,7 +227,7 @@ export class DepositController {
     async initiateDeposit(
         @CurrentUser('id') userId: string,
         @Body() dto: InitiateDepositDto,
-        @Req() req: any,
+        @Req() req: Request,
     ): Promise<InitiateDepositResponseDto> {
         this.logger.log(`Initiating deposit for user ${userId}: ${dto.amount} ${dto.chain}`);
 
@@ -268,7 +268,7 @@ export class DepositController {
     async verifyDeposit(
         @CurrentUser('id') userId: string,
         @Body() dto: VerifyDepositDto,
-        @Req() req: any,
+        @Req() req: Request,
     ): Promise<DepositTransactionDto> {
         this.logger.log(`Verifying deposit for user ${userId}: ${dto.nonce}`);
 
@@ -345,7 +345,7 @@ export class DepositController {
     async initiateWithdrawal(
         @CurrentUser('id') userId: string,
         @Body() dto: InitiateWithdrawalDto,
-        @Req() req: any,
+        @Req() req: Request,
     ): Promise<WithdrawalResponseDto> {
         this.logger.log(`Initiating withdrawal for user ${userId}: ${dto.amount} ${dto.chain}`);
 
@@ -388,7 +388,7 @@ export class DepositController {
     async confirmWithdrawal(
         @CurrentUser('id') userId: string,
         @Body() dto: ConfirmWithdrawalDto,
-        @Req() req: any,
+        @Req() req: Request,
     ): Promise<WithdrawalResponseDto> {
         this.logger.log(`Confirming withdrawal for user ${userId}: ${dto.withdrawalId}`);
 

@@ -1,5 +1,5 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
-// Adapter-agnostic types (superseded by Fastify onRequest hook in main.ts)
+import { Request, Response, NextFunction } from 'express';
 import { ConfigService } from '@nestjs/config';
 
 /**
@@ -25,7 +25,7 @@ export class SecurityHeadersMiddleware implements NestMiddleware {
 
     constructor(private readonly configService: ConfigService) { }
 
-    use(req: any, res: any, next: () => void): void {
+    use(req: Request, res: Response, next: NextFunction): void {
         // ===================
         // Core Security Headers
         // ===================

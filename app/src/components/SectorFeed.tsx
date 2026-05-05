@@ -11,10 +11,10 @@ interface Props {
 
 // ── Tab metadata ────────────────────────────────────────────────
 const TAB_META: Record<string, { icon: string; title: string; description: string }> = {
-    top:     { icon: '🔥', title: 'Top Markets',      description: 'Most popular competitions by participant count' },
-    foryou:  { icon: '✨', title: 'Recommended For You', description: 'Curated picks based on activity and potential' },
-    signals: { icon: '📡', title: 'Market Signals',    description: 'Latest intelligence from live data feeds' },
-    latest:  { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created' },
+    top: { icon: '🔥', title: 'Top Markets', description: 'Most popular competitions by participant count' },
+    foryou: { icon: '✨', title: 'Recommended For You', description: 'Curated picks based on activity and potential' },
+    signals: { icon: '📡', title: 'Market Signals', description: 'Latest intelligence from live data feeds' },
+    latest: { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created' },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -84,9 +84,9 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
     const progress = getProgressPct(comp);
 
     return (
-        <article 
-            className="feed-card animate-in" 
-            style={{ 
+        <article
+            className="feed-card animate-in"
+            style={{
                 border: selected ? '2px solid var(--accent-indigo)' : '1px solid var(--border-glass)',
                 cursor: 'pointer',
                 transform: selected ? 'scale(1.02)' : 'none',
@@ -497,9 +497,9 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
 
             <div className="sector-feed__grid">
                 {sorted.map((comp) => (
-                    <CompetitionCard 
-                        key={comp.id} 
-                        comp={comp} 
+                    <CompetitionCard
+                        key={comp.id}
+                        comp={comp}
                         selected={comp.id === selectedCompId}
                         onClick={() => onSelectCompetition?.(comp.id)}
                     />

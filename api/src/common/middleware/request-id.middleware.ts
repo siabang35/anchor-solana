@@ -1,5 +1,5 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
-// Adapter-agnostic types (superseded by Fastify genReqId in main.ts)
+import { Request, Response, NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
 /**
@@ -18,7 +18,7 @@ import { randomUUID } from 'crypto';
 export class RequestIdMiddleware implements NestMiddleware {
     private readonly HEADER_NAME = 'X-Request-ID';
 
-    use(req: any, res: any, next: () => void): void {
+    use(req: Request, res: Response, next: NextFunction): void {
         // Use existing request ID from trusted proxy, or generate new one
         const existingId = req.headers['x-request-id'] as string;
 

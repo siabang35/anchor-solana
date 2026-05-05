@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, VerifyCallback, Profile, StrategyOptionsWithRequest } from 'passport-google-oauth20';
 import { ConfigService } from '@nestjs/config';
-// Adapter-agnostic: no Express types needed
+import { Request } from 'express';
 
 /**
  * Google OAuth Strategy
@@ -39,7 +39,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
      * Full security verification is done in auth.controller using GoogleOAuthSecurityService.
      */
     async validate(
-        req: any,
+        req: Request,
         accessToken: string,
         refreshToken: string,
         profile: Profile,

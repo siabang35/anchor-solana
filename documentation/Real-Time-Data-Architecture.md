@@ -34,10 +34,9 @@ sequenceDiagram
 
 ## 2. Ingestion Layer (ETL)
 
-### 2.1 Polling, Webhooks & RSS Feeds
+### 2.1 Polling & Webhooks
 *   **Polling**: High-frequency polling (every 1-5 mins) for critical sources like Crypto Prices, GDELT, and Breaking News.
 *   **Webhooks**: Direct integration for immediate events (e.g., On-chain transaction alerts).
-*   **RSS Aggregation (Free & Robust)**: Concurrent `Promise.allSettled` fetching from top publishers (Google News Business, CNBC, WSJ, Financial Times, Investing.com) to bypass API rate limits and ensure a constant data flow, specifically leveraged in the **Economy** and **Finance** sectors.
 
 ### 2.2 Normalization
 Before data enters the stream, it is normalized into a `UnifiedItem` structure:

@@ -253,4 +253,3 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
         </header>
     );
 }
-

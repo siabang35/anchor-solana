@@ -202,9 +202,9 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
 
     return (
         <>
-            <Header 
-                theme={theme} onToggleTheme={toggleTheme} 
-                activeSector={sector} 
+            <Header
+                theme={theme} onToggleTheme={toggleTheme}
+                activeSector={sector}
             />
             <main className="main-container">
                 {/* Category Hero Header */}
@@ -536,8 +536,8 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                                         </span>
                                     </div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                                        {cluster.article_urls?.length || 0} articles · 
-                                        {cluster.signals?.length || 0} signals · 
+                                        {cluster.article_urls?.length || 0} articles ·
+                                        {cluster.signals?.length || 0} signals ·
                                         Sentiment: <span style={{ color: cluster.sentiment > 0 ? '#10b981' : cluster.sentiment < 0 ? '#ef4444' : '#6b7394' }}>
                                             {cluster.sentiment > 0 ? '📈' : cluster.sentiment < 0 ? '📉' : '➖'} {(cluster.sentiment * 100).toFixed(0)}%
                                         </span>
@@ -576,17 +576,17 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
 
                         <div className="feed-scroll" style={{ maxHeight: '300px' }}>
                             {feeds.map((item: LiveFeedItem) => (
-                                <a 
-                                    key={item.id} 
-                                    href={item.url || '#'} 
-                                    target={item.url ? "_blank" : "_self"} 
+                                <a
+                                    key={item.id}
+                                    href={item.url || '#'}
+                                    target={item.url ? "_blank" : "_self"}
                                     rel="noopener noreferrer"
                                     className={`feed-item ${item.impact}`}
                                     style={{ textDecoration: 'none', color: 'inherit', display: 'flex', cursor: item.url ? 'pointer' : 'default' }}
                                 >
                                     <span className="feed-icon">{item.icon}</span>
                                     <div style={{ flex: 1 }}>
-                                        <div className="feed-source">{item.source} {item.url && <span style={{fontSize: '0.5rem', opacity: 0.5}}>🔗</span>}</div>
+                                        <div className="feed-source">{item.source} {item.url && <span style={{ fontSize: '0.5rem', opacity: 0.5 }}>🔗</span>}</div>
                                         <div className="feed-text">{item.text}</div>
                                     </div>
                                     <span className={`feed-impact ${item.impact}`}>{item.impact.toUpperCase()}</span>

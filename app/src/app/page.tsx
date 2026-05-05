@@ -26,6 +26,7 @@ function HomeInner() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [activeSector, setActiveSector] = useState('top');
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
 
   // Agent data for neural lines on curve
   const { publicKey } = useWallet();
@@ -82,6 +83,11 @@ function HomeInner() {
     );
   });
 
+  // Compute user level from agents count
+  const agentCount = forecasters.length;
+  const userLevel = agentCount >= 10 ? 5 : agentCount >= 7 ? 4 : agentCount >= 4 ? 3 : agentCount >= 2 ? 2 : agentCount >= 1 ? 1 : 0;
+  const levelNames = ['Explorer', 'Analyst', 'Strategist', 'Architect', 'Oracle', 'Sovereign'];
+
   return (
     <>
       <Header 
@@ -90,30 +96,147 @@ function HomeInner() {
         onSectorChange={(s) => { setActiveSector(s); setSelectedCompId(null); }} 
       />
       <main className="main-container">
-        {/* Solana AI Banner */}
-        <div className="principle-banner animate-in" style={{
-            background: 'linear-gradient(135deg, rgba(20,241,149,0.05) 0%, rgba(153,69,255,0.05) 100%)',
-            border: '1px solid rgba(153,69,255,0.2)',
-            position: 'relative', overflow: 'hidden',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-        }}>
-            <div style={{
-                position: 'absolute', top: '-50%', left: '-10%', width: '120%', height: '200%',
-                background: 'radial-gradient(ellipse at top left, rgba(20,241,149,0.15) 0%, transparent 50%), radial-gradient(ellipse at bottom right, rgba(153,69,255,0.15) 0%, transparent 50%)',
-                pointerEvents: 'none', zIndex: 0
-            }} />
-            <div style={{ position: 'relative', zIndex: 1 }}>
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--text-primary)' }}>
-                    <img 
-                        src="/images/coin/solana.png" 
-                        alt="Solana Logo" 
-                        style={{ width: '28px', height: '28px', filter: 'drop-shadow(0 0 6px rgba(20,241,149,0.4))' }} 
-                    />
-                    Solana AI Agent Competition
-                </h2>
-                <p style={{ color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                    Deploy AI agents, predict market outcomes via <strong>AI Claw</strong> mechanics, and earn real-time rewards.
-                </p>
+        {/* ═══ HERO BENTO — PredictaX/Nexa hybrid ═══ */}
+        <div className="hero-bento animate-float">
+            {/* Main hero card */}
+            <div className="hero-bento__main">
+                <div style={{ position: 'relative', zIndex: 1, padding: '1rem 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', background: 'var(--bg-secondary)', padding: '0.3rem 0.6rem', borderRadius: '20px', width: 'fit-content', border: '1px solid var(--border-glass)' }}>
+                        <img 
+                            src="/images/coin/solana.png" 
+                            alt="Solana" 
+                            style={{ width: '16px', height: '16px', filter: 'drop-shadow(0 0 8px rgba(20,241,149,0.4))' }} 
+                        />
+                        <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                            Powered by Solana
+                        </span>
+                    </div>
+                    <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, fontFamily: 'var(--font-sans)', color: 'var(--text-primary)', letterSpacing: '-0.04em', lineHeight: 1.05, marginBottom: '1rem' }}>
+                        AI-Native <span style={{ background: 'var(--gradient-vibrant)', WebkitBackgroundClip: 'text', color: 'transparent', WebkitTextFillColor: 'transparent' }}>Probability<br/>Trading</span> Platform
+                    </h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: 1.6, maxWidth: '420px', fontWeight: 500 }}>
+                        Deploy autonomous AI agents, predict real-world outcomes across <strong style={{ color: 'var(--sol-green)' }}>7 sectors</strong>, and earn from the Value Creation Pool.
+                    </p>
+                </div>
+            </div>
+
+            {/* Side stat card 1 — Trending Agents */}
+            <div className="hero-bento__side animate-float stagger-1">
+                <div style={{ fontSize: '0.55rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>
+                    🔥 Trending Agents
+                </div>
+                {filteredForecasters.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                        {filteredForecasters.slice(0, 3).map((f, i) => (
+                            <div key={f.id || i} style={{
+                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                padding: '0.35rem 0.5rem', borderRadius: '10px',
+                                background: i === 0 ? 'rgba(251,191,36,0.06)' : 'transparent',
+                                border: `1px solid ${i === 0 ? 'rgba(251,191,36,0.12)' : 'var(--border-card)'}`,
+                            }}>
+                                <div style={{
+                                    width: '28px', height: '28px', borderRadius: '8px',
+                                    background: `linear-gradient(135deg, hsl(${(i * 90 + 200) % 360}, 70%, 55%), hsl(${(i * 90 + 245) % 360}, 80%, 50%))`,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.65rem', fontWeight: 800, color: 'white', flexShrink: 0,
+                                }}>
+                                    {(f.name || 'AI')[0]}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {f.name || `Agent ${i + 1}`}
+                                    </div>
+                                    <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                        {f.status || 'active'}
+                                    </div>
+                                </div>
+                                <span style={{ fontSize: '0.55rem', fontWeight: 800, color: i === 0 ? '#fbbf24' : 'var(--accent-indigo)' }}>
+                                    #{i + 1}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.2rem', padding: '0.2rem' }}>
+                        <div 
+                            className="instruction-toggle"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} 
+                            onClick={() => setIsInstructionsOpen(!isInstructionsOpen)}
+                        >
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                                Ready to deploy? How to build:
+                            </div>
+                            <div className="instruction-chevron" style={{ fontSize: '0.8rem', color: 'var(--accent-indigo)', transform: isInstructionsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                                ▼
+                            </div>
+                        </div>
+
+                        <div className={`instruction-content ${isInstructionsOpen ? 'open' : ''}`}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                                <div style={{ background: 'var(--bg-secondary)', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent-indigo)' }}>1</div>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-primary)' }}>Select a <strong>Category</strong> below</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                                <div style={{ background: 'var(--bg-secondary)', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent-indigo)' }}>2</div>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-primary)' }}>
+                                    <span className="desktop-text">Scroll down to <strong>Build AI Agent</strong></span>
+                                    <span className="mobile-text">Tap <strong>DEPLOY AI</strong> on the right</span>
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(255,255,255,0.02)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                                <div style={{ background: 'var(--bg-secondary)', width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--accent-indigo)' }}>3</div>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-primary)' }}>Confirm &amp; <strong>Deploy</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Side stat card 2 — Live Stats */}
+            <div className="hero-bento__side animate-float stagger-2">
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {[
+                        { label: 'Markets', value: String(competitions.length || '—'), color: 'var(--sol-purple)' },
+                        { label: 'AI Agents', value: String(forecasters.length || '—'), color: 'var(--sol-green)' },
+                        { label: 'Network', value: 'Devnet', color: 'var(--accent-cyan)' },
+                    ].map((stat) => (
+                        <div key={stat.label} style={{
+                            flex: 1, minWidth: '60px',
+                            background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-card)',
+                            borderRadius: '12px', padding: '0.6rem 0.5rem', textAlign: 'center',
+                        }}>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: stat.color }}>{stat.value}</div>
+                            <div style={{ fontSize: '0.5rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>{stat.label}</div>
+                        </div>
+                    ))}
+                </div>
+                {/* User Level */}
+                {publicKey && (
+                    <div style={{
+                        marginTop: '0.6rem', padding: '0.5rem',
+                        borderRadius: '10px', background: 'rgba(153,69,255,0.04)',
+                        border: '1px solid rgba(153,69,255,0.08)',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    }}>
+                        <div style={{
+                            width: '32px', height: '32px', borderRadius: '10px',
+                            background: 'var(--gradient-primary)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '0.85rem', flexShrink: 0,
+                            boxShadow: '0 4px 12px rgba(153,69,255,0.2)',
+                        }}>
+                            {['🌱', '📊', '🎯', '🏗️', '🔮', '👑'][userLevel]}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                Level {userLevel + 1} · {levelNames[userLevel]}
+                            </div>
+                            <div style={{ width: '100%', height: '3px', background: 'var(--border-glass)', borderRadius: '2px', marginTop: '3px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.min(100, (agentCount / 10) * 100)}%`, background: 'var(--gradient-primary)', borderRadius: '2px' }} />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
 
@@ -149,9 +272,11 @@ function HomeInner() {
         </div>
 
         {/* Data Feeds + Deploy Agent */}
-        <div className="grid-2">
+        <div style={{ display: 'grid', gridTemplateColumns: activeSector === 'top' ? '1fr' : '1fr 1fr', gap: '1rem' }}>
           <DataFeeds category={activeSector} />
-          <DeployAgent initialCategory={activeSector} />
+          {activeSector !== 'top' && (
+              <DeployAgent initialCategory={activeSector} />
+          )}
         </div>
 
         {/* Global Pool & Champions + Value Pool + Leaderboard */}
@@ -162,7 +287,7 @@ function HomeInner() {
         </div>
 
         {/* Performance Analytics */}
-        <div style={{ marginTop: '0.75rem' }}>
+        <div className="performance-section" style={{ marginTop: '0.75rem' }}>
           <Performance />
         </div>
       </main>

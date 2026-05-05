@@ -20,7 +20,7 @@ import {
     ApiParam,
     ApiQuery,
 } from '@nestjs/swagger';
-// Adapter-agnostic: no Express types needed
+import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { AdminGuard, SuperAdminGuard } from './guards/index.js';
 import { AdminService } from './admin.service.js';
@@ -45,12 +45,10 @@ import {
     RequestLogQueryDto, // Added RequestLogQueryDto
 } from './dto/index.js';
 
-// Adapter-agnostic request with auth
-interface AuthenticatedRequest {
+// Extend Express Request to include user and adminUser
+interface AuthenticatedRequest extends Request {
     user: { sub: string; email?: string };
     adminUser?: { id: string; role: string; permissions: object };
-    ip?: string;
-    headers: Record<string, any>;
 }
 
 @ApiTags('Admin')

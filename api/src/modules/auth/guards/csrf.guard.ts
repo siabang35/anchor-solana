@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-// Adapter-agnostic: no Express types needed
+import { Request } from 'express';
 import * as crypto from 'crypto';
 
 export const SKIP_CSRF_KEY = 'skipCsrf';
@@ -46,7 +46,7 @@ export class CsrfGuard implements CanActivate {
     }
 
     canActivate(context: ExecutionContext): boolean {
-        const request = context.switchToHttp().getRequest<any>();
+        const request = context.switchToHttp().getRequest<Request>();
         const response = context.switchToHttp().getResponse();
 
         // Safe methods don't need CSRF protection
@@ -86,7 +86,7 @@ export class CsrfGuard implements CanActivate {
     /**
      * Validate CSRF token from header against cookie
      */
-    private validateCsrfToken(request: any, response: any): boolean {
+    private validateCsrfToken(request: Request, response: any): boolean {
         const cookieToken = request.cookies?.[this.cookieName];
         const headerToken = request.headers[this.headerName] as string;
 
@@ -112,7 +112,7 @@ export class CsrfGuard implements CanActivate {
     /**
      * Ensure CSRF cookie is set
      */
-    private ensureCsrfCookie(request: any, response: any): void {
+    private ensureCsrfCookie(request: Request, response: any): void {
         if (!request.cookies?.[this.cookieName]) {
             this.setCsrfCookie(response);
         }
@@ -182,7 +182,7 @@ export class CsrfGuard implements CanActivate {
     /**
      * Get client IP for logging
      */
-    private getClientIp(request: any): string {
+    private getClientIp(request: Request): string {
         const forwardedFor = request.headers['x-forwarded-for'];
         if (forwardedFor) {
             const ips = Array.isArray(forwardedFor)

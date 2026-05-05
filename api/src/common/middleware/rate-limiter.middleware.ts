@@ -13,7 +13,7 @@
  */
 
 import { Injectable, NestMiddleware, HttpException, HttpStatus, Logger } from '@nestjs/common';
-// Adapter-agnostic types (superseded by @fastify/rate-limit in main.ts)
+import { Request, Response, NextFunction } from 'express';
 
 export interface RateLimitEntry {
     count: number;
@@ -82,7 +82,7 @@ export class RateLimiterMiddleware implements NestMiddleware {
     /**
      * Generate a unique key for rate limiting
      */
-    private getKey(req: any): string {
+    private getKey(req: Request): string {
         if (this.config.keyGenerator) {
             return this.config.keyGenerator(req);
         }
@@ -97,7 +97,7 @@ export class RateLimiterMiddleware implements NestMiddleware {
     /**
      * Get client IP address
      */
-    private getClientIp(req: any): string {
+    private getClientIp(req: Request): string {
         const forwarded = req.headers['x-forwarded-for'];
         if (forwarded) {
             const ips = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(',');
@@ -110,7 +110,7 @@ export class RateLimiterMiddleware implements NestMiddleware {
     /**
      * Check if request should be rate limited
      */
-    use(req: any, res: any, next: () => void): void {
+    use(req: Request, res: Response, next: NextFunction): void {
         // Skip if configured to skip
         if (this.config.skipIf && this.config.skipIf(req)) {
             return next();

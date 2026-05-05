@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase, apiFetch } from '@/lib/supabase';
+import { supabase, API_BASE_URL, apiFetch } from '@/lib/supabase';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export interface LiveFeedItem {
@@ -85,12 +85,10 @@ function mapToFeedItem(item: any): LiveFeedItem {
 
 /**
  * Hook for real-time live feed data.
- *
- * OPTIMIZED:
- * 1. Primary: API fetch (fastest via Fastify + ETag cache)
- * 2. Fallback: Supabase direct query (only if API fails)
- * 3. No triple waterfall — parallel fallback with race
- * 4. Realtime subscription for instant new items
+ * 
+ * 1. Fetches initial items from REST API (or Supabase fallback)
+ * 2. Subscribes to Supabase Realtime for new INSERTs
+ * 3. Auto-prepends new items to the feed
  */
 export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedResult {
     const [feeds, setFeeds] = useState<LiveFeedItem[]>([]);
@@ -98,20 +96,15 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
     const [error, setError] = useState<string | null>(null);
     const [connected, setConnected] = useState(false);
     const channelRef = useRef<RealtimeChannel | null>(null);
-    const fetchCountRef = useRef(0);
 
-    const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
-
-    // Initial fetch — optimized: API first, single fallback
+    // Initial fetch
     const fetchFeeds = useCallback(async () => {
-        fetchCountRef.current += 1;
-        if (fetchCountRef.current === 1) {
-            setLoading(true);
-        }
+        setLoading(true);
         setError(null);
 
-        // ── Primary: Backend API (Fastify, cached with ETag) ──
         try {
+            // Try backend API first
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             const path = isCategoryValid
                 ? `/markets/feed?category=${category}&limit=${limit}`
                 : `/markets/feed?limit=${limit}`;
@@ -119,9 +112,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
             const responseData = await apiFetch<any>(path);
 
             if (responseData) {
-                const itemsList = Array.isArray(responseData)
-                    ? responseData
-                    : (responseData?.items || responseData?.data || []);
+                const itemsList = Array.isArray(responseData) ? responseData : (responseData?.items || responseData?.data || []);
                 const items = itemsList.map(mapToFeedItem);
 
                 if (items.length > 0) {
@@ -130,12 +121,13 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                     return;
                 }
             }
-        } catch {
-            // Silently fall through to Supabase fallback
+        } catch (err: any) {
+            console.warn('Backend API failed for live feed:', err.message);
         }
 
-        // ── Fallback: Direct Supabase query ──
+        // Fallback: fetch directly from Supabase market_data_items
         try {
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('market_data_items')
                 .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags');
@@ -149,16 +141,18 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 .limit(limit);
 
             if (!sbError && data && data.length > 0) {
-                setFeeds(data.map(mapToFeedItem));
+                const items = data.map(mapToFeedItem);
+                setFeeds(items);
                 setLoading(false);
                 return;
             }
         } catch {
-            // Fall through
+            // Supabase query failed
         }
 
-        // ── Last resort: Competitions as feed items ──
+        // Fallback 2: Use competitions as feed items
         try {
+            const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('competitions')
                 .select('id, title, description, sector, status, created_at');
@@ -192,7 +186,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
         } finally {
             setLoading(false);
         }
-    }, [limit, category, isCategoryValid]);
+    }, [limit, category]);
 
     // Subscribe to realtime inserts
     useEffect(() => {
@@ -210,6 +204,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 },
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     const newRow = payload.new as any;
+                    const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
                     const matchesCategory = !isCategoryValid || newRow.category === category;
 
                     if (newRow.is_active !== false && newRow.is_duplicate !== true && matchesCategory) {
@@ -233,7 +228,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 supabase.removeChannel(channelRef.current);
             }
         };
-    }, [limit, category, fetchFeeds, isCategoryValid]);
+    }, [limit, category, fetchFeeds]);
 
     return { feeds, loading, error, connected, refetch: fetchFeeds };
 }
