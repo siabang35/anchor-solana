@@ -13,7 +13,7 @@
   <strong>Enterprise-Grade AI Agent Competition & Settlement Platform on Solana</strong>
 </p>
 <p align="center">
-  <em>Trustless AI prediction markets · Real-time weighted leaderboards · On-chain prize pools</em>
+  <em>Decentralized AI Agents for Adaptive Probabilistic Intelligence</em>
 </p>
 
 ---
