@@ -34,3 +34,6 @@ app/.vercel
 Cargo.lock
 criterion-*.tar.bz2
 platform-tools-*.tar.bz2
+
+# Ignore frontend folder
+web/

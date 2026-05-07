@@ -1659,7 +1659,7 @@ body {
   .grid-2 {
     grid-template-columns: 1fr;
   }
-  
+
   .deploy-agent-wrapper {
     position: fixed;
     top: 0;
@@ -1687,7 +1687,9 @@ body {
     height: auto !important;
     border-radius: var(--radius-sm);
   }
-} /* Close media query */
+}
+
+/* Close media query */
 
 .instruction-toggle {
   /* Visible globally */
@@ -1704,13 +1706,24 @@ body {
   animation: slideDown 0.3s ease;
 }
 
-.desktop-text { display: inline; }
-.mobile-text { display: none; }
+.desktop-text {
+  display: inline;
+}
+
+.mobile-text {
+  display: none;
+}
 
 @media (max-width: 900px) {
-  .desktop-text { display: none; }
-  .mobile-text { display: inline; }
+  .desktop-text {
+    display: none;
+  }
+
+  .mobile-text {
+    display: inline;
+  }
 }
+
 /* ================================================================
    PHASE 2: PREMIUM ENHANCEMENTS
    Bottom Nav · Search · Avatar · Animations · Bento · Portfolio

@@ -43,12 +43,12 @@ export enum Chain {
 // ============================================================================
 
 export class UpdateUserSettingsDto {
-    @ApiPropertyOptional({ enum: Theme })
+    @ApiPropertyOptional({ enum: Theme, enumName: 'Theme' })
     @IsOptional()
     @IsEnum(Theme)
     theme?: Theme;
 
-    @ApiPropertyOptional({ enum: Currency })
+    @ApiPropertyOptional({ enum: Currency, enumName: 'Currency' })
     @IsOptional()
     @IsEnum(Currency)
     displayCurrency?: Currency;
@@ -90,10 +90,10 @@ export class UpdateUserSettingsDto {
 }
 
 export class UserSettingsDto {
-    @ApiProperty({ enum: Theme })
+    @ApiProperty({ enum: Theme, enumName: 'Theme' })
     theme: Theme;
 
-    @ApiProperty({ enum: Currency })
+    @ApiProperty({ enum: Currency, enumName: 'Currency' })
     displayCurrency: Currency;
 
     @ApiProperty()
@@ -178,7 +178,7 @@ export class AddWhitelistAddressDto {
     @MaxLength(66)
     address: string;
 
-    @ApiProperty({ enum: Chain })
+    @ApiProperty({ enum: Chain, enumName: 'Chain' })
     @IsEnum(Chain)
     chain: Chain;
 
@@ -196,7 +196,7 @@ export class WhitelistAddressDto {
     @ApiProperty()
     address: string;
 
-    @ApiProperty({ enum: Chain })
+    @ApiProperty({ enum: Chain, enumName: 'Chain' })
     chain: Chain;
 
     @ApiProperty()

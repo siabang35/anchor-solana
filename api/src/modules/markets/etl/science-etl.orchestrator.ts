@@ -7,13 +7,14 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BaseETLOrchestrator, ETLResult, MarketDataItem } from './base-etl.orchestrator.js';
-import { SemanticScholarClient, ArxivClient } from '../clients/index.js';
+import { SemanticScholarClient, ArxivClient, RSSClient } from '../clients/index.js';
 import { MarketMessagingService } from '../market-messaging.service.js';
 
 @Injectable()
 export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnModuleInit {
     private semanticScholar: SemanticScholarClient;
     private arxiv: ArxivClient;
+    private rss: RSSClient;
 
     constructor(private readonly messagingService: MarketMessagingService) {
         super('ScienceETLOrchestrator', 'science');
@@ -21,6 +22,7 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
 
         this.semanticScholar = new SemanticScholarClient();
         this.arxiv = new ArxivClient();
+        this.rss = new RSSClient();
     }
 
     async onModuleInit() {
@@ -86,6 +88,22 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             // Stream updates
             await this.messagingService.publishMessage('science', arxivItems, 'papers_update');
 
+            // 3. Fetch High-Quality Science News from Public Internet Sources (Free RSS)
+            this.logger.debug('Fetching high-quality science news from public internet sources...');
+            const rssItems = await this.fetchScienceRSSFeeds();
+            recordsFetched += rssItems.length;
+
+            // Enrich RSS items with scraped images (fallback to topic-based images)
+            await this.enrichItemsWithImages(rssItems, (title, desc) => this.getScienceImageUrl(undefined, title, desc));
+
+            const rssStats = await this.upsertItems(rssItems);
+            recordsCreated += rssStats.created;
+            recordsUpdated += rssStats.updated;
+            duplicatesFound += rssStats.duplicates;
+
+            // Stream updates
+            await this.messagingService.publishMessage('science', rssItems, 'papers_update');
+
         } catch (error) {
             errors.push((error as Error).message);
         }
@@ -123,6 +141,33 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             this.logger.warn(`Failed to fetch arXiv papers: ${(error as Error).message}`);
             return [];
         }
+    }
+
+    /**
+     * Fetch varied, high-quality science news without API keys
+     */
+    private async fetchScienceRSSFeeds(): Promise<MarketDataItem[]> {
+        const feeds = [
+            { url: 'https://www.nature.com/nature.rss', source: 'Nature' },
+            { url: 'https://www.sciencedaily.com/rss/all.xml', source: 'ScienceDaily' },
+            { url: 'https://news.mit.edu/rss/topic/artificial-intelligence2', source: 'MIT News' },
+            { url: 'https://www.sciencenews.org/feed', source: 'ScienceNews' }
+        ];
+
+        const allItems: MarketDataItem[] = [];
+        const results = await Promise.allSettled(
+            feeds.map(feed => this.rss.fetchFeed(feed.url, feed.source, 'science'))
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                allItems.push(...result.value.slice(0, 15)); // Limit to top 15 per source
+            } else {
+                this.logger.warn(`Failed to fetch a science RSS feed: ${result.reason}`);
+            }
+        }
+
+        return allItems;
     }
 
     private async storePapers(papers: any[]) {

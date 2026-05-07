@@ -92,13 +92,19 @@ export const CATEGORIES: MarketCategory[] = [
     },
     {
         id: 'crypto', name: 'Crypto', icon: '₿',
-        description: 'Predict crypto market events and price movements',
+        description: 'Predict crypto market events, price movements, and trending crypto news',
+        subCategories: [
+            { id: 'markets', name: 'Coins & Tokens', icon: '🪙' },
+            { id: 'news', name: 'Trending News', icon: '📰' },
+            { id: 'defi', name: 'DeFi & NFTs', icon: '🦄' },
+        ],
         markets: [
-            { id: 'btc-100k', title: 'BTC Above $100k This Month', outcomes: ['Yes', 'No'] },
-            { id: 'eth-merge', title: 'ETH Layer 2 TVL Growth', outcomes: ['High Growth', 'Moderate', 'Decline'] },
-            { id: 'sol-price', title: 'SOL Price Direction (7D)', outcomes: ['Bullish', 'Sideways', 'Bearish'] },
-            { id: 'defi-tvl', title: 'DeFi Total TVL TVL Trend', outcomes: ['Increase >5%', 'Stable', 'Decrease >5%'] },
-            { id: 'nft-volume', title: 'NFT Market Weekly Volume', outcomes: ['Up', 'Stable', 'Down'] },
+            { id: 'btc-100k', title: 'BTC Above $100k This Month', outcomes: ['Yes', 'No'], subCategoryId: 'markets' },
+            { id: 'sol-price', title: 'SOL Price Direction (7D)', outcomes: ['Bullish', 'Sideways', 'Bearish'], subCategoryId: 'markets' },
+            { id: 'binance-sec', title: 'SEC vs Binance Settlement', outcomes: ['Fined', 'Dismissed', 'Ongoing'], subCategoryId: 'news' },
+            { id: 'etf-approval', title: 'Next Crypto ETF Approval', outcomes: ['Approved', 'Delayed', 'Rejected'], subCategoryId: 'news' },
+            { id: 'defi-tvl', title: 'DeFi Total TVL Trend', outcomes: ['Increase >5%', 'Stable', 'Decrease >5%'], subCategoryId: 'defi' },
+            { id: 'nft-volume', title: 'NFT Market Weekly Volume', outcomes: ['Up', 'Stable', 'Down'], subCategoryId: 'defi' },
         ],
     },
     {

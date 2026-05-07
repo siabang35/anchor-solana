@@ -216,15 +216,20 @@ async function bootstrap() {
     // SECURITY: Only available in explicit development mode
     // ===================
     if (nodeEnv === 'development') {
-        const config = new DocumentBuilder()
-            .setTitle('ExoDuZe API')
-            .setDescription('The ExoDuZe API documentation')
-            .setVersion('1.0')
-            .addBearerAuth()
-            .build();
-        const document = SwaggerModule.createDocument(app, config);
-        SwaggerModule.setup('docs', app, document);
-        logger.log('📚 Swagger UI enabled (development mode only)');
+        try {
+            const config = new DocumentBuilder()
+                .setTitle('ExoDuZe API')
+                .setDescription('The ExoDuZe API documentation')
+                .setVersion('1.0')
+                .addBearerAuth()
+                .build();
+            const document = SwaggerModule.createDocument(app, config);
+            SwaggerModule.setup('docs', app, document);
+            logger.log('📚 Swagger UI enabled (development mode only)');
+        } catch (swaggerErr: any) {
+            logger.warn(`⚠️ Swagger document generation failed (non-critical): ${swaggerErr.message}`);
+            logger.warn('   API will run without Swagger UI. Fix enum circular deps to restore docs.');
+        }
     } else {
         logger.log('📚 Swagger UI disabled (non-development environment)');
     }

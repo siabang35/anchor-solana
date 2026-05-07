@@ -32,7 +32,7 @@ const sanitizeSportParam = ({ value }: { value: unknown }): SportType | undefine
 };
 
 export class SportsEventsQueryDto {
-    @ApiPropertyOptional({ enum: SportType })
+    @ApiPropertyOptional({ enum: SportType, enumName: 'SportType' })
     @IsOptional()
     @Transform(sanitizeSportParam)
     @IsEnum(SportType)
@@ -43,7 +43,7 @@ export class SportsEventsQueryDto {
     @IsUUID()
     leagueId?: string;
 
-    @ApiPropertyOptional({ enum: EventStatus })
+    @ApiPropertyOptional({ enum: EventStatus, enumName: 'EventStatus' })
     @IsOptional()
     @IsEnum(EventStatus)
     status?: EventStatus;
@@ -104,7 +104,7 @@ export class SportsEventsQueryDto {
 }
 
 export class SportsMarketsQueryDto {
-    @ApiPropertyOptional({ enum: SportType })
+    @ApiPropertyOptional({ enum: SportType, enumName: 'SportType' })
     @IsOptional()
     @Transform(sanitizeSportParam)
     @IsEnum(SportType)
@@ -115,7 +115,7 @@ export class SportsMarketsQueryDto {
     @IsUUID()
     eventId?: string;
 
-    @ApiPropertyOptional({ enum: SportsMarketType })
+    @ApiPropertyOptional({ enum: SportsMarketType, enumName: 'SportsMarketType' })
     @IsOptional()
     @IsEnum(SportsMarketType)
     marketType?: SportsMarketType;
@@ -170,7 +170,7 @@ export class SportsMarketsQueryDto {
 }
 
 export class SportsLeaguesQueryDto {
-    @ApiPropertyOptional({ enum: SportType })
+    @ApiPropertyOptional({ enum: SportType, enumName: 'SportType' })
     @IsOptional()
     @Transform(sanitizeSportParam)
     @IsEnum(SportType)
@@ -219,7 +219,7 @@ export class SportsLeaguesQueryDto {
 // ========================
 
 export class TriggerSyncDto {
-    @ApiPropertyOptional({ enum: SportType })
+    @ApiPropertyOptional({ enum: SportType, enumName: 'SportType' })
     @IsOptional()
     @IsEnum(SportType)
     sport?: SportType;
@@ -257,7 +257,7 @@ export class SportsLeagueResponseDto {
     @ApiProperty()
     externalId: string;
 
-    @ApiProperty({ enum: SportType })
+    @ApiProperty({ enum: SportType, enumName: 'SportType' })
     sport: SportType;
 
     @ApiProperty()
@@ -301,7 +301,7 @@ export class SportsTeamResponseDto {
     @ApiPropertyOptional()
     leagueId?: string;
 
-    @ApiProperty({ enum: SportType })
+    @ApiProperty({ enum: SportType, enumName: 'SportType' })
     sport: SportType;
 
     @ApiProperty()
@@ -354,7 +354,7 @@ export class SportsEventResponseDto {
     @ApiPropertyOptional()
     awayTeamId?: string;
 
-    @ApiProperty({ enum: SportType })
+    @ApiProperty({ enum: SportType, enumName: 'SportType' })
     sport: SportType;
 
     @ApiPropertyOptional()
@@ -372,7 +372,7 @@ export class SportsEventResponseDto {
     @ApiProperty()
     startTime: Date;
 
-    @ApiProperty({ enum: EventStatus })
+    @ApiProperty({ enum: EventStatus, enumName: 'EventStatus' })
     status: EventStatus;
 
     @ApiPropertyOptional()
@@ -426,7 +426,7 @@ export class SportsMarketResponseDto {
     @ApiPropertyOptional()
     marketId?: string;
 
-    @ApiProperty({ enum: SportsMarketType })
+    @ApiProperty({ enum: SportsMarketType, enumName: 'SportsMarketType' })
     marketType: SportsMarketType;
 
     @ApiProperty()
@@ -543,7 +543,7 @@ export class CreateSportsMarketDto {
     @IsUUID()
     eventId: string;
 
-    @ApiProperty({ enum: SportsMarketType })
+    @ApiProperty({ enum: SportsMarketType, enumName: 'SportsMarketType' })
     @IsEnum(SportsMarketType)
     marketType: SportsMarketType;
 

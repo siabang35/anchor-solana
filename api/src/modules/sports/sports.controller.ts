@@ -98,7 +98,7 @@ export class SportsController {
     @Get('teams/search')
     @ApiOperation({ summary: 'Search teams by name' })
     @ApiQuery({ name: 'q', description: 'Search query' })
-    @ApiQuery({ name: 'sport', enum: SportType, required: false })
+    @ApiQuery({ name: 'sport', enum: SportType, enumName: 'SportType', required: false })
     @ApiResponse({ status: 200, description: 'Search results' })
     async searchTeams(
         @Query('q') query: string,
@@ -133,7 +133,7 @@ export class SportsController {
 
     @Get('events/live')
     @ApiOperation({ summary: 'Get live events' })
-    @ApiQuery({ name: 'sport', enum: SportType, required: false })
+    @ApiQuery({ name: 'sport', enum: SportType, enumName: 'SportType', required: false })
     @ApiResponse({ status: 200, description: 'List of live events' })
     async getLiveEvents(
         @Query('sport') sport?: SportType,
@@ -143,7 +143,7 @@ export class SportsController {
 
     @Get('events/upcoming')
     @ApiOperation({ summary: 'Get upcoming events' })
-    @ApiQuery({ name: 'sport', enum: SportType, required: false })
+    @ApiQuery({ name: 'sport', enum: SportType, enumName: 'SportType', required: false })
     @ApiQuery({ name: 'limit', type: Number, required: false })
     @ApiResponse({ status: 200, description: 'List of upcoming events' })
     async getUpcomingEvents(

@@ -36,7 +36,7 @@ function isValidSector(s: string): s is ValidSector {
 const SECTOR_META: Record<string, { label: string; icon: string; color: string; description: string }> = {
     politics: { label: 'Politics', icon: '🏛️', color: '#818cf8', description: 'Political events, regulatory decisions, and government policy predictions' },
     finance: { label: 'Finance', icon: '📈', color: '#10b981', description: 'Financial markets, earnings, interest rates, and economic indicators' },
-    crypto: { label: 'Crypto', icon: '₿', color: '#f59e0b', description: 'Cryptocurrency markets, DeFi protocols, and blockchain events' },
+    crypto: { label: 'Crypto', icon: '₿', color: '#f59e0b', description: 'Cryptocurrency markets, trending crypto news, DeFi protocols, and blockchain events' },
     tech: { label: 'Technology', icon: '💻', color: '#6366f1', description: 'Tech industry events, product launches, and innovation milestones' },
     economy: { label: 'Economy', icon: '🌍', color: '#14b8a6', description: 'Macroeconomic indicators, GDP, inflation, and trade data' },
     science: { label: 'Science', icon: '🔬', color: '#8b5cf6', description: 'Scientific breakthroughs, clinical trials, and research milestones' },

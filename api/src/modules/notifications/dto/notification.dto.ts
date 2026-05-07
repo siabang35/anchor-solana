@@ -62,7 +62,7 @@ export class NotificationsQueryDto {
     @IsBoolean()
     isRead?: boolean;
 
-    @ApiPropertyOptional({ enum: NotificationType })
+    @ApiPropertyOptional({ enum: NotificationType, enumName: 'NotificationType' })
     @IsOptional()
     @IsEnum(NotificationType)
     type?: NotificationType;
@@ -115,7 +115,7 @@ export class NotificationDto {
     @ApiProperty()
     id: string;
 
-    @ApiProperty({ enum: NotificationType })
+    @ApiProperty({ enum: NotificationType, enumName: 'NotificationType' })
     type: NotificationType;
 
     @ApiProperty()

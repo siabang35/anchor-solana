@@ -201,7 +201,12 @@ export class AgentsService {
             );
         }
 
-        // 2. Insert forecaster agent into the new agents table
+        // 2. Insert forecaster agent with 'pending_stake' status
+        const competitionIds = dto.competition_ids || [];
+        if (competitionIds.length > 3) {
+            throw new BadRequestException('Cannot deploy forecaster agent to more than 3 competitions at once.');
+        }
+
         const { data: agent, error: insertError } = await supabase
             .from('agents')
             .insert({
@@ -209,7 +214,7 @@ export class AgentsService {
                 name: dto.name,
                 system_prompt: dto.system_prompt,
                 model: 'Qwen/Qwen2.5-7B-Instruct',
-                status: 'active',
+                status: competitionIds.length > 0 ? 'pending_stake' : 'active',
             })
             .select('*')
             .single();
@@ -219,45 +224,87 @@ export class AgentsService {
             throw new BadRequestException(`Failed to deploy forecaster agent: ${insertError.message}`);
         }
 
-        // 3. Link agent to competition if competition_ids provided
-        const competitionIds = dto.competition_ids || [];
-        if (competitionIds.length > 3) {
-            throw new BadRequestException('Cannot deploy forecaster agent to more than 3 competitions at once.');
-        }
+        // 3. STAKE-FIRST FLOW: Create stake → wait for confirmation → register in competition
+        const stakeResults: Array<{ competition_id: string; stake_status: string; tx?: string }> = [];
 
-        if (competitionIds.length > 0) {
+        if (competitionIds.length > 0 && this.poolService) {
+            for (const compId of competitionIds) {
+                try {
+                    // 3a. Create the on-chain stake (synchronous — wait for TX)
+                    this.logger.log(`⏳ Creating stake for agent ${agent.id} in competition ${compId}...`);
+                    const stakeResult = await this.poolService.autoStakeWithDevnetTx(
+                        compId, userId, agent.id, DEFAULT_AUTO_STAKE,
+                    );
+                    const txHash = stakeResult.onchainTx || null;
+                    this.logger.log(`✅ Stake confirmed for agent ${agent.id} in comp ${compId}: TX=${txHash?.slice(0, 20) || 'local'}`);
+
+                    // 3b. Stake succeeded → NOW register agent in the competition
+                    await supabase.from('agent_competition_entries').insert({
+                        agent_id: agent.id,
+                        competition_id: compId,
+                        user_id: userId,
+                        status: 'active',
+                    });
+
+                    stakeResults.push({
+                        competition_id: compId,
+                        stake_status: 'confirmed',
+                        tx: txHash,
+                    });
+                } catch (stakeErr: any) {
+                    this.logger.warn(`❌ Stake failed for comp ${compId}: ${stakeErr.message}`);
+
+                    // Stake failed — still register but with 'pending_stake' status
+                    // so user can retry the stake later
+                    await supabase.from('agent_competition_entries').insert({
+                        agent_id: agent.id,
+                        competition_id: compId,
+                        user_id: userId,
+                        status: 'pending_stake',
+                    });
+
+                    stakeResults.push({
+                        competition_id: compId,
+                        stake_status: 'failed',
+                    });
+                }
+            }
+
+            // 3c. If ALL stakes succeeded, activate the agent
+            const allStakesOk = stakeResults.every(r => r.stake_status === 'confirmed');
+            const anyStakeOk = stakeResults.some(r => r.stake_status === 'confirmed');
+
+            const newAgentStatus = allStakesOk ? 'active' : (anyStakeOk ? 'active' : 'pending_stake');
+            await supabase.from('agents').update({ status: newAgentStatus }).eq('id', agent.id);
+            agent.status = newAgentStatus;
+        } else if (competitionIds.length > 0) {
+            // No pool service — register directly (dev/testing mode)
             const entries = competitionIds.map(compId => ({
                 agent_id: agent.id,
                 competition_id: compId,
                 user_id: userId,
                 status: 'active',
             }));
-            
             await supabase.from('agent_competition_entries').insert(entries);
-
-            // ═══ AUTO-STAKE: Create pool_stake with real Solana devnet TX for EACH competition ═══
-            if (this.poolService) {
-                for (const compId of competitionIds) {
-                    try {
-                        const result = await this.poolService.autoStakeWithDevnetTx(
-                            compId, userId, agent.id, DEFAULT_AUTO_STAKE,
-                        );
-                        this.logger.log(`🎰 Auto-stake for agent ${agent.id} in comp ${compId}: TX=${result.onchainTx?.slice(0, 20) || 'pending'}`);
-                    } catch (stakeErr: any) {
-                        this.logger.warn(`Auto-stake failed for comp ${compId} (non-blocking): ${stakeErr.message}`);
-                    }
-                }
-            }
+            await supabase.from('agents').update({ status: 'active' }).eq('id', agent.id);
+            agent.status = 'active';
         }
 
         this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
 
-        // Trigger immediate first prediction so the frontend updates instantly
-        this.agentRunnerService.runSingleAgentId(agent.id).catch(err => {
-            this.logger.warn(`Failed to trigger immediate run for agent ${agent.id}: ${err.message}`);
-        });
+        // 4. Trigger immediate first prediction so the frontend updates instantly
+        if (agent.status === 'active') {
+            this.agentRunnerService.runSingleAgentId(agent.id).catch(err => {
+                this.logger.warn(`Failed to trigger immediate run for agent ${agent.id}: ${err.message}`);
+            });
+        }
 
-        return { ...agent, max_free_prompts: MAX_FREE_DEPLOYS, prompts_used: 0 };
+        return {
+            ...agent,
+            max_free_prompts: MAX_FREE_DEPLOYS,
+            prompts_used: 0,
+            stakes: stakeResults,
+        };
     }
 
     /**

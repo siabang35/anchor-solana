@@ -7,11 +7,13 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { BaseETLOrchestrator, ETLResult, MarketDataItem } from './base-etl.orchestrator.js';
-import { WorldBankClient, GDELTClient, IMFClient, OECDClient, AlphaVantageClient } from '../clients/index.js';
+import { WorldBankClient, GDELTClient, IMFClient, OECDClient, AlphaVantageClient, RSSClient } from '../clients/index.js';
 import { MarketMessagingService } from '../market-messaging.service.js';
 
 @Injectable()
 export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnModuleInit {
+    private readonly rss: RSSClient;
+
     constructor(
         private readonly worldBank: WorldBankClient,
         private readonly imf: IMFClient,
@@ -21,7 +23,8 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
         private readonly messagingService: MarketMessagingService
     ) {
         super('EconomyETLOrchestrator', 'economy');
-        this.syncInterval = 24 * 60 * 60 * 1000; // 24 hours
+        this.syncInterval = 12 * 60 * 60 * 1000; // 12 hours (more frequent for news)
+        this.rss = new RSSClient();
     }
 
     async onModuleInit() {
@@ -96,11 +99,17 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             }
 
             // 2. Fetch economic news from GDELT
-            this.logger.debug('Fetching economic news...');
+            this.logger.debug('Fetching economic news from GDELT...');
             const economicNews = await this.fetchEconomicNews();
             recordsFetched += economicNews.length;
 
             const newsItems = economicNews.map(n => this.transformGDELTToItem(n));
+
+            // 3. Fetch High-Quality Internet Sources (Free RSS)
+            this.logger.debug('Fetching high-quality economy news from public internet sources...');
+            const rssItems = await this.fetchEconomyRSSFeeds();
+            recordsFetched += rssItems.length;
+            newsItems.push(...rssItems);
 
             // Enrich news items with scraped images
             await this.enrichItemsWithImages(newsItems);
@@ -150,6 +159,33 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             this.logger.warn(`Failed to fetch economic news: ${(error as Error).message}`);
             return [];
         }
+    }
+
+    /**
+     * Fetch varied, high-quality economy news without API keys
+     */
+    private async fetchEconomyRSSFeeds(): Promise<MarketDataItem[]> {
+        const feeds = [
+            { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', source: 'CNBC Economy' },
+            { url: 'https://www.ft.com/global-economy?format=rss', source: 'Financial Times' },
+            { url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml', source: 'WSJ Business' },
+            { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' }
+        ];
+
+        const allItems: MarketDataItem[] = [];
+        const results = await Promise.allSettled(
+            feeds.map(feed => this.rss.fetchFeed(feed.url, feed.source, 'economy'))
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                allItems.push(...result.value.slice(0, 15)); // Limit to top 15 per source
+            } else {
+                this.logger.warn(`Failed to fetch an economy RSS feed: ${result.reason}`);
+            }
+        }
+
+        return allItems;
     }
 
     private transformGDELTToItem(article: any): MarketDataItem {

@@ -52,12 +52,12 @@ export class TransactionsQueryDto {
     @Max(100)
     limit?: number = 20;
 
-    @ApiPropertyOptional({ enum: TransactionType })
+    @ApiPropertyOptional({ enum: TransactionType, enumName: 'TransactionType' })
     @IsOptional()
     @IsEnum(TransactionType)
     type?: TransactionType;
 
-    @ApiPropertyOptional({ enum: TransactionStatus })
+    @ApiPropertyOptional({ enum: TransactionStatus, enumName: 'TransactionStatus' })
     @IsOptional()
     @IsEnum(TransactionStatus)
     status?: TransactionStatus;
@@ -81,7 +81,7 @@ export class TransactionDto {
     @ApiProperty()
     id: string;
 
-    @ApiProperty({ enum: TransactionType })
+    @ApiProperty({ enum: TransactionType, enumName: 'TransactionType' })
     type: TransactionType;
 
     @ApiProperty()
@@ -90,7 +90,7 @@ export class TransactionDto {
     @ApiProperty()
     currency: string;
 
-    @ApiProperty({ enum: TransactionStatus })
+    @ApiProperty({ enum: TransactionStatus, enumName: 'TransactionStatus' })
     status: TransactionStatus;
 
     @ApiPropertyOptional()

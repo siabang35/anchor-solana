@@ -932,8 +932,8 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
                 security_nonce: state?.lastHmac || null,
             });
         } catch (err: any) {
-            // Non-critical — don't break the stream
-            this.logger.debug(`Failed to store snapshot: ${err.message}`);
+            // Log storage errors visibly — silent failures hide missing columns/tables
+            this.logger.warn(`Failed to store snapshot for ${competitionId}: ${err.message}`);
         }
     }
 

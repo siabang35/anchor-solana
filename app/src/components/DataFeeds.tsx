@@ -10,11 +10,11 @@ export default function DataFeeds({ category }: { category?: string }) {
         <div className="glass-card card-body animate-in">
             <div className="section-header">
                 <h3 className="section-title">
-                    <span className="icon">📡</span> Live Data Feeds 
+                    <span className="icon">📡</span> Live Data Feeds
                     {category && category !== 'top' && category !== 'foryou' && (
-                        <span style={{ 
-                            marginLeft: '8px', 
-                            fontSize: '0.65rem', 
+                        <span style={{
+                            marginLeft: '8px',
+                            fontSize: '0.65rem',
                             opacity: 0.8,
                             padding: '2px 6px',
                             background: 'rgba(255,255,255,0.1)',
@@ -25,8 +25,8 @@ export default function DataFeeds({ category }: { category?: string }) {
                     )}
                 </h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <button 
-                        onClick={() => refetch()} 
+                    <button
+                        onClick={() => refetch()}
                         disabled={loading}
                         style={{
                             background: 'transparent',

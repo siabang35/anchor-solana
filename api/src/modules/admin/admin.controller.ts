@@ -153,7 +153,7 @@ export class AdminController {
 
     @Get('alerts')
     @ApiOperation({ summary: 'Get system alerts' })
-    @ApiQuery({ name: 'status', enum: AlertStatus, required: false })
+    @ApiQuery({ name: 'status', enum: AlertStatus, enumName: 'AlertStatus', required: false })
     @ApiResponse({ status: 200, type: [SystemAlertDto] })
     async getAlerts(@Query('status') status?: AlertStatus): Promise<SystemAlertDto[]> {
         return this.adminService.getAlerts(status);

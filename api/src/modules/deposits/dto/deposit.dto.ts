@@ -254,7 +254,7 @@ export class DepositTransactionDto {
     @ApiProperty({ example: '0x1234...5678' })
     txHash: string | null;
 
-    @ApiProperty({ enum: DepositStatus, example: 'confirmed' })
+    @ApiProperty({ enum: DepositStatus, enumName: 'DepositStatus', example: 'confirmed' })
     status: DepositStatus;
 
     @ApiProperty({ example: '2026-01-06T12:00:00Z' })
@@ -355,7 +355,7 @@ export class WithdrawalResponseDto {
     @ApiProperty({ example: '0x1234...5678' })
     toAddress: string;
 
-    @ApiProperty({ enum: DepositStatus, example: 'pending' })
+    @ApiProperty({ enum: DepositStatus, enumName: 'DepositStatus', example: 'pending' })
     status: DepositStatus;
 
     @ApiProperty({ example: '2026-01-07T12:00:00Z' })

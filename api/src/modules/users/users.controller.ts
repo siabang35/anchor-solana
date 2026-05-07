@@ -6,7 +6,6 @@ import {
     Delete,
     Body,
     Param,
-    Req,
     UseGuards,
     HttpCode,
     HttpStatus,
@@ -61,10 +60,6 @@ export class UsersController {
         return result;
     }
 
-    /**
-     * POST /users/avatar
-     * Upload avatar using standard NestJS FileInterceptor (Express)
-     */
     @Post('avatar')
     @UseInterceptors(FileInterceptor('file'))
     async uploadAvatar(
@@ -76,14 +71,8 @@ export class UsersController {
                     new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
                 ],
             }),
-        ) file: any,
+        ) file: any, // Using any to avoid complex type import issues, service verifies it
     ) {
-        if (!file) {
-            throw new Error('No file uploaded');
-        }
-        
-        // Pass the file buffer, mimetype, etc to the service
-        // Express.Multer.File properties: buffer, mimetype, originalname, size
         const publicUrl = await this.usersService.uploadAvatar(userId, file);
         return { avatarUrl: publicUrl };
     }

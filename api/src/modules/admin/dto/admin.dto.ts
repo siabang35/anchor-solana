@@ -57,7 +57,7 @@ export class AdminUsersQueryDto {
     @MaxLength(100)
     search?: string;
 
-    @ApiPropertyOptional({ enum: UserStatus })
+    @ApiPropertyOptional({ enum: UserStatus, enumName: 'UserStatus' })
     @IsOptional()
     @IsEnum(UserStatus)
     status?: UserStatus;
@@ -131,7 +131,7 @@ export class AdminAuditLogQueryDto {
 // ============================================================================
 
 export class UpdateUserStatusDto {
-    @ApiProperty({ enum: UserStatus })
+    @ApiProperty({ enum: UserStatus, enumName: 'UserStatus' })
     @IsEnum(UserStatus)
     status: UserStatus;
 
@@ -160,7 +160,7 @@ export class RejectWithdrawalDto {
 }
 
 export class UpdateAlertStatusDto {
-    @ApiProperty({ enum: AlertStatus })
+    @ApiProperty({ enum: AlertStatus, enumName: 'AlertStatus' })
     @IsEnum(AlertStatus)
     status: AlertStatus;
 
@@ -238,7 +238,7 @@ export class AdminUserDto {
     @ApiProperty()
     fullName: string;
 
-    @ApiProperty({ enum: UserStatus })
+    @ApiProperty({ enum: UserStatus, enumName: 'UserStatus' })
     status: UserStatus;
 
     @ApiProperty()
@@ -344,7 +344,7 @@ export class SystemAlertDto {
     @ApiProperty()
     type: string;
 
-    @ApiProperty({ enum: AlertSeverity })
+    @ApiProperty({ enum: AlertSeverity, enumName: 'AlertSeverity' })
     severity: AlertSeverity;
 
     @ApiProperty()
@@ -353,7 +353,7 @@ export class SystemAlertDto {
     @ApiProperty()
     description: string;
 
-    @ApiProperty({ enum: AlertStatus })
+    @ApiProperty({ enum: AlertStatus, enumName: 'AlertStatus' })
     status: AlertStatus;
 
     @ApiProperty()
