@@ -151,7 +151,11 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             { url: 'https://www.nature.com/nature.rss', source: 'Nature' },
             { url: 'https://www.sciencedaily.com/rss/all.xml', source: 'ScienceDaily' },
             { url: 'https://news.mit.edu/rss/topic/artificial-intelligence2', source: 'MIT News' },
-            { url: 'https://www.sciencenews.org/feed', source: 'ScienceNews' }
+            { url: 'https://www.sciencenews.org/feed', source: 'ScienceNews' },
+            { url: 'https://www.newscientist.com/section/news/feed/', source: 'New Scientist' },
+            { url: 'https://www.science.org/rss/news_current.xml', source: 'Science Magazine' },
+            { url: 'https://phys.org/rss-feed/', source: 'Phys.org' },
+            { url: 'https://www.nasa.gov/rss/dyn/breaking_news.rss', source: 'NASA' },
         ];
 
         const allItems: MarketDataItem[] = [];

@@ -56,14 +56,28 @@ export class InputSanitizerMiddleware implements NestMiddleware {
             req.body = sanitizedBody;
         }
 
+        // Sanitize query params in-place (req.query is read-only in newer Express)
         if (req.query && typeof req.query === 'object') {
-            const sanitizedQuery = this.sanitizeObject(req.query as Record<string, any>, req);
-            req.query = sanitizedQuery;
+            try {
+                const sanitizedQuery = this.sanitizeObject(req.query as Record<string, any>, req);
+                for (const key of Object.keys(req.query)) {
+                    (req.query as any)[key] = sanitizedQuery[key];
+                }
+            } catch {
+                // req.query may be immutable in some Express versions — skip safely
+            }
         }
 
+        // Sanitize params in-place (req.params may be read-only)
         if (req.params && typeof req.params === 'object') {
-            const sanitizedParams = this.sanitizeObject(req.params, req);
-            req.params = sanitizedParams;
+            try {
+                const sanitizedParams = this.sanitizeObject(req.params, req);
+                for (const key of Object.keys(req.params)) {
+                    (req.params as any)[key] = sanitizedParams[key];
+                }
+            } catch {
+                // req.params may be immutable — skip safely
+            }
         }
 
         next();

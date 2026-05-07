@@ -20,9 +20,13 @@ export class RSSClient {
 
     /**
      * Fetch items from a generic RSS feed URL
+     * Anti-throttling: randomized delay + timeout
      */
     async fetchFeed(url: string, sourceName: string, category: string): Promise<MarketDataItem[]> {
         try {
+            // Anti-throttling: small random delay (100-500ms) to avoid burst detection
+            await new Promise(r => setTimeout(r, 100 + Math.random() * 400));
+
             const feed = await this.parser.parseURL(url);
 
             return feed.items.map(item => this.transformToMarketDataItem(item, sourceName, category));
@@ -118,12 +122,16 @@ export class RSSClient {
             this.fetchNPRPolitics(),
             this.fetchAlJazeeraPolitics(),
             this.fetchTheHillPolitics(),
+            this.fetchFeed('https://rss.politico.com/politics-news.xml', 'Politico', 'politics'),
+            this.fetchFeed('https://feeds.reuters.com/Reuters/worldNews', 'Reuters World', 'politics'),
+            this.fetchFeed('https://rsshub.app/apnews/topics/politics', 'AP News', 'politics'),
+            this.fetchFeed('https://www.foreignaffairs.com/rss.xml', 'Foreign Affairs', 'politics'),
         ]);
 
         const allItems: MarketDataItem[] = [];
         for (const result of results) {
             if (result.status === 'fulfilled') {
-                allItems.push(...result.value);
+                allItems.push(...result.value.slice(0, 15));
             } else {
                 this.logger.warn(`Feed fetch failed: ${result.reason}`);
             }

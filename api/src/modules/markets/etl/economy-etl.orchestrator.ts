@@ -169,7 +169,11 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', source: 'CNBC Economy' },
             { url: 'https://www.ft.com/global-economy?format=rss', source: 'Financial Times' },
             { url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml', source: 'WSJ Business' },
-            { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' }
+            { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' },
+            { url: 'https://feeds.reuters.com/reuters/businessNews', source: 'Reuters Business' },
+            { url: 'https://feeds.bloomberg.com/markets/news.rss', source: 'Bloomberg Markets' },
+            { url: 'https://www.economist.com/finance-and-economics/rss.xml', source: 'The Economist' },
+            { url: 'https://www.weforum.org/feed', source: 'World Economic Forum' },
         ];
 
         const allItems: MarketDataItem[] = [];

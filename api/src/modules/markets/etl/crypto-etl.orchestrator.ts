@@ -9,11 +9,13 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Inject, Optional } from '@ne
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BaseETLOrchestrator, ETLResult, MarketDataItem } from './base-etl.orchestrator.js';
-import { CoinGeckoClient, CoinMarketCapClient, CryptoPanicClient, FEATURED_CRYPTO_IDS } from '../clients/index.js';
+import { CoinGeckoClient, CoinMarketCapClient, CryptoPanicClient, FEATURED_CRYPTO_IDS, RSSClient } from '../clients/index.js';
 import { MarketMessagingService } from '../market-messaging.service.js';
 
 @Injectable()
 export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModuleInit, OnModuleDestroy {
+    private readonly rss: RSSClient;
+
     constructor(
         private readonly coinGecko: CoinGeckoClient,
         private readonly coinMarketCap: CoinMarketCapClient,
@@ -23,6 +25,7 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
     ) {
         super('CryptoETLOrchestrator', 'crypto');
         this.syncInterval = 5 * 60 * 1000; // 5 minutes for crypto
+        this.rss = new RSSClient();
     }
 
     async onModuleInit() {
@@ -94,8 +97,18 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
             this.logger.debug('Fetching Fear & Greed Index...');
             await this.fetchAndStoreFearGreed();
 
-            // Streaming: Publish signal
-            // (Note: signals are also published inside fetchAndStoreFearGreed)
+            // 4. Fetch High-Quality Crypto News from Public Internet Sources (Free RSS)
+            this.logger.debug('Fetching high-quality crypto news from public internet sources...');
+            const rssItems = await this.fetchCryptoRSSFeeds();
+            recordsFetched += rssItems.length;
+
+            // Enrich RSS items with scraped images
+            await this.enrichItemsWithImages(rssItems);
+
+            const rssStats = await this.upsertItems(rssItems);
+            recordsCreated += rssStats.created;
+            recordsUpdated += rssStats.updated;
+            duplicatesFound += rssStats.duplicates;
 
         } catch (error) {
             errors.push((error as Error).message);
@@ -178,6 +191,37 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
             this.logger.warn(`Failed to fetch news: ${(error as Error).message}`);
             return [];
         }
+    }
+
+    /**
+     * Fetch varied, high-quality crypto news without API keys
+     */
+    private async fetchCryptoRSSFeeds(): Promise<MarketDataItem[]> {
+        const feeds = [
+            { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', source: 'CoinDesk' },
+            { url: 'https://cointelegraph.com/rss', source: 'CoinTelegraph' },
+            { url: 'https://bitcoinmagazine.com/.rss/full/', source: 'Bitcoin Magazine' },
+            { url: 'https://decrypt.co/feed', source: 'Decrypt' },
+            { url: 'https://www.theblock.co/rss.xml', source: 'The Block' },
+            { url: 'https://blockworks.co/feed', source: 'Blockworks' },
+            { url: 'https://beincrypto.com/feed/', source: 'BeInCrypto' },
+            { url: 'https://cryptoslate.com/feed/', source: 'CryptoSlate' },
+        ];
+
+        const allItems: MarketDataItem[] = [];
+        const results = await Promise.allSettled(
+            feeds.map(feed => this.rss.fetchFeed(feed.url, feed.source, 'crypto'))
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                allItems.push(...result.value.slice(0, 15));
+            } else {
+                this.logger.warn(`Failed to fetch a crypto RSS feed: ${result.reason}`);
+            }
+        }
+
+        return allItems;
     }
 
     /**

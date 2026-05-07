@@ -29,7 +29,7 @@ export class AgentsService {
         private readonly configService: ConfigService,
         private readonly agentRunnerService: AgentRunnerService,
         @Optional() private readonly poolService: PoolService,
-    ) {}
+    ) { }
 
     private async resolveUserId(identifier: string): Promise<string | null> {
         if (!identifier) return null;
@@ -50,7 +50,7 @@ export class AgentsService {
         if (identifier.length >= 32 && identifier.length <= 44 && !identifier.includes('@')) {
             try {
                 this.logger.log(`Auto-provisioning wallet user for: ${identifier}`);
-                const randomPassword = Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+                const randomPassword = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
                 const { data: authData, error: authError } = await supabase.auth.admin.createUser({
                     email: `${identifier.slice(0, 8)}_${Date.now()}@wallet.exoduze.app`,
                     password: randomPassword,
@@ -84,7 +84,7 @@ export class AgentsService {
                 this.logger.error(`Auto-provision failed for ${identifier}`, e);
             }
         }
-        
+
         return null;
     }
 
@@ -188,7 +188,7 @@ export class AgentsService {
     async deployForecaster(rawUserId: string, dto: DeployForecastingAgentDto): Promise<any> {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) throw new UnauthorizedException('Wallet not connected or missing User ID');
-        
+
         // Use admin client to bypass RLS since the backend already authenticated the user
         const supabase = this.supabaseService.getAdminClient();
 
@@ -214,7 +214,7 @@ export class AgentsService {
                 name: dto.name,
                 system_prompt: dto.system_prompt,
                 model: 'Qwen/Qwen2.5-7B-Instruct',
-                status: competitionIds.length > 0 ? 'pending_stake' : 'active',
+                status: 'active',
             })
             .select('*')
             .single();
@@ -229,65 +229,70 @@ export class AgentsService {
 
         if (competitionIds.length > 0 && this.poolService) {
             for (const compId of competitionIds) {
+                let stakeOk = false;
+                let txHash: string | undefined;
+
+                // 3a. Create the on-chain stake (synchronous — wait for TX)
                 try {
-                    // 3a. Create the on-chain stake (synchronous — wait for TX)
                     this.logger.log(`⏳ Creating stake for agent ${agent.id} in competition ${compId}...`);
                     const stakeResult = await this.poolService.autoStakeWithDevnetTx(
                         compId, userId, agent.id, DEFAULT_AUTO_STAKE,
                     );
-                    const txHash = stakeResult.onchainTx || null;
+                    txHash = stakeResult.onchainTx || undefined;
+                    stakeOk = true;
                     this.logger.log(`✅ Stake confirmed for agent ${agent.id} in comp ${compId}: TX=${txHash?.slice(0, 20) || 'local'}`);
-
-                    // 3b. Stake succeeded → NOW register agent in the competition
-                    await supabase.from('agent_competition_entries').insert({
-                        agent_id: agent.id,
-                        competition_id: compId,
-                        user_id: userId,
-                        status: 'active',
-                    });
-
-                    stakeResults.push({
-                        competition_id: compId,
-                        stake_status: 'confirmed',
-                        tx: txHash,
-                    });
                 } catch (stakeErr: any) {
-                    this.logger.warn(`❌ Stake failed for comp ${compId}: ${stakeErr.message}`);
+                    this.logger.warn(`⚠️ Stake failed for comp ${compId} (non-blocking): ${stakeErr.message}`);
+                }
 
-                    // Stake failed — still register but with 'pending_stake' status
-                    // so user can retry the stake later
-                    await supabase.from('agent_competition_entries').insert({
+                // 3b. Register agent in the competition (regardless of stake outcome)
+                try {
+                    const { error: entryError } = await supabase.from('agent_competition_entries').insert({
                         agent_id: agent.id,
                         competition_id: compId,
                         user_id: userId,
-                        status: 'pending_stake',
+                        status: stakeOk ? 'active' : 'pending',
                     });
-
-                    stakeResults.push({
-                        competition_id: compId,
-                        stake_status: 'failed',
-                    });
+                    if (entryError) {
+                        this.logger.warn(`Competition entry insert error: ${entryError.message}`);
+                    }
+                } catch (entryErr: any) {
+                    this.logger.warn(`Competition entry failed for comp ${compId}: ${entryErr.message}`);
                 }
+
+                stakeResults.push({
+                    competition_id: compId,
+                    stake_status: stakeOk ? 'confirmed' : 'failed',
+                    tx: txHash,
+                });
             }
 
-            // 3c. If ALL stakes succeeded, activate the agent
-            const allStakesOk = stakeResults.every(r => r.stake_status === 'confirmed');
+            // 3c. Activate the agent if any stake succeeded
             const anyStakeOk = stakeResults.some(r => r.stake_status === 'confirmed');
-
-            const newAgentStatus = allStakesOk ? 'active' : (anyStakeOk ? 'active' : 'pending_stake');
-            await supabase.from('agents').update({ status: newAgentStatus }).eq('id', agent.id);
-            agent.status = newAgentStatus;
+            const newAgentStatus = anyStakeOk ? 'active' : 'active'; // Always activate — stake failure shouldn't block the agent
+            try {
+                await supabase.from('agents').update({ status: newAgentStatus }).eq('id', agent.id);
+                agent.status = newAgentStatus;
+            } catch (updateErr: any) {
+                this.logger.warn(`Agent status update failed: ${updateErr.message}`);
+                agent.status = 'active';
+            }
         } else if (competitionIds.length > 0) {
             // No pool service — register directly (dev/testing mode)
-            const entries = competitionIds.map(compId => ({
-                agent_id: agent.id,
-                competition_id: compId,
-                user_id: userId,
-                status: 'active',
-            }));
-            await supabase.from('agent_competition_entries').insert(entries);
-            await supabase.from('agents').update({ status: 'active' }).eq('id', agent.id);
-            agent.status = 'active';
+            try {
+                const entries = competitionIds.map(compId => ({
+                    agent_id: agent.id,
+                    competition_id: compId,
+                    user_id: userId,
+                    status: 'active',
+                }));
+                await supabase.from('agent_competition_entries').insert(entries);
+                await supabase.from('agents').update({ status: 'active' }).eq('id', agent.id);
+                agent.status = 'active';
+            } catch (directErr: any) {
+                this.logger.warn(`Direct competition registration failed: ${directErr.message}`);
+                agent.status = 'active';
+            }
         }
 
         this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
@@ -776,7 +781,7 @@ export class AgentsService {
         if (competitionId) {
             query = query.eq('competition_id', competitionId);
         }
-        
+
         if (sector && sector !== 'all' && sector !== 'top') {
             query = query.eq('competitions.sector', sector);
         }

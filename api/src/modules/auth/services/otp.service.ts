@@ -8,7 +8,7 @@ import {
     Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../../database/supabase.service.js';
 import { UsersService } from '../../users/users.service.js';

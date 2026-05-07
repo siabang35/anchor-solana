@@ -186,13 +186,31 @@ export class FinanceETLOrchestrator extends BaseETLOrchestrator implements OnMod
     }
 
     private async fetchYahooFinanceRSS(): Promise<MarketDataItem[]> {
-        const url = 'https://finance.yahoo.com/news/rssindex';
-        try {
-            return await this.rss.fetchFeed(url, 'Yahoo Finance', 'finance');
-        } catch (e) {
-            this.logger.warn('Failed to fetch Yahoo RSS');
-            return [];
+        const feeds = [
+            { url: 'https://finance.yahoo.com/news/rssindex', source: 'Yahoo Finance' },
+            { url: 'https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline', source: 'Investopedia' },
+            { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', source: 'MarketWatch' },
+            { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', source: 'CNBC Finance' },
+            { url: 'https://seekingalpha.com/market_currents.xml', source: 'Seeking Alpha' },
+            { url: 'https://www.fool.com/feeds/index.aspx', source: 'Motley Fool' },
+            { url: 'https://www.forbes.com/money/feed/', source: 'Forbes Finance' },
+            { url: 'https://financialpost.com/feed', source: 'Financial Post' },
+        ];
+
+        const allItems: MarketDataItem[] = [];
+        const results = await Promise.allSettled(
+            feeds.map(feed => this.rss.fetchFeed(feed.url, feed.source, 'finance'))
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                allItems.push(...result.value.slice(0, 15));
+            } else {
+                this.logger.warn(`Failed to fetch a finance RSS feed: ${result.reason}`);
+            }
         }
+
+        return allItems;
     }
 
     private transformNewsToItem(article: any): MarketDataItem {

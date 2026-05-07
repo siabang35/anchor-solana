@@ -8,13 +8,14 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { BaseETLOrchestrator, ETLResult, MarketDataItem } from './base-etl.orchestrator.js';
-import { HackerNewsClient, NewsAPIClient } from '../clients/index.js';
+import { HackerNewsClient, NewsAPIClient, RSSClient } from '../clients/index.js';
 import { MarketMessagingService } from '../market-messaging.service.js';
 
 @Injectable()
 export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModuleInit {
     private hackerNews: HackerNewsClient;
     private newsApi: NewsAPIClient;
+    private rss: RSSClient;
 
     constructor(
         private readonly configService: ConfigService,
@@ -25,6 +26,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
 
         this.hackerNews = new HackerNewsClient();
         this.newsApi = new NewsAPIClient(configService);
+        this.rss = new RSSClient();
     }
 
     async onModuleInit() {
@@ -88,6 +90,22 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             // Stream updates
             await this.messagingService.publishMessage('tech', newsItems, 'news_update');
 
+            // 3. Fetch High-Quality Tech News from Public Internet Sources (Free RSS)
+            this.logger.debug('Fetching high-quality tech news from public internet sources...');
+            const rssItems = await this.fetchTechRSSFeeds();
+            recordsFetched += rssItems.length;
+
+            // Enrich RSS items with scraped images (fallback to topic-based images)
+            await this.enrichItemsWithImages(rssItems, (title) => this.getTechImageUrl(title));
+
+            const rssStats = await this.upsertItems(rssItems);
+            recordsCreated += rssStats.created;
+            recordsUpdated += rssStats.updated;
+            duplicatesFound += rssStats.duplicates;
+
+            // Stream updates
+            await this.messagingService.publishMessage('tech', rssItems, 'news_update');
+
         } catch (error) {
             errors.push((error as Error).message);
         }
@@ -125,6 +143,37 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             this.logger.warn(`Failed to fetch tech news: ${(error as Error).message}`);
             return [];
         }
+    }
+
+    /**
+     * Fetch varied, high-quality tech news without API keys
+     */
+    private async fetchTechRSSFeeds(): Promise<MarketDataItem[]> {
+        const feeds = [
+            { url: 'https://techcrunch.com/feed/', source: 'TechCrunch' },
+            { url: 'https://feeds.arstechnica.com/arstechnica/index', source: 'Ars Technica' },
+            { url: 'https://www.theverge.com/rss/index.xml', source: 'The Verge' },
+            { url: 'https://www.wired.com/feed/rss', source: 'Wired' },
+            { url: 'https://www.zdnet.com/news/rss.xml', source: 'ZDNet' },
+            { url: 'https://www.engadget.com/rss.xml', source: 'Engadget' },
+            { url: 'https://venturebeat.com/feed/', source: 'VentureBeat' },
+            { url: 'https://www.technologyreview.com/feed/', source: 'MIT Tech Review' },
+        ];
+
+        const allItems: MarketDataItem[] = [];
+        const results = await Promise.allSettled(
+            feeds.map(feed => this.rss.fetchFeed(feed.url, feed.source, 'tech'))
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                allItems.push(...result.value.slice(0, 15));
+            } else {
+                this.logger.warn(`Failed to fetch a tech RSS feed: ${result.reason}`);
+            }
+        }
+
+        return allItems;
     }
 
     private async storeHNStories(stories: any[]) {
