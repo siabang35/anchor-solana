@@ -125,9 +125,14 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                         }
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = payload.new as unknown as Competition;
-                        setCompetitions((prev) =>
-                            prev.map((c) => (c.id === updated.id ? updated : c)),
-                        );
+                        // Remove settled/cancelled competitions from the feed immediately
+                        if (updated.status === 'settled' || updated.status === 'cancelled') {
+                            setCompetitions((prev) => prev.filter((c) => c.id !== updated.id));
+                        } else {
+                            setCompetitions((prev) =>
+                                prev.map((c) => (c.id === updated.id ? updated : c)),
+                            );
+                        }
                     } else if (payload.eventType === 'DELETE') {
                         const deleted = payload.old as unknown as Competition;
                         setCompetitions((prev) => prev.filter((c) => c.id !== deleted.id));
@@ -148,10 +153,12 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
     }, [sector, fetchCompetitions]);
 
     // Derive active competition (first active one for the current sector)
-    const activeCompetition = competitions.find((c) => c.status === 'active') || competitions[0] || null;
+    // Filter out any settled/cancelled that slipped through
+    const activeComps = competitions.filter(c => c.status === 'active' || c.status === 'upcoming');
+    const activeCompetition = activeComps.find((c) => c.status === 'active') || activeComps[0] || null;
 
     return {
-        competitions,
+        competitions: activeComps,
         sectorSummary,
         loading,
         error,

@@ -85,4 +85,68 @@ export class AntiManipulationUtil {
         const sum = historyProbs.reduce((acc, p) => acc + p, 0);
         return sum / historyProbs.length;
     }
+
+    // ========================================================================
+    // ANTI-THROTTLING / ANTI-CHUNKING / ANTI-HACKING / ANTI-MANIPULATION
+    // ========================================================================
+
+    /**
+     * Cryptographically secure random outcome selection.
+     * Uses crypto.randomInt (CSPRNG) instead of Math.random to prevent prediction.
+     */
+    static secureRandomOutcome(outcomeCount: number): number {
+        if (outcomeCount <= 1) return 0;
+        return crypto.randomInt(0, outcomeCount);
+    }
+
+    /**
+     * Generate a cryptographic nonce for idempotency and replay protection.
+     */
+    static generateNonce(): string {
+        return crypto.randomBytes(16).toString('hex');
+    }
+
+    /**
+     * Generate HMAC signature for competition creation integrity verification.
+     * Proves that competition was created by authorized system, not injected.
+     */
+    static generateCreationHMAC(category: string, horizon: string, title: string, timestamp: number): string {
+        const secret = process.env.COMPETITION_HMAC_SECRET || 'exoduze-integrity-key-v2';
+        const payload = `${category}:${horizon}:${title.substring(0, 64)}:${timestamp}`;
+        return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    }
+
+    /**
+     * Sanitize competition title to prevent injection attacks.
+     * Removes HTML, script tags, control characters, and excessive whitespace.
+     */
+    static sanitizeTitle(title: string): string {
+        return title
+            .replace(/<[^>]*>/g, '')           // Strip HTML tags
+            .replace(/[<>'";&]/g, '')          // Remove dangerous characters
+            .replace(/[\x00-\x1f\x7f]/g, '')  // Remove control characters
+            .replace(/\s+/g, ' ')              // Normalize whitespace
+            .trim()
+            .substring(0, 200);                // Max length
+    }
+
+    /**
+     * Check if a creation request is within cooldown period.
+     * Anti-throttling: prevents rapid-fire creation for same slot.
+     */
+    static isWithinCooldown(
+        cooldownMap: Map<string, number>,
+        key: string,
+        cooldownMs: number,
+    ): boolean {
+        const lastCreated = cooldownMap.get(key) || 0;
+        return (Date.now() - lastCreated) < cooldownMs;
+    }
+
+    /**
+     * Record a creation timestamp in the cooldown map.
+     */
+    static recordCreation(cooldownMap: Map<string, number>, key: string): void {
+        cooldownMap.set(key, Date.now());
+    }
 }

@@ -23,6 +23,7 @@ import { SupabaseService } from '../../../database/supabase.service.js';
 import { CompetitionManagerService, HORIZON_TIERS, getRefreshConfig, type HorizonTier } from './competition-manager.service.js';
 import { computeTfIdf, kMeansClustering } from '../../../common/utils/clustering.util.js';
 import { PoolService } from '../../pool/pool.service.js';
+import { AntiManipulationUtil } from '../utils/anti-manipulation.util.js';
 
 /** How many unique competitions to maintain PER CATEGORY (one per horizon tier) */
 const TARGET_COMPETITIONS_PER_CATEGORY = 4;
@@ -66,7 +67,12 @@ interface ClusteredCompetition {
 export class RealtimeCompetitionSeederService {
     private readonly logger = new Logger(RealtimeCompetitionSeederService.name);
     private isSeeding = false;
+    private isSettling = false;
     private isRefreshingClusters = false;
+
+    /** Anti-throttling: per slot cooldown map (key: `category::horizon`) */
+    private readonly creationCooldowns = new Map<string, number>();
+    private static readonly CREATION_COOLDOWN_MS = 60_000; // 1 min min between same slot
 
     constructor(
         private readonly supabaseService: SupabaseService,
@@ -84,14 +90,16 @@ export class RealtimeCompetitionSeederService {
         }, 5000);
     }
 
-    @Cron('*/10 * * * *')
+    /** Every 3 minutes: scan all categories and fill any missing horizon slots */
+    @Cron('*/3 * * * *')
     async handleCron() {
         await this.seedAllCategories();
     }
 
-    @Cron(CronExpression.EVERY_MINUTE)
-    async settleExpired() {
-        await this.settleExpiredCompetitions();
+    /** Every 30 seconds: settle expired + immediately replenish freed slots */
+    @Cron('*/30 * * * * *')
+    async settleAndReplenishCron() {
+        await this.settleAndReplenish();
     }
 
     /**
@@ -118,31 +126,35 @@ export class RealtimeCompetitionSeederService {
         }
     }
 
+    /**
+     * HORIZON-SLOT-AWARE SEEDING
+     * Instead of counting open slots, explicitly checks which horizon tiers
+     * (2h, 7h, 12h, 24h) are missing and fills each one specifically.
+     * Anti-throttling: skips slots still within cooldown period.
+     */
     private async seedCategory(category: string): Promise<void> {
-        // 1. Check existing active/upcoming comps for this category
-        const supabase = this.supabaseService.getAdminClient();
-        const { count, error } = await supabase
-            .from('competitions')
-            .select('id', { count: 'exact', head: true })
-            .eq('sector', category)
-            .in('status', ['active', 'upcoming']);
+        // 1. Get exactly which horizon slots are missing
+        const missingSlots = await this.compManager.getMissingHorizonSlots(category);
+        if (missingSlots.length === 0) return;
 
-        if (error) {
-            this.logger.error(`Error counting competitions for ${category}: ${error.message}`);
-            return;
-        }
+        // 2. Anti-throttling: filter out slots still in cooldown
+        const slotsToFill = missingSlots.filter(horizon => {
+            const key = `${category}::${horizon}`;
+            return !AntiManipulationUtil.isWithinCooldown(
+                this.creationCooldowns, key,
+                RealtimeCompetitionSeederService.CREATION_COOLDOWN_MS,
+            );
+        });
 
-        const existingCount = count || 0;
-        const openSlotCount = TARGET_COMPETITIONS_PER_CATEGORY - existingCount;
+        if (slotsToFill.length === 0) return;
 
-        if (openSlotCount <= 0) return;
+        this.logger.log(`🌱 [${category}] Filling ${slotsToFill.length} missing slot(s): [${slotsToFill.join(', ')}]`);
 
-        this.logger.log(`🌱 [${category}] ${openSlotCount} open competition slot(s). clustering...`);
-
-        // 2. Get existing fingerprints and horizons for this category
+        // 3. Get existing fingerprints for dedup
         const existingFingerprints = await this.compManager.getActiveFingerprints(category);
-        const usedHorizons = await this.getUsedHorizons(category);
 
+        // 4. Collect ETL candidates
+        const supabase = this.supabaseService.getAdminClient();
         const allCandidates: ETLCandidate[] = [];
         await this.collectCategoryETL(supabase, category, allCandidates);
 
@@ -151,89 +163,53 @@ export class RealtimeCompetitionSeederService {
             return;
         }
 
-        // Cluster the collected data into `openSlotCount` plus some buffer
-        const clusteredTopics = this.clusterCandidates(allCandidates, openSlotCount + 3);
-
-        // Sort by urgency to assign horizons
+        // 5. Cluster candidates
+        const clusteredTopics = this.clusterCandidates(allCandidates, slotsToFill.length + 3);
         clusteredTopics.sort((a, b) => b.urgencyScore - a.urgencyScore);
 
-        let created = 0;
-        for (const topic of clusteredTopics) {
-            if (created >= openSlotCount) break;
-
-            if (this.compManager.isTooSimilar(topic.title, existingFingerprints)) {
-                this.logger.debug(`  ⏭ [${category}] Skipping similar: "${topic.title.substring(0, 60)}..."`);
-                continue;
+        // 6. Fill each missing horizon slot with the best available topic
+        for (const horizon of slotsToFill) {
+            // Find best non-duplicate candidate for this slot
+            let bestTopic: ClusteredCompetition | null = null;
+            for (const topic of clusteredTopics) {
+                if (this.compManager.isTooSimilar(topic.title, existingFingerprints)) continue;
+                bestTopic = topic;
+                break;
             }
 
-            const horizon = this.assignHorizon(topic.urgencyScore, usedHorizons);
-            if (!horizon) {
-                this.logger.debug(`  ⏭ [${category}] No available horizon for: "${topic.title.substring(0, 60)}..."`);
+            if (!bestTopic) {
+                this.logger.debug(`  ⏭ [${category}/${horizon}] No suitable candidate`);
                 continue;
             }
 
             try {
                 const comp = await this.compManager.createCompetition(
                     category,
-                    topic.title,
-                    topic.description,
+                    bestTopic.title,
+                    bestTopic.description,
                     horizon,
-                    topic.baseProbability,
+                    bestTopic.baseProbability,
                 );
 
                 if (comp) {
-                    usedHorizons.add(horizon);
-                    existingFingerprints.add(topic.title.toLowerCase());
-                    created++;
-                    
-                    // Automatically bind the clustered data so the UI isn't empty!
-                    await this.insertInitialNewsCluster(comp.id, topic);
+                    existingFingerprints.add(bestTopic.title.toLowerCase());
+                    AntiManipulationUtil.recordCreation(this.creationCooldowns, `${category}::${horizon}`);
+                    // Remove used topic from pool
+                    const idx = clusteredTopics.indexOf(bestTopic);
+                    if (idx >= 0) clusteredTopics.splice(idx, 1);
+                    await this.insertInitialNewsCluster(comp.id, bestTopic);
+                    this.logger.log(`  ✅ Filled [${category}/${horizon}] "${bestTopic.title.substring(0, 60)}..."`);
                 }
             } catch (err: any) {
                 if (!err.message?.includes('unique') && !err.message?.includes('duplicate')) {
-                    this.logger.warn(`  ❌ [${category}] Failed: ${err.message}`);
+                    this.logger.warn(`  ❌ [${category}/${horizon}] Failed: ${err.message}`);
                 }
             }
         }
     }
 
-    private async getUsedHorizons(category: string): Promise<Set<string>> {
-        const supabase = this.supabaseService.getAdminClient();
-        const { data, error } = await supabase
-            .from('competitions')
-            .select('time_horizon')
-            .eq('sector', category)
-            .in('status', ['active', 'upcoming']);
-
-        if (error) return new Set();
-        return new Set((data || []).map(c => c.time_horizon).filter(Boolean));
-    }
-
-    private assignHorizon(urgencyScore: number, usedHorizons: Set<string>): HorizonTier | null {
-        // Urgency bands mapped to 4 horizon tiers (max 1 Day)
-        let preferredHorizons: HorizonTier[];
-        if (urgencyScore >= 0.75) {
-            preferredHorizons = ['2h', '7h'];       // Very urgent → short horizons
-        } else if (urgencyScore >= 0.50) {
-            preferredHorizons = ['7h', '12h'];       // Medium-high urgency
-        } else if (urgencyScore >= 0.25) {
-            preferredHorizons = ['12h', '24h'];      // Medium urgency
-        } else {
-            preferredHorizons = ['24h'];             // Long-term → max 1 day
-        }
-
-        // Try preferred horizons first
-        for (const h of preferredHorizons) {
-            if (!usedHorizons.has(h)) return h;
-        }
-
-        // Fallback: try ALL valid horizon tiers
-        for (const h of HORIZON_TIERS) {
-            if (!usedHorizons.has(h)) return h;
-        }
-
-        return null;
-    }
+    // getUsedHorizons and assignHorizon removed — replaced by
+    // compManager.getMissingHorizonSlots() for precise slot-aware filling.
 
     private async collectCategoryETL(supabase: any, category: string, allCandidates: ETLCandidate[]): Promise<void> {
         // 1. Market signals — increased limit from 15 to 25 for better diversity
@@ -627,65 +603,130 @@ export class RealtimeCompetitionSeederService {
         return union > 0 ? intersection / union : 0;
     }
 
-    private async settleExpiredCompetitions(): Promise<void> {
+    /**
+     * ATOMIC SETTLE + IMMEDIATE REPLENISH
+     *
+     * 1. Find all expired active competitions
+     * 2. Settle each (secure random outcome, pool settlement, prize disbursement)
+     * 3. Collect freed slots (category + horizon pairs)
+     * 4. Immediately create replacement competitions for each freed slot
+     * 5. Promote upcoming → active
+     *
+     * Anti-manipulation: uses CSPRNG for outcome selection (not Math.random)
+     * Anti-throttling: guarded by isSettling flag + per-slot cooldowns
+     * Anti-chunking: processes all settlements atomically before replenishment
+     */
+    private async settleAndReplenish(): Promise<void> {
+        if (this.isSettling) return;
+        this.isSettling = true;
+
         try {
             const supabase = this.supabaseService.getAdminClient();
+
+            // --- PHASE 1: Find expired competitions ---
             const { data: expired, error } = await supabase
                 .from('competitions')
                 .select('id, title, sector, time_horizon, outcomes')
                 .eq('status', 'active')
                 .lt('competition_end', new Date().toISOString());
 
-            if (error || !expired || expired.length === 0) return;
+            if (error || !expired || expired.length === 0) {
+                // Still promote upcoming → active even with no settlements
+                await this.promoteUpcoming(supabase);
+                return;
+            }
+
+            // --- PHASE 2: Settle all expired competitions ---
+            const freedSlots: { category: string; horizon: string }[] = [];
 
             for (const comp of expired) {
-                // Determine a random winning outcome if available
+                // Anti-manipulation: CSPRNG outcome (not predictable Math.random)
                 let winningOutcome = 0;
                 if (comp.outcomes && Array.isArray(comp.outcomes) && comp.outcomes.length > 0) {
-                    winningOutcome = Math.floor(Math.random() * comp.outcomes.length);
+                    winningOutcome = AntiManipulationUtil.secureRandomOutcome(comp.outcomes.length);
                 }
+
+                // Generate settlement integrity hash
+                const settlementNonce = AntiManipulationUtil.generateNonce();
+                const settlementHash = AntiManipulationUtil.hashSnapshot({
+                    id: comp.id, winningOutcome, nonce: settlementNonce,
+                    settledAt: new Date().toISOString(),
+                });
 
                 await supabase
                     .from('competitions')
-                    .update({ status: 'settled', winning_outcome: winningOutcome })
+                    .update({
+                        status: 'settled',
+                        winning_outcome: winningOutcome,
+                        metadata: {
+                            settlementHash,
+                            settlementNonce,
+                            settledAt: new Date().toISOString(),
+                            settledBy: 'system_auto',
+                        },
+                    })
                     .eq('id', comp.id);
-                    
-                // Automatically settle the pool, determine winners, disburse prizes on-chain
+
+                this.logger.log(`⚖️ Settled: [${comp.sector}/${comp.time_horizon}] "${comp.title.substring(0, 50)}" → outcome=${winningOutcome}`);
+
+                // Settle pool + disburse prizes on-chain
                 try {
                     if (this.poolService) {
-                        // Use PoolService which handles DB settlement + on-chain disbursement
                         await this.poolService.settlePool(comp.id, 'system_cron');
-                        this.logger.log(`🏆 Pool settled + prizes disbursed on-chain for ${comp.id} (${comp.title})`);
+                        this.logger.log(`🏆 Pool settled + prizes disbursed for ${comp.id}`);
                     } else {
-                        // Fallback: DB-only settlement
                         const { error: settleErr } = await supabase.rpc('settle_competition_pool', {
                             p_competition_id: comp.id,
-                            p_settled_by: 'system_cron'
+                            p_settled_by: 'system_cron',
                         });
-                        if (settleErr) {
-                            this.logger.error(`Failed to settle pool for ${comp.id}: ${settleErr.message}`);
-                        } else {
-                            this.logger.log(`Pool DB-settled for expired competition ${comp.id}`);
-                        }
+                        if (settleErr) this.logger.error(`Pool settle error: ${settleErr.message}`);
                     }
                 } catch (e: any) {
-                    this.logger.error(`Exception settling pool for ${comp.id}: ${e.message}`);
+                    this.logger.error(`Pool settlement exception for ${comp.id}: ${e.message}`);
+                }
+
+                // Record freed slot for immediate replenishment
+                if (comp.sector && comp.time_horizon) {
+                    freedSlots.push({ category: comp.sector, horizon: comp.time_horizon });
                 }
             }
-            
-            // Refresh global leaderboard after automatic settlements
-            try { await supabase.rpc('refresh_global_leaderboard'); } catch (e) {}
 
+            // Refresh leaderboard after settlements
+            try { await supabase.rpc('refresh_global_leaderboard'); } catch (_e) {}
+
+            // --- PHASE 3: Promote upcoming → active ---
+            await this.promoteUpcoming(supabase);
+
+            // --- PHASE 4: Immediately replenish all freed slots ---
+            if (freedSlots.length > 0) {
+                this.logger.log(`🔄 Replenishing ${freedSlots.length} freed slot(s)...`);
+                const categoriesToSeed = new Set(freedSlots.map(s => s.category));
+                for (const category of categoriesToSeed) {
+                    try {
+                        await this.seedCategory(category);
+                    } catch (err: any) {
+                        this.logger.error(`Replenishment error for ${category}: ${err.message}`);
+                    }
+                }
+            }
+
+        } catch (err: any) {
+            this.logger.error(`settleAndReplenish error: ${err.message}`);
+        } finally {
+            this.isSettling = false;
+        }
+    }
+
+    /** Promote upcoming competitions to active when their start time has passed */
+    private async promoteUpcoming(supabase: any): Promise<void> {
+        try {
             await supabase
                 .from('competitions')
                 .update({ status: 'active' })
                 .eq('status', 'upcoming')
                 .lte('competition_start', new Date().toISOString())
                 .gt('competition_end', new Date().toISOString());
-
-        } catch (err: any) {
-            this.logger.debug(`Settle check error: ${err.message}`);
-        }
+        } catch (_e) {}
     }
 
     /**

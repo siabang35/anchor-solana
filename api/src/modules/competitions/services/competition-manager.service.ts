@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../../database/supabase.service.js';
 import { tokenize } from '../../../common/utils/clustering.util.js';
+import { AntiManipulationUtil } from '../utils/anti-manipulation.util.js';
 
 /**
  * All valid horizon tiers for the competition system.
@@ -86,6 +87,35 @@ export class CompetitionManagerService {
 
         const usedHorizons = new Set<string>((data || []).map(c => c.time_horizon).filter(Boolean));
         return HORIZON_TIERS.filter(h => !usedHorizons.has(h));
+    }
+
+    /**
+     * Returns which specific horizon tiers are missing for a given category.
+     * Used by the seeder to fill exactly the right slots after settlement.
+     */
+    async getMissingHorizonSlots(category: string): Promise<HorizonTier[]> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('competitions')
+            .select('time_horizon')
+            .eq('sector', category.toLowerCase())
+            .in('status', ['active', 'upcoming']);
+
+        if (error) {
+            this.logger.error(`Error checking missing slots for ${category}: ${error.message}`);
+            return [...HORIZON_TIERS]; // Assume all missing on error
+        }
+
+        const usedHorizons = new Set<string>(
+            (data || []).map(c => c.time_horizon).filter(Boolean),
+        );
+        const missing = HORIZON_TIERS.filter(h => !usedHorizons.has(h));
+
+        if (missing.length > 0) {
+            this.logger.debug(`[${category}] Missing horizon slots: [${missing.join(', ')}]`);
+        }
+        return missing;
     }
 
     /**
@@ -202,9 +232,19 @@ export class CompetitionManagerService {
         const start = Date.now();
         const end = start + duration;
 
+        // Anti-hacking: sanitize title input
+        const safeTitle = AntiManipulationUtil.sanitizeTitle(title);
+        const safeDescription = AntiManipulationUtil.sanitizeTitle(description);
+
+        // Anti-manipulation: generate integrity HMAC + nonce
+        const nonce = AntiManipulationUtil.generateNonce();
+        const integrityHmac = AntiManipulationUtil.generateCreationHMAC(
+            category, validHorizon, safeTitle, start,
+        );
+
         const { data, error } = await supabase.from('competitions').insert({
-            title,
-            description,
+            title: safeTitle,
+            description: safeDescription,
             sector: category.toLowerCase(),
             status: 'active',
             competition_start: new Date(start).toISOString(),
@@ -217,6 +257,8 @@ export class CompetitionManagerService {
                 source: 'etl-cluster-pipeline',
                 horizon: validHorizon,
                 createdAt: new Date().toISOString(),
+                nonce,
+                integrityHmac,
             },
         }).select('*').single();
 
@@ -230,7 +272,7 @@ export class CompetitionManagerService {
             return null;
         }
 
-        this.logger.log(`✅ Created: "${title}" [${validHorizon}] in ${category}`);
+        this.logger.log(`✅ Created: "${safeTitle}" [${validHorizon}] in ${category}`);
         return data;
     }
 

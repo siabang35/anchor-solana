@@ -129,12 +129,21 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const { competitions, loading: compLoading, connected } = useCompetitions(sector);
 
     // Sort: live first, then upcoming, then ended
-    const sorted = useMemo(() => [...competitions].sort((a, b) => {
-        const order = { live: 0, upcoming: 1, ended: 2 };
-        const diff = order[getCompetitionStatus(a)] - order[getCompetitionStatus(b)];
-        if (diff !== 0) return diff;
-        return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
-    }), [competitions]);
+    const sorted = useMemo(() => {
+        const now = Date.now();
+        return [...competitions]
+            // Filter out ended competitions — they get auto-replaced by the backend
+            .filter(c => {
+                const end = new Date(c.competition_end).getTime();
+                return end > now; // Only show competitions that haven't expired
+            })
+            .sort((a, b) => {
+                const order = { live: 0, upcoming: 1, ended: 2 };
+                const diff = order[getCompetitionStatus(a)] - order[getCompetitionStatus(b)];
+                if (diff !== 0) return diff;
+                return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
+            });
+    }, [competitions]);
 
     // Active competition for curve
     const activeComp = selectedCompId

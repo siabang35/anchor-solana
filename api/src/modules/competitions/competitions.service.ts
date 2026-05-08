@@ -83,7 +83,7 @@ export class CompetitionsService {
             .from('competitions')
             .select('*')
             .eq('sector', sector)
-            .in('status', ['active', 'upcoming', 'settled'])
+            .in('status', ['active', 'upcoming'])
             .order('competition_start', { ascending: false })
             .limit(limit);
 
