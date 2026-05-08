@@ -59,7 +59,84 @@ const SIMILARITY_THRESHOLD = 0.65;
 export class CompetitionManagerService {
     private readonly logger = new Logger(CompetitionManagerService.name);
 
+    /** Debounce: last time autoSettleExpired was executed */
+    private lastAutoSettleTs = 0;
+    private static readonly AUTO_SETTLE_DEBOUNCE_MS = 30_000; // 30s debounce
+
     constructor(private readonly supabaseService: SupabaseService) {}
+
+    /**
+     * AUTO-SETTLE: Call DB function to settle all expired competitions.
+     * This ensures expired competitions are cleared from the active cap count
+     * BEFORE we attempt to create new ones, preventing false cap violations.
+     * Returns the number of competitions that were auto-settled.
+     */
+    async autoSettleExpired(force = false): Promise<number> {
+        // Debounce: skip if called within the last 30s (unless forced)
+        const now = Date.now();
+        if (!force && (now - this.lastAutoSettleTs) < CompetitionManagerService.AUTO_SETTLE_DEBOUNCE_MS) {
+            return 0;
+        }
+        this.lastAutoSettleTs = now;
+
+        try {
+            const supabase = this.supabaseService.getAdminClient();
+            const { data, error } = await supabase.rpc('auto_settle_expired_competitions');
+
+            if (error) {
+                this.logger.warn(`Auto-settle RPC error: ${error.message}`);
+                // Fallback: do it app-side
+                return this.autoSettleExpiredAppSide();
+            }
+
+            const settledCount = typeof data === 'number' ? data : 0;
+            if (settledCount > 0) {
+                this.logger.log(`⚡ Auto-settled ${settledCount} expired competition(s) via DB RPC`);
+            }
+            return settledCount;
+        } catch (err: any) {
+            this.logger.warn(`Auto-settle exception: ${err.message}`);
+            return this.autoSettleExpiredAppSide();
+        }
+    }
+
+    /**
+     * App-side fallback for auto-settling expired competitions
+     * when the DB RPC function is not available.
+     */
+    private async autoSettleExpiredAppSide(): Promise<number> {
+        try {
+            const supabase = this.supabaseService.getAdminClient();
+            const now = new Date().toISOString();
+
+            const { data: expired } = await supabase
+                .from('competitions')
+                .select('id')
+                .eq('status', 'active')
+                .lt('competition_end', now);
+
+            if (!expired || expired.length === 0) return 0;
+
+            const ids = expired.map(c => c.id);
+            await supabase
+                .from('competitions')
+                .update({
+                    status: 'settled',
+                    metadata: {
+                        settledAt: now,
+                        settledBy: 'auto_expire_appside',
+                        autoSettled: true,
+                    },
+                })
+                .in('id', ids);
+
+            this.logger.log(`⚡ Auto-settled ${ids.length} expired competition(s) via app-side fallback`);
+            return ids.length;
+        } catch (err: any) {
+            this.logger.error(`App-side auto-settle error: ${err.message}`);
+            return 0;
+        }
+    }
 
     /**
      * Returns available (unfilled) horizon slots globally.
@@ -68,11 +145,13 @@ export class CompetitionManagerService {
      */
     async getAvailableHorizonSlots(category?: string): Promise<HorizonTier[]> {
         const supabase = this.supabaseService.getAdminClient();
+        const now = new Date().toISOString();
 
         let query = supabase
             .from('competitions')
             .select('time_horizon')
-            .in('status', ['active', 'upcoming']);
+            .in('status', ['active', 'upcoming'])
+            .gt('competition_end', now); // Only count non-expired as occupied
 
         if (category) {
             query = query.eq('sector', category.toLowerCase());
@@ -92,15 +171,19 @@ export class CompetitionManagerService {
     /**
      * Returns which specific horizon tiers are missing for a given category.
      * Used by the seeder to fill exactly the right slots after settlement.
+     * ENHANCED: Also treats time-expired (but not yet settled) competitions as missing,
+     * so the system immediately knows a slot needs replacement.
      */
     async getMissingHorizonSlots(category: string): Promise<HorizonTier[]> {
         const supabase = this.supabaseService.getAdminClient();
+        const now = new Date().toISOString();
 
         const { data, error } = await supabase
             .from('competitions')
             .select('time_horizon')
             .eq('sector', category.toLowerCase())
-            .in('status', ['active', 'upcoming']);
+            .in('status', ['active', 'upcoming'])
+            .gt('competition_end', now); // Only count non-expired as "filled"
 
         if (error) {
             this.logger.error(`Error checking missing slots for ${category}: ${error.message}`);
@@ -179,6 +262,91 @@ export class CompetitionManagerService {
     }
 
     /**
+     * ANTI-RECYCLING: Get ALL historical fingerprints for a category.
+     * Includes settled, cancelled, and active competitions.
+     * This ensures that once a topic has been used in ANY competition,
+     * it is NEVER reused — guaranteeing fresh data every time.
+     */
+    async getAllHistoricalFingerprints(category: string): Promise<Set<string>> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('competitions')
+            .select('title')
+            .eq('sector', category.toLowerCase())
+            .order('created_at', { ascending: false })
+            .limit(500); // Last 500 competitions per category — no status filter
+
+        if (error) {
+            this.logger.error(`Error fetching historical fingerprints for ${category}: ${error.message}`);
+            return new Set();
+        }
+
+        const fingerprints = new Set<string>();
+        for (const row of data || []) {
+            if (row.title) {
+                fingerprints.add(this.normalizeTitle(row.title));
+            }
+        }
+        this.logger.debug(`[${category}] Historical fingerprints: ${fingerprints.size} unique titles`);
+        return fingerprints;
+    }
+
+    /**
+     * ANTI-RECYCLING: Get ALL used source titles across ALL categories.
+     * Used to exclude ETL data items that have already been consumed.
+     * Stores multiple normalized variants per title for bulletproof matching.
+     */
+    async getAllUsedSourceTitles(category: string): Promise<Set<string>> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data, error } = await supabase
+            .from('competitions')
+            .select('title, description')
+            .eq('sector', category.toLowerCase())
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+        if (error) {
+            this.logger.error(`Error fetching used source titles for ${category}: ${error.message}`);
+            return new Set();
+        }
+
+        const titles = new Set<string>();
+        for (const row of data || []) {
+            if (row.title) {
+                const raw = row.title.toLowerCase().trim();
+                // Variant 1: Raw lowercase
+                titles.add(raw);
+                // Variant 2: Standard normalized
+                titles.add(this.normalizeTitle(row.title));
+                // Variant 3: Hash-stripped (remove [abc123] suffixes)
+                const hashStripped = raw
+                    .replace(/\[[a-f0-9]{4,10}\]/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                titles.add(hashStripped);
+                // Variant 4: Base title (strip "— outcome prediction?" and hash)
+                const baseTitle = raw
+                    .replace(/\s*[—–\-]+\s*outcome prediction\??/gi, '')
+                    .replace(/\[[a-f0-9]{4,10}\]/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                if (baseTitle.length > 5) titles.add(baseTitle);
+            }
+            // Also store description snippets for cross-reference
+            if (row.description) {
+                const descNorm = row.description.toLowerCase().trim();
+                if (descNorm.length > 20 && descNorm.length < 300) {
+                    titles.add(descNorm);
+                }
+            }
+        }
+        this.logger.debug(`[${category}] Loaded ${titles.size} used source title variants for anti-recycling`);
+        return titles;
+    }
+
+    /**
      * Check if a candidate title is too similar to any existing active competition.
      * Uses token-based Jaccard similarity (threshold: 0.45).
      * Also checks cross-category to prevent same topic appearing in multiple sectors.
@@ -186,10 +354,21 @@ export class CompetitionManagerService {
     isTooSimilar(candidateTitle: string, existingFingerprints: Set<string>): boolean {
         const normalizedCandidate = this.normalizeTitle(candidateTitle);
 
-        // Exact match
+        // Layer 1: Exact match
         if (existingFingerprints.has(normalizedCandidate)) return true;
 
-        // Token-level Jaccard similarity check
+        // Layer 2: Substring/contains match (catches hash suffix variations)
+        if (normalizedCandidate.length >= 15) {
+            for (const existing of existingFingerprints) {
+                if (existing.length < 15) continue;
+                if (normalizedCandidate.includes(existing) || existing.includes(normalizedCandidate)) {
+                    this.logger.debug(`Dedup (substring): "${candidateTitle.substring(0, 40)}..." ⊂ "${existing.substring(0, 40)}..."`);
+                    return true;
+                }
+            }
+        }
+
+        // Layer 3: Token-level Jaccard similarity check
         const candidateTokens = new Set(tokenize(normalizedCandidate));
         if (candidateTokens.size === 0) return false;
 
@@ -206,7 +385,7 @@ export class CompetitionManagerService {
             const similarity = union > 0 ? intersection / union : 0;
 
             if (similarity > SIMILARITY_THRESHOLD) {
-                this.logger.debug(`Dedup: "${candidateTitle.substring(0, 40)}..." ~= "${existing.substring(0, 40)}..." (Jaccard=${similarity.toFixed(3)})`);
+                this.logger.debug(`Dedup (Jaccard): "${candidateTitle.substring(0, 40)}..." ~= "${existing.substring(0, 40)}..." (sim=${similarity.toFixed(3)})`);
                 return true;
             }
         }
@@ -231,6 +410,9 @@ export class CompetitionManagerService {
         const duration = HORIZON_DURATION_MS[validHorizon] || HORIZON_DURATION_MS['24h'];
         const start = Date.now();
         const end = start + duration;
+
+        // NOTE: autoSettleExpired() is called once per seed cycle by the seeder,
+        // NOT per-insert — avoids N redundant DB calls per category.
 
         // Anti-hacking: sanitize title input
         const safeTitle = AntiManipulationUtil.sanitizeTitle(title);
@@ -267,6 +449,39 @@ export class CompetitionManagerService {
             if (error.message?.includes('unique') || error.message?.includes('duplicate') || error.code === '23505') {
                 this.logger.warn(`Competition creation blocked by unique constraint [${category}/${validHorizon}] — skipping.`);
                 return null;
+            }
+            // Cap error from DB trigger — force auto-settle and retry ONCE
+            if (error.message?.includes('already at cap')) {
+                this.logger.warn(`Cap hit for [${category}/${validHorizon}] — forcing auto-settle and retrying...`);
+                await this.autoSettleExpired(true);
+                // Retry the insert once after settling
+                const { data: retryData, error: retryErr } = await supabase.from('competitions').insert({
+                    title: safeTitle,
+                    description: safeDescription,
+                    sector: category.toLowerCase(),
+                    status: 'active',
+                    competition_start: new Date(start).toISOString(),
+                    competition_end: new Date(end).toISOString(),
+                    time_horizon: validHorizon,
+                    base_probability: baseProbability,
+                    probabilities: [Math.round(baseProbability * 10000), 10000 - Math.round(baseProbability * 10000)],
+                    metadata: {
+                        autoGenerated: true,
+                        source: 'etl-cluster-pipeline',
+                        horizon: validHorizon,
+                        createdAt: new Date().toISOString(),
+                        nonce,
+                        integrityHmac,
+                        retryAfterSettle: true,
+                    },
+                }).select('*').single();
+
+                if (retryErr) {
+                    this.logger.error(`Retry also failed for [${category}/${validHorizon}]: ${retryErr.message}`);
+                    return null;
+                }
+                this.logger.log(`✅ Retry succeeded: "${safeTitle}" [${validHorizon}] in ${category}`);
+                return retryData;
             }
             this.logger.error(`Failed to create competition: ${error.message}`);
             return null;
@@ -351,6 +566,115 @@ export class CompetitionManagerService {
         }
     }
 
+    // ========================================================================
+    // SOURCE-LEVEL ANTI-RECYCLING: Track consumed ETL data by source ID
+    // ========================================================================
+
+    /**
+     * Get all consumed source IDs for a category and source table.
+     * Returns a Set of source IDs that have already been used in past competitions.
+     * This is the BULLETPROOF layer of anti-recycling: even if title normalization
+     * misses a match, the source ID will catch it.
+     */
+    async getUsedSourceIds(category: string, sourceTable: string): Promise<Set<string>> {
+        const supabase = this.supabaseService.getAdminClient();
+        try {
+            const { data, error } = await supabase.rpc('get_used_source_ids', {
+                p_category: category.toLowerCase(),
+                p_source_table: sourceTable,
+            });
+
+            if (error) {
+                // Fallback: direct query if RPC not available yet
+                const { data: directData } = await supabase
+                    .from('used_competition_sources')
+                    .select('source_id')
+                    .eq('category', category.toLowerCase())
+                    .eq('source_table', sourceTable)
+                    .order('consumed_at', { ascending: false })
+                    .limit(1000);
+
+                return new Set((directData || []).map(r => r.source_id));
+            }
+
+            return new Set((data || []).map((r: any) => typeof r === 'string' ? r : r.source_id));
+        } catch (err: any) {
+            this.logger.warn(`getUsedSourceIds error (${category}/${sourceTable}): ${err.message}`);
+            return new Set();
+        }
+    }
+
+    /**
+     * Record which ETL source items were consumed to create a competition.
+     * Called after successful competition creation to ensure data is never reused.
+     * 
+     * @param competitionId - The newly created competition ID
+     * @param category - The competition category/sector
+     * @param sources - Array of {source_table, source_id, source_title}
+     */
+    async recordUsedSources(
+        competitionId: string,
+        category: string,
+        sources: Array<{ source_table: string; source_id: string; source_title?: string }>,
+    ): Promise<void> {
+        if (sources.length === 0) return;
+
+        const supabase = this.supabaseService.getAdminClient();
+        try {
+            const { error } = await supabase.rpc('record_used_sources', {
+                p_competition_id: competitionId,
+                p_category: category.toLowerCase(),
+                p_sources: sources,
+            });
+
+            if (error) {
+                // Fallback: direct insert if RPC not available yet
+                const rows = sources.map(s => ({
+                    competition_id: competitionId,
+                    source_table: s.source_table,
+                    source_id: s.source_id,
+                    source_title: s.source_title || null,
+                    category: category.toLowerCase(),
+                }));
+
+                await supabase
+                    .from('used_competition_sources')
+                    .upsert(rows, { onConflict: 'source_table,source_id,competition_id' });
+            }
+
+            this.logger.debug(`[${category}] Recorded ${sources.length} consumed source(s) for competition ${competitionId}`);
+        } catch (err: any) {
+            // Non-fatal — title-based dedup still works as fallback
+            this.logger.warn(`recordUsedSources error: ${err.message}`);
+        }
+    }
+
+    /**
+     * Periodic cleanup: prune used_competition_sources older than 30 days.
+     * Prevents unbounded table growth while maintaining enough history
+     * to prevent any realistic recycling scenario.
+     */
+    async cleanupOldSourceTracking(): Promise<number> {
+        try {
+            const supabase = this.supabaseService.getAdminClient();
+            const { data, error } = await supabase.rpc('cleanup_old_used_sources');
+
+            if (error) {
+                this.logger.warn(`Source tracking cleanup error: ${error.message}`);
+                return 0;
+            }
+
+            const cleaned = typeof data === 'number' ? data : 0;
+            if (cleaned > 0) {
+                this.logger.log(`🧹 Pruned ${cleaned} old source tracking record(s)`);
+            }
+            return cleaned;
+        } catch (err: any) {
+            this.logger.warn(`Source tracking cleanup exception: ${err.message}`);
+            return 0;
+        }
+    }
+
     /**
      * Normalize a title for fingerprint comparison.
      * Strips prices, common suffixes, and special characters.
@@ -360,10 +684,14 @@ export class CompetitionManagerService {
             .replace(/\s+/g, ' ')
             .replace(/[—–\-]+/g, ' ')
             .replace(/outcome prediction\??/gi, '')
+            .replace(/\[[a-f0-9]{4,10}\]/gi, '') // Strip hash suffixes like [72240c]
             .replace(/\$[\d,.]+/g, '')      // Remove price values like $32.93
             .replace(/[\d,.]+%/g, '')        // Remove percentages
             .replace(/\d{1,2}h\s*change/gi, '') // Remove "24h Change" patterns
+            .replace(/source:\s*https?:\/\/\S+/gi, '') // Remove source URLs
+            .replace(/https?:\/\/\S+/gi, '')    // Remove any URLs
             .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')           // Re-normalize spaces after all replacements
             .trim()
             .toLowerCase();
     }

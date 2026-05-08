@@ -7,10 +7,13 @@ import {
     Query,
     HttpCode,
     HttpStatus,
+    Headers,
+    ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service.js';
 import { EtlIngestionService } from './services/etl-ingestion.service.js';
+import { RealtimeCompetitionSeederService } from './services/realtime-competition-seeder.service.js';
 import { CreateCompetitionDto, EtlWebhookDto } from './dto/index.js';
 
 @ApiTags('Competitions')
@@ -18,7 +21,8 @@ import { CreateCompetitionDto, EtlWebhookDto } from './dto/index.js';
 export class CompetitionsController {
     constructor(
         private readonly competitionsService: CompetitionsService,
-        private readonly etlIngestionService: EtlIngestionService
+        private readonly etlIngestionService: EtlIngestionService,
+        private readonly seederService: RealtimeCompetitionSeederService,
     ) {}
 
     /**
@@ -46,6 +50,27 @@ export class CompetitionsController {
             dto.horizon
         );
         return { success: !!result };
+    }
+
+    /**
+     * ADMIN: Force-reset all competitions and reseed with fresh data.
+     * Settles all active/upcoming competitions, clears cooldowns,
+     * then creates 4 fresh competitions per category (7 categories × 4 horizons = 28 total).
+     */
+    @Post('admin/reset-and-reseed')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Force reset all competitions and reseed with fresh data' })
+    async forceResetAndReseed(
+        @Headers('x-admin-key') adminKey?: string,
+    ) {
+        // Simple admin key protection
+        const expectedKey = process.env.ADMIN_API_KEY || 'exoduze-admin-reset-2026';
+        if (adminKey !== expectedKey) {
+            throw new ForbiddenException('Invalid admin key');
+        }
+
+        const result = await this.seederService.forceResetAndReseed();
+        return result;
     }
 
     /**

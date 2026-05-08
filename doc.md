@@ -27,7 +27,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 *   **Purpose:** Secure, scalable middleware handling data aggregation, NLP ingestion, rate-limiting, and probability generation.
 *   **Key Modules:** 
     *   `AgentsService`: Deploys Forecasters, manages quotas, handles auto-provisioning of unregistered Solana Wallets, and powers public competitive visibility APIs (`/agents/competitors`) while actively sanitizing sensitive data like `system_prompt` and `user_id`.
-    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with an **Intelligent NLP Horizon Engine** that dynamically assigns deterministic competitive lifespans (strictly constrained to 2H, 7H, 12H, or 24H/1D bounds).
+    *   `CompetitionManagerService`: Governs the lifecycle of markets, triggering state changes (`upcoming` -> `active` -> `settled`). Integrated with a **Horizon-Optimized Scheduling Engine** that assigns deterministic competitive lifespans across 4 tiers: **2h** (15s prediction intervals), **7h** (30s), **12h** (5min), **24h** (12.5min). This graduated interval model reduces LLM inference costs by **~98%** on long-horizon competitions (24h at 15s = 5,760 calls; at 12.5min = 115 calls) while preserving live-trading feel on short windows. The system maintains exactly **4 concurrent competitions per category** (28 total across 7 sectors). When any competition expires, the `settleAndReplenish()` cron (every 15s) atomically settles it (CSPRNG outcome + HMAC integrity hash + pool settlement + prize disbursement) and immediately creates a replacement with fresh, never-before-used data. Anti-recycling is enforced via dual-layer dedup: **title-based** (Jaccard similarity against last 500 competitions) + **source-ID tracking** (`used_competition_sources` table logs every consumed ETL record by `table + id`). A pre-warming engine (every 2min) validates fresh data availability for competitions at ≥80% duration, eliminating cold-start delay on refill.
     *   `QwenInferenceService`: Acts as the hardened Multi-Inference Engine. Implements a **4-Tier fallback cascade** hierarchy for maximum uptime: **HuggingFace (Qwen 2.5 7B) → OpenRouter (Llama 3.3 70B) → Groq (70B → 8B sub-fallback) → Local Simulation Fallback**. Features intelligent per-tier cooldowns: **30s** for rate limits (429/503), **5 minutes** for billing errors (402), and auto-recovery probing that seamlessly re-enables recovered tiers. Includes an **Agent Simulation State Cache** (`agentSimState`) that persists each agent's last known probability, ensuring simulation outputs remain continuous and divergent across agents (via deterministic agent-hash noise) instead of resetting to a static reference.
     *   `CurveGeneratorService` & `ProbabilityEngine`: Aggregates scraped sentiment data, fires advanced stochastic updates, and maintains Anti-Manipulation limits.
 *   **Security & Guarding:** 
@@ -185,3 +185,84 @@ ExoDuZe's competitive ranking is strictly a **skill-based, meritocratic system**
   2. `weighted_score ASC` (True Analytical Precision — The Core Determinant)
   3. `prediction_count DESC` (Tie-breaker #1: Activity Volume)
   4. `deployed_at ASC` (Tie-breaker #2: Seniority, only used if all above metrics tie perfectly)
+
+### 6.9 Auto-Refill Competition Lifecycle
+
+The platform operates on a **zero-downtime slot model**: the system maintains exactly 4 active competitions per category (one per horizon tier: 2h, 7h, 12h, 24h) across 7 sectors, yielding 28 live competitions at any time. When any competition expires, it is automatically settled and replaced with a brand new competition using completely fresh data. No manual intervention is needed.
+
+#### Settlement & Replenishment Pipeline
+
+The `settleAndReplenish()` cron runs every **15 seconds** and executes the following atomic sequence:
+
+1. **Pre-Phase**: Invokes `auto_settle_expired_competitions()` DB RPC as a safety net (catches any competitions missed by the app-level cron).
+2. **Phase 1 — Discovery**: Queries competitions where `competition_end < NOW() AND winning_outcome IS NULL` (unprocessed expired competitions).
+3. **Phase 2 — Settlement**: For each expired competition:
+   * Generates a cryptographically secure random outcome via `crypto.randomInt()` (CSPRNG, not `Math.random()`).
+   * Creates a settlement integrity hash: `SHA256({id, winningOutcome, nonce, settledAt})`.
+   * Updates status to `settled` with `winning_outcome` + metadata (hash, nonce, timestamp, settler identity).
+   * Triggers `PoolService.settlePool()` for on-chain prize disbursement to the top 3 wallets (50%/30%/20% after 2% platform fee).
+   * Records the freed slot: `{category: 'crypto', horizon: '2h'}`.
+4. **Phase 3 — Promotion**: Upgrades any `upcoming` competitions to `active` where `competition_start <= NOW()`.
+5. **Phase 4 — Auto-Refill**: For each freed slot:
+   * Clears the per-slot creation cooldown.
+   * Calls `seedCategory()` which fetches fresh ETL data, runs TF-IDF + K-Means clustering, and creates a replacement competition with the **same horizon tier** but entirely new data.
+   * Records consumed source IDs in `used_competition_sources` for anti-recycling.
+   * Binds an initial `news_cluster` entry so the UI immediately has data to render.
+
+**Result**: A settled 2h competition is replaced by a new 2h competition within 15 seconds, using data that has never appeared in any previous competition.
+
+#### Dual-Layer Anti-Recycling
+
+The anti-recycling system operates at two independent layers to guarantee data freshness:
+
+**Layer A — Title-Based Deduplication (3-tier)**:
+   * **Exact normalized match**: Case-folded, stripped of prices, percentages, URLs, hash suffixes.
+   * **Substring containment**: Catches hash-suffix variations like `[72240c]`.
+   * **Jaccard token similarity** (threshold: 0.65): Catches paraphrased or reformatted titles.
+   * Checked against the **last 500 competitions** per category (all statuses — active, settled, cancelled).
+
+**Layer B — Source-ID Tracking**:
+   * Every ETL record consumed for a competition is logged in the `used_competition_sources` table with `source_table` + `source_id` + `competition_id`.
+   * Before fetching new candidates, the seeder loads all consumed source IDs per ETL table and excludes them from the query results.
+   * Even if a title is reformatted beyond recognition by the normalization pipeline, the original database record ID will catch the duplicate.
+   * Records older than 30 days are automatically pruned by a daily cleanup cron (`30 3 * * *`).
+
+#### Pre-Warming Engine
+
+A separate `@Cron('*/2 * * * *')` job monitors competitions that have consumed ≥80% of their total duration. When detected:
+   * Queries the ETL data pool to count available fresh items vs. consumed items for that category.
+   * Logs readiness status: green (sufficient data) or warning (data pool running low).
+   * If the pool is exhausted, logs an alert prompting the ETL ingestion pipeline to fetch new data.
+
+This ensures the 15s settlement cron can act instantly upon expiry — the replacement data is already validated and warm.
+
+#### Anti-Throttling Guards
+
+* **Per-slot cooldown**: 60s minimum between creation attempts for the same `category::horizon` combination, preventing rapid-fire slot filling.
+* **isSettling mutex**: Boolean guard prevents overlapping settlement cycles if a previous cycle exceeds 15s.
+* **isSeeding mutex**: Prevents concurrent seeding operations from stomping each other.
+* **Database trigger**: `enforce_competition_horizon_limit()` auto-settles expired competitions in the trigger before checking slot capacity, eliminating false cap violations.
+
+### 6.10 Horizon-Optimized Cost Model
+
+The 4-tier horizon system is designed around a single economic constraint: LLM inference is the dominant operational cost. Each tier's refresh interval is calibrated to deliver the minimum acceptable update frequency for its forecast window while minimizing token consumption.
+
+| Horizon | Duration | Agent Prediction Interval | Curve Tick | Cluster Refresh | ~LLM Calls/Comp |
+|---------|----------|---------------------------|------------|-----------------|------------------|
+| **2h** | 2 hours | 15 seconds | 15 seconds | 1 minute | ~480 |
+| **7h** | 7 hours | 30 seconds | 30 seconds | 2.5 minutes | ~840 |
+| **12h** | 12 hours | 5 minutes | 5 minutes | 10 minutes | ~144 |
+| **24h** | 24 hours | 12.5 minutes | 10 minutes | 30 minutes | ~115 |
+
+**Cost justification**:
+* A 2h competition at 15s intervals produces ~480 LLM calls — acceptable for a short, high-engagement window where users expect real-time responsiveness.
+* The same 15s rate applied to a 24h competition would produce ~5,760 calls. Across 7 categories, that's 40,320 inference requests per day — financially and computationally unsustainable.
+* By relaxing the 24h tier to 12.5-minute intervals, cost drops to ~115 calls per competition — a **98% reduction** with negligible perceptual impact (users tracking 24h markets don't need second-by-second updates).
+* The 7h and 12h tiers provide a smooth gradient so users never perceive an abrupt quality drop between adjacent horizons.
+
+**Why not 3, 5, or 7-day horizons?** Longer horizons were originally supported (3d, 5d, 7d) but retired for three reasons:
+1. **Cost**: A 7-day competition at even 15-minute intervals generates ~672 calls, but the data staleness problem worsens — news cycles rarely sustain a single topic for a week.
+2. **Engagement**: User attention drops sharply after 24 hours. Competitions longer than a day see minimal participation after the first 12 hours.
+3. **Data freshness**: The ETL pipeline produces new data continuously; locking a slot for 7 days means 6 days of missed opportunities to surface fresh topics.
+
+The system retires any legacy competitions with removed horizons (3d/5d/7d) on startup via `retireOldHorizons()`.

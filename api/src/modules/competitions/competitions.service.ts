@@ -51,11 +51,13 @@ export class CompetitionsService {
      */
     async findActive(sector?: string, limit: number = 20): Promise<CompetitionResponseDto[]> {
         const supabase = this.supabaseService.getClient();
+        const now = new Date().toISOString();
 
         let query = supabase
             .from('competitions')
             .select('*')
             .in('status', ['active', 'upcoming'])
+            .gt('competition_end', now) // Exclude time-expired competitions
             .order('competition_start', { ascending: true })
             .limit(limit);
 
@@ -78,12 +80,14 @@ export class CompetitionsService {
      */
     async findBySector(sector: string, limit: number = 20): Promise<CompetitionResponseDto[]> {
         const supabase = this.supabaseService.getClient();
+        const now = new Date().toISOString();
 
         const { data, error } = await supabase
             .from('competitions')
             .select('*')
             .eq('sector', sector)
             .in('status', ['active', 'upcoming'])
+            .gt('competition_end', now) // Exclude time-expired competitions
             .order('competition_start', { ascending: false })
             .limit(limit);
 
@@ -119,11 +123,13 @@ export class CompetitionsService {
      */
     async getSectorSummary(): Promise<SectorSummaryDto[]> {
         const supabase = this.supabaseService.getClient();
+        const now = new Date().toISOString();
 
         const { data, error } = await supabase
             .from('competitions')
             .select('sector, status')
-            .in('status', ['active', 'upcoming']);
+            .in('status', ['active', 'upcoming'])
+            .gt('competition_end', now); // Only count non-expired
 
         if (error) {
             this.logger.error(`Failed to fetch sector summary: ${error.message}`);

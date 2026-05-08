@@ -77,6 +77,7 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                     .from('competitions')
                     .select('*')
                     .in('status', ['active', 'upcoming'])
+                    .gt('competition_end', new Date().toISOString()) // Exclude time-expired
                     .order('competition_start', { ascending: true })
                     .limit(50);
 
@@ -115,6 +116,10 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
                         const newComp = payload.new as unknown as Competition;
+                        // Only add if not expired and matches sector
+                        const isExpired = new Date(newComp.competition_end).getTime() < Date.now();
+                        if (isExpired) return;
+                        if (newComp.status === 'settled' || newComp.status === 'cancelled') return;
                         if (!sector || sector === 'all' || newComp.sector === sector) {
                             setCompetitions((prev) => {
                                 // dedup and memory check
@@ -153,8 +158,14 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
     }, [sector, fetchCompetitions]);
 
     // Derive active competition (first active one for the current sector)
-    // Filter out any settled/cancelled that slipped through
-    const activeComps = competitions.filter(c => c.status === 'active' || c.status === 'upcoming');
+    // Filter out any settled/cancelled AND time-expired competitions
+    const now = Date.now();
+    const activeComps = competitions.filter(c => {
+        if (c.status !== 'active' && c.status !== 'upcoming') return false;
+        // Also exclude competitions whose end time has passed (before settle cron runs)
+        if (new Date(c.competition_end).getTime() < now) return false;
+        return true;
+    });
     const activeCompetition = activeComps.find((c) => c.status === 'active') || activeComps[0] || null;
 
     return {

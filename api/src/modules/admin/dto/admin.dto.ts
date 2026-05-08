@@ -421,8 +421,8 @@ export class SecurityConfigDto {
     @ApiProperty()
     key: string;
 
-    @ApiProperty({ type: 'object' })
-    value: any;
+    @ApiProperty({ type: 'object', additionalProperties: true })
+    value: Record<string, any>;
 
     @ApiProperty()
     description: string;
@@ -438,9 +438,9 @@ export class SecurityConfigDto {
 }
 
 export class UpdateSecurityConfigDto {
-    @ApiProperty({ type: 'object', description: 'New JSON value for the config key' })
+    @ApiProperty({ type: 'object', description: 'New JSON value for the config key', additionalProperties: true })
     @IsOptional() // Value can be anything, validation depends on key type logic in service
-    value: any;
+    value: Record<string, any>;
 }
 
 export class TrafficStatsDto {

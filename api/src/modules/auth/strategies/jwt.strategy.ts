@@ -19,6 +19,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         private readonly configService: ConfigService,
         private readonly usersService: UsersService,
     ) {
+        const jwtSecret = configService.get<string>('JWT_SECRET');
+        if (!jwtSecret) {
+            throw new Error('JWT_SECRET environment variable is not configured');
+        }
         super({
             jwtFromRequest: ExtractJwt.fromExtractors([
                 // Try Authorization header first
@@ -32,7 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
                 },
             ]),
             ignoreExpiration: false,
-            secretOrKey: configService.get<string>('JWT_SECRET'),
+            secretOrKey: jwtSecret,
         });
     }
 

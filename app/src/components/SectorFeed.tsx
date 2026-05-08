@@ -415,6 +415,9 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
     }
     // signals tab doesn't use competitions
 
+    // FILTER OUT ended competitions — they should NEVER appear in the feed
+    sorted = sorted.filter(c => getCompetitionStatus(c) !== 'ended');
+
     const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
 
     // ── Signals Tab: render live feed items ─────────────────────
