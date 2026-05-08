@@ -71,6 +71,15 @@ export const envSchema = z.object({
     PRIVY_APP_SECRET: z.string().optional(),
     PRIVY_JWKS_URL: z.string().url().optional(),
 
+
+    // CurveEngine HMAC Secret
+    CURVE_HMAC_SECRET: z.string().optional(),
+    COMPETITION_HMAC_SECRET: z.string().optional(),
+    LEADERBOARD_HMAC_SECRET: z.string().optional(),
+
+    // Solana Treasury
+    SOL_TREASURY_PRIVATE_KEY: z.string().optional(),
+
     // SMTP Email
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.string().transform(Number).pipe(z.number()).default('587'),

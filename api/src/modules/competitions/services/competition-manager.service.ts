@@ -361,9 +361,12 @@ export class CompetitionManagerService {
         if (normalizedCandidate.length >= 15) {
             for (const existing of existingFingerprints) {
                 if (existing.length < 15) continue;
-                if (normalizedCandidate.includes(existing) || existing.includes(normalizedCandidate)) {
-                    this.logger.debug(`Dedup (substring): "${candidateTitle.substring(0, 40)}..." ⊂ "${existing.substring(0, 40)}..."`);
-                    return true;
+                // Only do substring match if the lengths are relatively similar to avoid generic matches
+                if (existing.length >= normalizedCandidate.length * 0.5 && existing.length <= normalizedCandidate.length * 2.0) {
+                    if (normalizedCandidate.includes(existing) || existing.includes(normalizedCandidate)) {
+                        this.logger.debug(`Dedup (substring): "${candidateTitle.substring(0, 40)}..." ⊂ "${existing.substring(0, 40)}..."`);
+                        return true;
+                    }
                 }
             }
         }
@@ -384,7 +387,7 @@ export class CompetitionManagerService {
             const union = candidateTokens.size + existingTokens.size - intersection;
             const similarity = union > 0 ? intersection / union : 0;
 
-            if (similarity > SIMILARITY_THRESHOLD) {
+            if (similarity > 0.75) {
                 this.logger.debug(`Dedup (Jaccard): "${candidateTitle.substring(0, 40)}..." ~= "${existing.substring(0, 40)}..." (sim=${similarity.toFixed(3)})`);
                 return true;
             }

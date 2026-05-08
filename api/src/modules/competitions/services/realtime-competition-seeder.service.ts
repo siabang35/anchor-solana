@@ -294,26 +294,75 @@ export class RealtimeCompetitionSeederService {
             }
 
             // Step 2: Cancel ALL remaining active/upcoming competitions
+            // IMPORTANT: Settle pools FIRST to prevent user stakes from being stranded
             const { data: remaining } = await supabase
                 .from('competitions')
-                .select('id')
+                .select('id, title, sector, time_horizon, outcomes')
                 .in('status', ['active', 'upcoming']);
 
             if (remaining && remaining.length > 0) {
-                const ids = remaining.map(c => c.id);
-                await supabase
-                    .from('competitions')
-                    .update({
-                        status: 'cancelled',
-                        metadata: {
-                            cancelledAt: new Date().toISOString(),
-                            cancelledBy: 'startup_fresh_seed',
-                            reason: 'Server restart — replaced with fresh data',
-                        },
-                    })
-                    .in('id', ids);
+                // Settle pools for competitions that have active stakes
+                for (const comp of remaining) {
+                    try {
+                        if (this.poolService) {
+                            // Determine a CSPRNG outcome for fair settlement
+                            let winningOutcome = 0;
+                            if (comp.outcomes && Array.isArray(comp.outcomes) && comp.outcomes.length > 0) {
+                                winningOutcome = AntiManipulationUtil.secureRandomOutcome(comp.outcomes.length);
+                            }
+                            const settlementNonce = AntiManipulationUtil.generateNonce();
+                            const settlementHash = AntiManipulationUtil.hashSnapshot({
+                                id: comp.id, winningOutcome, nonce: settlementNonce,
+                                settledAt: new Date().toISOString(),
+                            });
 
-                this.logger.log(`🧹 Startup: cancelled ${ids.length} stale competition(s)`);
+                            await supabase
+                                .from('competitions')
+                                .update({
+                                    status: 'settled',
+                                    winning_outcome: winningOutcome,
+                                    metadata: {
+                                        settlementHash, settlementNonce,
+                                        settledAt: new Date().toISOString(),
+                                        settledBy: 'startup_graceful_settle',
+                                    },
+                                })
+                                .eq('id', comp.id);
+
+                            await this.poolService.settlePool(comp.id, 'startup_graceful_settle');
+                            this.logger.log(`⚖️ Startup: gracefully settled pool for "${(comp.title || '').substring(0, 40)}"`);
+                        } else {
+                            // No pool service — just cancel
+                            await supabase
+                                .from('competitions')
+                                .update({
+                                    status: 'cancelled',
+                                    metadata: {
+                                        cancelledAt: new Date().toISOString(),
+                                        cancelledBy: 'startup_fresh_seed',
+                                        reason: 'Server restart — no pool service for settlement',
+                                    },
+                                })
+                                .eq('id', comp.id);
+                        }
+                    } catch (settleErr: any) {
+                        // Fallback: cancel if settlement fails
+                        this.logger.warn(`Startup settle failed for ${comp.id}, cancelling: ${settleErr.message}`);
+                        await supabase
+                            .from('competitions')
+                            .update({
+                                status: 'cancelled',
+                                metadata: {
+                                    cancelledAt: new Date().toISOString(),
+                                    cancelledBy: 'startup_fresh_seed',
+                                    reason: `Server restart — settlement failed: ${settleErr.message}`,
+                                },
+                            })
+                            .eq('id', comp.id);
+                    }
+                }
+
+                this.logger.log(`⚖️ Startup: processed ${remaining.length} remaining competition(s) with pool settlement`);
             }
 
             // Step 3: Small delay to let DB constraints settle
@@ -484,7 +533,9 @@ export class RealtimeCompetitionSeederService {
         };
 
         const tokenize = (text: string): Set<string> => {
-            return new Set(text.split(/\s+/).filter(w => w.length > 2));
+            // Filter out common meaningless words that falsely inflate similarity
+            const stopWords = new Set(['vs', 'the', 'a', 'an', 'for', 'in', 'on', 'at', 'to', 'of', 'and', 'with', 'by']);
+            return new Set(text.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w)));
         };
 
         const jaccardSim = (a: Set<string>, b: Set<string>): number => {
@@ -524,7 +575,7 @@ export class RealtimeCompetitionSeederService {
             for (const usedTokens of tokenizedUsed) {
                 if (usedTokens.size < 3) continue;
                 const sim = jaccardSim(candidateTokens, usedTokens);
-                if (sim > 0.45) return true; // Aggressive threshold — err on the side of freshness
+                if (sim > 0.75) return true; // Threshold raised from 0.45 to 0.75 to allow different matches in same league
             }
 
             return false;
@@ -825,9 +876,14 @@ export class RealtimeCompetitionSeederService {
                 .limit(15);
 
             if (historicalItems) {
+                let fallbackPushed = 0;
                 for (const item of historicalItems) {
                     if (!item.title) continue;
-                    if (isAlreadyUsed(item.title)) continue; // ANTI-RECYCLING: skip even in fallback
+                    // RELAXED FALLBACK: If we are here, we are desperate for data.
+                    // Only reject if it's an EXACT match, ignore the aggressive token similarity.
+                    const norm = deepNormalize(item.title);
+                    if (normalizedUsedSet.has(norm)) continue; 
+                    
                     allCandidates.push({
                         title: item.title,
                         cleanTitle: this.cleanTitle(item.title),
@@ -840,8 +896,9 @@ export class RealtimeCompetitionSeederService {
                         url: item.url,
                         payload: item,
                     });
+                    fallbackPushed++;
                 }
-                this.logger.log(`[${category}] Historical fallback yielded ${historicalItems.length} candidates`);
+                this.logger.log(`[${category}] Historical fallback yielded ${fallbackPushed} valid candidates`);
             }
         }
     }

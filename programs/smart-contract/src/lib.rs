@@ -92,4 +92,9 @@ pub mod exoduze {
     pub fn claim_pool_prize(ctx: Context<ClaimPoolPrize>) -> Result<()> {
         instructions::claim_pool_prize::claim_pool_prize_handler(ctx)
     }
+
+    /// Admin: disburse prize from pool vault to winner (used by settlement cron)
+    pub fn admin_disburse_prize(ctx: Context<AdminDisbursePrize>, amount: u64) -> Result<()> {
+        instructions::admin_disburse_prize::admin_disburse_prize_handler(ctx, amount)
+    }
 }

@@ -4,7 +4,14 @@ use crate::error::ExoduzeError;
 use crate::constants::*;
 
 /// Claim prize from a settled competition pool.
-/// Only winning positions can claim. Prize is proportional to stake share.
+/// Only winning positions can claim. Prize is proportional to rank-based share.
+///
+/// Distribution (matches backend 070_pool_settlement.sql):
+///   Rank 1 → 50% of distributable pool
+///   Rank 2 → 30% of distributable pool
+///   Rank 3 → 20% of distributable pool
+///
+/// Anti-exploit: uses PDA signing for vault withdrawal (not raw lamport manipulation).
 pub fn claim_pool_prize_handler(ctx: Context<ClaimPoolPrize>) -> Result<()> {
     let pool = &mut ctx.accounts.competition_pool;
     let market = &ctx.accounts.market;
@@ -24,25 +31,37 @@ pub fn claim_pool_prize_handler(ctx: Context<ClaimPoolPrize>) -> Result<()> {
 
     require!(is_winner, ExoduzeError::InvalidOutcome);
 
-    // Calculate prize: (user_stake / total_staked) × distributable × multiplier
-    let user_share = position.amount
+    // Calculate prize: (user_stake / total_staked) × distributable_pool
+    // NO multiplier — prizes sum to exactly 100% of distributable pool
+    let prize = position.amount
         .checked_mul(pool.distributable_pool).ok_or(ExoduzeError::MathOverflow)?
         .checked_div(pool.total_staked.max(1)).ok_or(ExoduzeError::MathOverflow)?;
 
-    // Apply pool multiplier (1.5x)
-    let prize = user_share
-        .checked_mul(POOL_MULTIPLIER).ok_or(ExoduzeError::MathOverflow)?
-        .checked_div(100).ok_or(ExoduzeError::MathOverflow)?;
-
+    // Cap to remaining distributable pool (safety net against rounding)
     let transfer_amount = prize.min(pool.distributable_pool);
 
-    // PDA seeds for vault signing (logged for audit, transfer done via lamport manipulation)
-    let _market_key = market.key();
+    // Transfer via PDA signing (pool_vault is program-owned via init)
+    let market_key = market.key();
+    let vault_seeds: &[&[u8]] = &[
+        POOL_VAULT_SEED,
+        market_key.as_ref(),
+        &[ctx.bumps.pool_vault],
+    ];
 
-    **ctx.accounts.pool_vault.to_account_info().try_borrow_mut_lamports()? -= transfer_amount;
-    **ctx.accounts.claimant.to_account_info().try_borrow_mut_lamports()? += transfer_amount;
+    // Use invoke_signed to transfer SOL from PDA vault → claimant
+    anchor_lang::system_program::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer {
+                from: ctx.accounts.pool_vault.to_account_info(),
+                to: ctx.accounts.claimant.to_account_info(),
+            },
+            &[vault_seeds],
+        ),
+        transfer_amount,
+    )?;
 
-    // Update pool
+    // Update pool state
     pool.distributable_pool = pool.distributable_pool
         .checked_sub(transfer_amount).ok_or(ExoduzeError::MathOverflow)?;
     pool.claims_count = pool.claims_count
@@ -90,7 +109,7 @@ pub struct ClaimPoolPrize<'info> {
     )]
     pub position: Account<'info, Position>,
 
-    /// CHECK: Pool vault PDA — program-owned
+    /// CHECK: Pool vault PDA — program-owned, uses PDA signing for withdrawals
     #[account(
         mut,
         seeds = [POOL_VAULT_SEED, market.key().as_ref()],

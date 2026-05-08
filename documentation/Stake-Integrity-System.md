@@ -109,4 +109,35 @@ The migration file `073_fix_pool_stake_count_drift.sql` includes a retroactive c
 
 ---
 
-*Engineered for trustless execution on Solana Devnet.*
+## 6. v2 Enhancements (2026-05-09)
+
+### 6.1 Startup Graceful Pool Settlement
+
+Previously, server restarts (`cancelAllAndSeedFresh()`) cancelled active competitions without settling their pools — user stakes were effectively lost. The v2 fix ensures:
+
+1. **Before cancellation**, each active competition's pool is settled:
+   - CSPRNG outcome generated for fair winner determination
+   - `poolService.settlePool()` calculates winners and disburses prizes
+   - Settlement hash + metadata recorded for audit trail
+2. **Fallback**: If settlement fails, the competition is cancelled with an error reason logged
+3. **Result**: No user stakes are ever stranded, even during unexpected restarts
+
+### 6.2 Smart Contract PDA Signing
+
+The `claim_pool_prize` and `admin_disburse_prize` instructions now use `invoke_signed` with PDA seeds for vault withdrawal, replacing the previous raw lamport manipulation that failed because the vault was owned by the System Program.
+
+### 6.3 1.5x Multiplier Removal
+
+The `POOL_MULTIPLIER` (150 = 1.5x) was removed from `claim_pool_prize`. Previously, if all winners claimed, total payouts could exceed the vault balance. Prizes are now a proportional share of the distributable pool.
+
+### 6.4 Additional Migrations
+
+| Migration | Purpose |
+|-----------|---------|
+| `073_fix_pool_stake_count_drift.sql` | Drift-proof triggers using aggregate queries |
+| `074_fix_competition_lifecycle.sql` | Fixed false-cap violations on horizon limits |
+| `075_competition_data_tracking.sql` | Anti-recycling source tracking for ETL data |
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-09 — Pool Settlement Hardening.*

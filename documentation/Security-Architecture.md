@@ -158,6 +158,9 @@ The platform uses a **Solana Devnet Treasury Keypair** for automated on-chain op
 | **Audit Trail** | Every disbursement TX is recorded in `pool_winners.disburse_tx` and `pool_settlement_audit` |
 | **Wallet Resolution** | Winner wallets resolved from authenticated user profiles — never from client input |
 | **Amount Validation** | Prize amounts calculated server-side from `distributable_pool × share_bps / 10000` |
+| **PDA Signing (v2)** | Smart contract uses `invoke_signed` with PDA seeds for vault withdrawal — no raw lamport manipulation |
+| **1.5x Multiplier Removed (v2)** | `claim_pool_prize` no longer applies `POOL_MULTIPLIER`, preventing vault over-drain |
+| **Startup Settlement (v2)** | On server restart, pools are settled (winners determined + prizes disbursed) before cancelling competitions — prevents user stake loss |
 
 ---
 
@@ -166,18 +169,19 @@ The platform uses a **Solana Devnet Treasury Keypair** for automated on-chain op
 Before deploying to production, verify:
 
 - [ ] `SOLANA_TREASURY_PRIVATE_KEY` is set and the wallet is funded
+- [ ] `COMPETITION_HMAC_SECRET` is set (32+ chars) — **no longer falls back to hardcoded default**
+- [ ] `LEADERBOARD_HMAC_SECRET` is set (32+ chars) — required for cross-restart score chain verification
 - [ ] `.env` is in `.gitignore` and NOT committed
 - [ ] `NODE_ENV=production` (disables debug logging of sensitive data)
 - [ ] `COOKIE_SECURE=true` (HTTPS only)
 - [ ] `CORS_ORIGINS` contains only production domains
 - [ ] All API keys and secrets are unique, strong, and rotated periodically
 - [ ] Database uses connection pooler (port 6543) for production
-
-- [ ] Database uses connection pooler (port 6543) for production
 - [ ] Rate limiting is configured (global: 300/min, auth: 5/min)
 - [ ] Swagger UI is disabled (`!isProduction` check)
 - [ ] File upload limits are enforced (5MB max)
+- [ ] Smart contract is deployed with latest security fixes (`anchor deploy`)
 
 ---
 
-*Last Updated: May 2026 — Fastify 5 Migration Complete*
+*Last Updated: 2026-05-09 — Pool Settlement Hardening & HMAC Security Fix*

@@ -83,7 +83,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const [categoryId, setCategoryId] = useState(initialCategory || '');
     const { competitions } = useCompetitions(categoryId);
 
-    const [agentMode, setAgentMode] = useState<'trader' | 'forecaster'>('forecaster');
+    // Agent mode is always 'forecaster' — Trading Agent removed (not aligned with ExoDuZe prediction competition model)
+    const agentMode = 'forecaster' as const;
     const [agentName, setAgentName] = useState('');
     const [subCategoryId, setSubCategoryId] = useState('');
     const [marketIds, setMarketIds] = useState<string[]>([]);
@@ -133,10 +134,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         if (autoSelectedCategory !== categoryId) {
             if (availableMarkets.length > 0) {
                 setMarketIds([availableMarkets[0].id]);
-                setAutoSelectedCategory(categoryId);
             } else {
                 setMarketIds([]);
             }
+            setAutoSelectedCategory(categoryId);
         }
     }, [availableMarkets, categoryId, autoSelectedCategory]);
     useEffect(() => { setMarketIds([]); setSelectedOutcome(0); }, [subCategoryId]);
@@ -197,22 +198,14 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             // Find matching agent type from backend
             const matchingType = agentTypes.find(t => t.sector === categoryId) || agentTypes[0];
 
-            const isForecaster = agentMode === 'forecaster';
-            const body = isForecaster ? {
+            const isForecaster = true; // Always forecaster mode
+            const body = {
                 name: agentName.trim(),
                 system_prompt: strategy,
                 competition_ids: marketIds
-            } : {
-                name: agentName.trim(),
-                agent_type_id: matchingType?.id || categoryId,
-                market_ids: marketIds,
-                strategy_prompt: strategy,
-                target_outcome: selectedMarket.outcomes[selectedOutcome] || 'home',
-                direction: direction === 'UP' ? 'long' : 'short',
-                risk_level: riskLevel,
             };
 
-            const endpoint = isForecaster ? '/agents/deploy-forecaster' : '/agents/deploy';
+            const endpoint = '/agents/deploy-forecaster';
 
             // Call backend API
             const result = await apiFetch<DeployedAgentResponse>(endpoint, {
@@ -599,33 +592,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         </div>
                     )}
 
-                    {/* Agent Mode Toggle */}
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 'var(--radius-round)', padding: '0.2rem' }}>
-                            <button
-                                onClick={() => setAgentMode('forecaster')}
-                                style={{
-                                    flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
-                                    background: agentMode === 'forecaster' ? 'var(--accent-primary)' : 'transparent',
-                                    color: agentMode === 'forecaster' ? '#fff' : 'var(--text-secondary)',
-                                    fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
-                                }}
-                            >
-                                🧠 AI Forecaster
-                            </button>
-                            <button
-                                onClick={() => setAgentMode('trader')}
-                                style={{
-                                    flex: 1, padding: '0.5rem', borderRadius: 'var(--radius-round)',
-                                    background: agentMode === 'trader' ? 'var(--accent-indigo)' : 'transparent',
-                                    color: agentMode === 'trader' ? '#fff' : 'var(--text-secondary)',
-                                    fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
-                                }}
-                            >
-                                ⚡ Trading Agent
-                            </button>
-                        </div>
-                    </div>
+                    {/* Agent Mode — Forecaster Only (Trading Agent removed: not aligned with prediction competition model) */}
 
                     {/* Agent Name */}
                     <div className="form-group">
@@ -814,56 +781,19 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         </div>
                     )}
 
-                    {/* Outcome Selection */}
-                    {selectedMarket && agentMode === 'trader' && (
-                        <div className="form-group">
-                            <label className="form-label">Target Outcome</label>
-                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                {selectedMarket.outcomes.map((out, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setSelectedOutcome(i)}
-                                        style={{
-                                            padding: '0.4rem 0.65rem',
-                                            borderRadius: 'var(--radius-round)',
-                                            border: selectedOutcome === i ? '2px solid var(--accent-green)' : '1px solid var(--border-card)',
-                                            background: selectedOutcome === i ? 'rgba(16,185,129,0.1)' : 'var(--bg-input)',
-                                            color: selectedOutcome === i ? 'var(--accent-green)' : 'var(--text-secondary)',
-                                            cursor: 'pointer',
-                                            fontSize: '0.7rem',
-                                            fontWeight: 600,
-                                            transition: 'all 0.2s',
-                                        }}
-                                    >
-                                        {out}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    {/* Outcome Selection removed — not needed for forecaster mode.
+                       Winners are determined by Brier Score accuracy, not by outcome/direction picks */}
 
-                    {/* Direction */}
-                    {marketIds.length > 0 && agentMode === 'trader' && (
-                        <div className="form-group">
-                            <label className="form-label">Direction</label>
-                            <div className="direction-btns">
-                                <button className={`dir-btn up ${direction === 'UP' ? 'active' : ''}`} onClick={() => setDirection('UP')}>
-                                    📈 UP (Probability ↑)
-                                </button>
-                                <button className={`dir-btn down ${direction === 'DOWN' ? 'active' : ''}`} onClick={() => setDirection('DOWN')}>
-                                    📉 DOWN (Probability ↓)
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    {/* Direction removed — forecaster agents don't pick directions.
+                       They generate probabilistic predictions scored by Brier accuracy */}
 
                     {/* Strategy Prompt */}
                     {marketIds.length > 0 && (
                         <div className="form-group">
-                            <label className="form-label">{agentMode === 'forecaster' ? 'System Prompt / Knowledge Base' : 'Strategy Prompt'}</label>
+                            <label className="form-label">System Prompt / Knowledge Base</label>
                             <textarea
                                 className="form-textarea"
-                                placeholder={agentMode === 'forecaster' ? `e.g. "Focus deeply on regulatory announcements and ignore short-term market noise."` : `e.g. "Analyze social sentiment for ${selectedMarket?.title || 'this market'} and take ${direction} positions when bullish confidence exceeds 65%"`}
+                                placeholder={`e.g. "Focus deeply on regulatory announcements and ignore short-term market noise."`}
                                 value={strategy}
                                 onChange={(e) => setStrategy(e.target.value)}
                                 maxLength={256}
@@ -874,16 +804,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         </div>
                     )}
 
-                    {/* Risk Level */}
-                    {marketIds.length > 0 && agentMode === 'trader' && (
-                        <div className="form-group">
-                            <label className="form-label">Risk Level: {riskLevel}/5</label>
-                            <input type="range" className="risk-slider" min={1} max={5} value={riskLevel} onChange={(e) => setRiskLevel(Number(e.target.value))} />
-                            <div className="risk-levels">
-                                <span>Conservative</span><span>Moderate</span><span>Aggressive</span>
-                            </div>
-                        </div>
-                    )}
+                    {/* Risk Level removed — not applicable to forecaster mode */}
 
                     {/* ═══ ON-CHAIN POOL STAKE ═══ */}
                     {marketIds.length > 0 && (

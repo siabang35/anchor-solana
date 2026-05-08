@@ -8,6 +8,224 @@
   },
   "instructions": [
     {
+      "name": "admin_disburse_prize",
+      "docs": [
+        "Admin: disburse prize from pool vault to winner (used by settlement cron)"
+      ],
+      "discriminator": [
+        3,
+        108,
+        186,
+        29,
+        111,
+        21,
+        213,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "platform"
+          ]
+        },
+        {
+          "name": "platform",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "competition_pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  112,
+                  101,
+                  116,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "pool_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "winner",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim_pool_prize",
+      "docs": [
+        "Claim prize from a settled competition pool"
+      ],
+      "discriminator": [
+        245,
+        4,
+        243,
+        201,
+        238,
+        6,
+        233,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "claimant",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "competition_pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  112,
+                  101,
+                  116,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "pool_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "claim_reward",
       "docs": [
         "Claim reward from Value Creation Pool"
@@ -520,6 +738,123 @@
       ]
     },
     {
+      "name": "stake_pool",
+      "docs": [
+        "Stake SOL into a competition's prize pool (anti-whale protected)"
+      ],
+      "discriminator": [
+        186,
+        105,
+        178,
+        191,
+        181,
+        236,
+        39,
+        162
+      ],
+      "accounts": [
+        {
+          "name": "staker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "platform",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  116,
+                  102,
+                  111,
+                  114,
+                  109
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "competition_pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  109,
+                  112,
+                  101,
+                  116,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "take_position",
       "docs": [
         "Take a position (Long/Short) on a market outcome with bonding curve pricing"
@@ -723,6 +1058,19 @@
       ]
     },
     {
+      "name": "CompetitionPool",
+      "discriminator": [
+        189,
+        253,
+        222,
+        42,
+        54,
+        249,
+        250,
+        75
+      ]
+    },
+    {
       "name": "Market",
       "discriminator": [
         219,
@@ -857,6 +1205,26 @@
       "code": 6018,
       "name": "SectorTooLong",
       "msg": "Sector name too long"
+    },
+    {
+      "code": 6019,
+      "name": "AmountTooLarge",
+      "msg": "Position amount exceeds maximum allowed (anti-whale)"
+    },
+    {
+      "code": 6020,
+      "name": "TooManyPositions",
+      "msg": "Maximum positions per market reached (fairness limit)"
+    },
+    {
+      "code": 6021,
+      "name": "PoolAlreadySettled",
+      "msg": "Pool is already settled"
+    },
+    {
+      "code": 6022,
+      "name": "PoolNotSettled",
+      "msg": "Pool has not been settled yet"
     }
   ],
   "types": [
@@ -952,6 +1320,64 @@
               "Maximum allowed deploys (10 for free tier)"
             ],
             "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CompetitionPool",
+      "docs": [
+        "Competition Pool — on-chain prize pool for a market",
+        "Aggregates stakes from participants, distributes to winners after settlement"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_staked",
+            "type": "u64"
+          },
+          {
+            "name": "platform_fee",
+            "type": "u64"
+          },
+          {
+            "name": "distributable_pool",
+            "type": "u64"
+          },
+          {
+            "name": "stake_count",
+            "type": "u64"
+          },
+          {
+            "name": "claims_count",
+            "type": "u64"
+          },
+          {
+            "name": "max_stake_per_user",
+            "type": "u64"
+          },
+          {
+            "name": "is_settled",
+            "type": "bool"
+          },
+          {
+            "name": "settled_at",
+            "type": {
+              "option": "i64"
+            }
           },
           {
             "name": "bump",

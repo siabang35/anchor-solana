@@ -111,7 +111,15 @@ export class AntiManipulationUtil {
      * Proves that competition was created by authorized system, not injected.
      */
     static generateCreationHMAC(category: string, horizon: string, title: string, timestamp: number): string {
-        const secret = process.env.COMPETITION_HMAC_SECRET || 'exoduze-integrity-key-v2';
+        const secret = process.env.COMPETITION_HMAC_SECRET;
+        if (!secret || secret.length < 32) {
+            // Generate a per-process ephemeral key — NOT verifiable across restarts
+            // Set COMPETITION_HMAC_SECRET (32+ chars) in .env for production integrity
+            const ephemeralKey = crypto.randomBytes(32).toString('hex');
+            console.warn('⚠️  COMPETITION_HMAC_SECRET not set — using ephemeral key. Set a persistent 32+ char secret in production.');
+            const payload = `${category}:${horizon}:${title.substring(0, 64)}:${timestamp}`;
+            return crypto.createHmac('sha256', ephemeralKey).update(payload).digest('hex');
+        }
         const payload = `${category}:${horizon}:${title.substring(0, 64)}:${timestamp}`;
         return crypto.createHmac('sha256', secret).update(payload).digest('hex');
     }

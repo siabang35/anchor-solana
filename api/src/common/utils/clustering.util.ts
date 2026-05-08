@@ -5,7 +5,7 @@ export function tokenize(text: string): string[] {
         .filter(word => word.length > 2 && !STOP_WORDS.has(word));
 }
 
-const STOP_WORDS = new Set(['the', 'is', 'in', 'at', 'of', 'and', 'a', 'to', 'for', 'on', 'with', 'as', 'by', 'an', 'this', 'that']);
+const STOP_WORDS = new Set(['the', 'is', 'in', 'at', 'of', 'and', 'a', 'to', 'for', 'on', 'with', 'as', 'by', 'an', 'this', 'that', 'vs', 'outcome', 'prediction', 'match', 'game', 'event', 'forecasting']);
 
 export function computeTfIdf(documents: string[]): number[][] {
     const docTokens = documents.map(tokenize);

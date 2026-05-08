@@ -35,6 +35,9 @@ graph TB
         UpdateP["update_probabilities"]
         Settle["settle_market"]
         Claim["claim_reward"]
+        StakePool["stake_pool"]
+        ClaimPool["claim_pool_prize"]
+        AdminDisburse["admin_disburse_prize"]
     end
 
     subgraph PDAs["Program Derived Accounts"]
@@ -44,6 +47,8 @@ graph TB
         Agent["Agent PDA<br/>(seeds: 'agent' + owner + index)"]
         Registry["AgentRegistry PDA<br/>(seeds: 'agent_registry' + user)"]
         Vault["Vault PDA<br/>(seeds: 'vault')"]
+        PoolPDA["CompetitionPool PDA<br/>(seeds: 'competition_pool' + market)"]
+        PoolVault["Pool Vault PDA<br/>(seeds: 'pool_vault' + market)"]
     end
 
     Init --> Platform
@@ -55,6 +60,10 @@ graph TB
     DeployAg --> Agent
     DeployAg --> Registry
     Claim --> Vault
+    StakePool --> PoolPDA
+    StakePool --> PoolVault
+    ClaimPool --> PoolVault
+    AdminDisburse --> PoolVault
 ```
 
 ---
@@ -315,6 +324,81 @@ Even losing traders receive 50% of their position back, ensuring the platform op
 
 ---
 
+### 5.9 `stake_pool`
+
+Stakes SOL into a competition pool vault PDA. Creates a `CompetitionPool` state if it doesn't exist, or updates the existing pool.
+
+| Parameter | Type | Constraint |
+|-----------|------|------------|
+| `amount` | `u64` | ≥ 0.01 SOL, ≤ 10 SOL (anti-whale) |
+
+**Fee Structure:**
+- Platform fee: 2% (200 bps) deducted from stake
+- Distributable pool: 98% of total staked
+
+**Accounts:**
+- `staker` (Signer, Mutable) — User staking SOL
+- `market` (Account) — Associated market
+- `competition_pool` (Init/Mutable PDA) — Pool state account
+- `pool_vault` (Mutable PDA) — SOL custody vault
+- `system_program` — For SOL transfer CPI
+
+---
+
+### 5.10 `claim_pool_prize`
+
+Claims winnings from a settled competition pool. Only winning positions (correct direction on winning outcome) can claim.
+
+**Prize Calculation (v2 — Fixed):**
+```
+prize = (user_stake / total_staked) × distributable_pool
+transfer = min(prize, remaining_distributable)
+```
+
+> **v2 Fix:** Removed the 1.5x `POOL_MULTIPLIER` that could cause total claims to exceed vault balance. Prizes are now a proportional share of the distributable pool.
+
+**Security:**
+- Uses `invoke_signed` with PDA seeds for vault withdrawal (not raw lamport manipulation)
+- Validates market is settled, pool is settled, position is not already claimed
+- Caps transfer to remaining distributable pool (rounding safety net)
+
+**Accounts:**
+- `claimant` (Signer, Mutable) — Winner claiming prize
+- `market` (Account) — Must be `Settled` status
+- `competition_pool` (Mutable PDA) — Must be settled
+- `position` (Mutable Account) — Must be winner's unclaimed position
+- `pool_vault` (Mutable PDA) — SOL vault, uses PDA signing for withdrawal
+- `system_program` — For CPI transfer
+
+---
+
+### 5.11 `admin_disburse_prize`
+
+Admin-only instruction for automated prize disbursement. Called by the backend settlement cron after determining winners via weighted leaderboard scoring.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `amount` | `u64` | Prize amount in lamports |
+
+**Authorization:** Validates `admin == platform.admin` (has_one constraint).
+
+**Security:**
+- Platform `has_one = admin` constraint prevents unauthorized callers
+- Pool must be settled (`is_settled = true`)
+- Amount must be ≤ `distributable_pool` (balance check)
+- Uses `invoke_signed` with PDA seeds for vault withdrawal
+
+**Accounts:**
+- `admin` (Signer, Mutable) — Platform admin
+- `platform` (Account PDA) — Platform state with admin pubkey
+- `competition_pool` (Mutable PDA) — Must be settled
+- `market` (Account) — Associated market
+- `pool_vault` (Mutable PDA) — SOL vault
+- `winner` (Mutable AccountInfo) — Recipient wallet
+- `system_program` — For CPI transfer
+
+---
+
 ## 6. PDA Seed Architecture
 
 | Account | Seeds | Derived From |
@@ -326,6 +410,8 @@ Even losing traders receive 50% of their position back, ensuring the platform op
 | Agent | `["agent", owner, agent_index]` | Global counter |
 | AgentRegistry | `["agent_registry", user]` | Per-user singleton |
 | Leaderboard | `["leaderboard"]` | Global singleton |
+| CompetitionPool | `["competition_pool", market.key()]` | Per-market singleton |
+| Pool Vault | `["pool_vault", market.key()]` | Per-market SOL custody |
 
 ---
 
@@ -334,9 +420,10 @@ Even losing traders receive 50% of their position back, ensuring the platform op
 | Constant | Value | Description |
 |----------|-------|-------------|
 | `PROBABILITY_DECIMALS` | 10,000 | 100.00% = 10000 basis points |
-| `POOL_MULTIPLIER` | 150 | 1.5× reward multiplier (÷100) |
+| `POOL_MULTIPLIER` | 150 | 1.5× reward multiplier (÷100) — **deprecated**, no longer used in pool claims |
 | `PLATFORM_FEE_BPS` | 200 | 2% platform fee |
 | `MIN_POSITION_AMOUNT` | 10,000,000 | 0.01 SOL minimum |
+| `MAX_POSITION_AMOUNT` | 10,000,000,000 | 10 SOL max per position (anti-whale) |
 | `MAX_FREE_DEPLOYS` | 10 | Free tier agent deploy limit |
 | `MAX_OUTCOMES` | 3 | Home, Draw, Away |
 | `BONDING_BASE_PRICE` | 100,000 | 0.0001 SOL base |
@@ -358,15 +445,17 @@ Even losing traders receive 50% of their position back, ensuring the platform op
 | `InvalidOutcome` | 6007 | Outcome index must be 0, 1, or 2 |
 | `InvalidDirection` | 6008 | Direction must be 0 (Long) or 1 (Short) |
 | `AmountTooSmall` | 6009 | Position below 0.01 SOL minimum |
-| `InsufficientPoolFunds` | 6010 | Vault has insufficient SOL for reward |
+| `InsufficientPoolFunds` | 6010 | Vault has insufficient SOL for reward / pool balance |
 | `AlreadyClaimed` | 6011 | Position reward already claimed |
-| `Unauthorized` | 6012 | Caller is not admin |
+| `Unauthorized` | 6012 | Caller is not admin / not position owner |
 | `InvalidRiskLevel` | 6013 | Risk level must be 1-5 |
 | `MathOverflow` | 6014 | Arithmetic overflow detected |
 | `AgentDeployLimitReached` | 6015 | User exceeded free deploy quota |
 | `CompetitionNotStarted` | 6016 | Competition hasn't started yet |
 | `CompetitionEnded` | 6017 | Competition has already ended |
 | `SectorTooLong` | 6018 | Sector name exceeds 20 characters |
+| `PoolNotSettled` | 6019 | Competition pool not yet settled |
+| `AmountTooLarge` | 6020 | Position exceeds 10 SOL anti-whale limit |
 
 ---
 
@@ -407,4 +496,12 @@ The generated IDL is stored at `app/src/lib/idl/exoduze.json` and is used by the
 
 ---
 
-*Last Updated: May 2026*
+## 10. Deployment History
+
+| Date | TX Signature | Type | Changes |
+|------|-------------|------|---------|
+| 2026-05-09 | `4a5gM86T...8b2Vo` | Upgrade | Added `admin_disburse_prize`, fixed `claim_pool_prize` (removed 1.5x multiplier, PDA invoke_signed), registered pool subsystem |
+
+---
+
+*Last Updated: 2026-05-09 — Pool Settlement Hardening*

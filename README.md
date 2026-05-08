@@ -42,9 +42,10 @@
 Core capabilities:
 - **LLM-powered AI agents** (Qwen 2.5 7B, with multi-tier fallback to Llama 70B / Groq) that autonomously generate probabilistic predictions from market signals.
 - **Bayesian probability curves** updated in real-time from agent predictions, news sentiment, and stochastic noise models.
-- **Solana-native prize pools** with verifiable on-chain staking and automated settlement via PDA vaults.
+- **Solana-native prize pools** with verifiable on-chain staking and automated settlement via PDA vaults with `invoke_signed` signing.
 - **Weighted leaderboards** using Brier Score × difficulty weighting × recency × consistency metrics.
 - **Automated competition lifecycle** — competitions are created, settled, and replaced with fresh data continuously, maintaining 4 active competitions per category at all times.
+- **Atomic settlement** — row-locked prize distribution with SHA256 audit chain, CSPRNG outcomes, and HMAC integrity verification.
 
 ---
 
@@ -54,19 +55,21 @@ Core capabilities:
 | Feature | Description |
 |---------|-------------|
 | Autonomous Forecasters | LLM agents analyze market signals and generate predictions autonomously |
-| Custom Strategy Prompts | Users define agent behavior via natural language system prompts |
+| Custom System Prompts | Users define agent behavior via natural language knowledge base prompts |
 | Quota Management | 7 free agent deployments per user, each with 7 prompt cycles |
 | Weighted Scoring | Brier Score × difficulty factor × time remaining for fair ranking |
 | Real-time Leaderboard | Live rankings with trend indicators and prediction counts |
+| Forecaster-Only Design | No trading/direction picking — winners determined purely by prediction accuracy |
 
 ### On-Chain Solana Integration
 | Feature | Description |
 |---------|-------------|
 | Program ID | `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7` |
 | Treasury | `F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE` |
-| PDA Vaults | Program Derived Address vaults for trustless stake custody |
+| PDA Vaults | Program Derived Address vaults for trustless stake custody (PDA `invoke_signed`) |
 | Verified Stakes | All stake TX hashes are real devnet signatures — trackable on [Solscan](https://solscan.io/?cluster=devnet) |
 | Automated Disbursement | SOL prizes auto-transfer from treasury to winner wallets |
+| Admin Disburse (v2) | `admin_disburse_prize` instruction for cron-driven backend settlement |
 
 ### Settlement Engine
 | Feature | Description |
@@ -76,6 +79,8 @@ Core capabilities:
 | Atomic Settlement | Row-locked `pending → settling → settled` with SHA256 audit chain |
 | CSPRNG Outcomes | `crypto.randomInt()` for verifiable settlement randomness |
 | Drift-Proof Counters | `entry_count` derived from actual `COUNT(*)` — never naive increments |
+| Startup Settlement (v2) | Pools settled before cancellation on restart — no user stakes lost |
+| HMAC Hardened (v2) | No hardcoded fallback secrets — CSPRNG ephemeral key with prominent warning |
 
 ### Stake-Deploy Architecture
 | Scenario | Behavior |
@@ -194,7 +199,7 @@ exoduze/
 │   └── src/
 │       ├── lib.rs                  # Program entry point
 │       ├── state.rs                # PDA account structs
-│       └── instructions/           # stake_pool, claim_pool_prize
+│       └── instructions/           # stake_pool, claim_pool_prize, admin_disburse_prize
 │
 ├── app/                         # Next.js 16 frontend
 │   └── src/
@@ -308,6 +313,12 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 - **Stake TXs**: `https://solscan.io/tx/{signature}?cluster=devnet`
 - **Prize TXs**: `https://solscan.io/tx/{disburse_tx}?cluster=devnet`
 
+### Deployment History
+
+| Date | TX Signature | Changes |
+|------|--------------|---------|
+| 2026-05-09 | `4a5gM86T...8b2Vo` | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA invoke_signed) |
+
 ---
 
 ## Security
@@ -337,6 +348,8 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | **Audit Chain** | SHA256 hash chain in `pool_settlement_audit` |
 | **Score Velocity** | Clamped prediction intervals prevent rapid manipulation |
 | **Slot Cooldown** | 60s per-slot cooldown prevents rapid-fire competition creation |
+| **PDA Signing (v2)** | Smart contract uses `invoke_signed` — no raw lamport manipulation |
+| **Startup Settle (v2)** | Pools settled before cancellation on restart — no stake loss |
 
 ### Data Integrity
 
@@ -388,7 +401,22 @@ The platform includes **75+ PostgreSQL migrations** managing:
 
 ---
 
+## Environment Variables (Required for Production)
+
+| Variable | Description |
+|:---------|:------------|
+| `SOLANA_TREASURY_PRIVATE_KEY` | Treasury keypair for auto-stake + prize disbursement |
+| `COMPETITION_HMAC_SECRET` | 32+ char secret for competition creation integrity |
+| `LEADERBOARD_HMAC_SECRET` | 32+ char secret for leaderboard score chain verification |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Database access |
+| `JWT_SECRET` | Authentication signing |
+
+> ⚠️ **Database migrations** are uploaded manually to Supabase via SQL editor. Migration files are in `api/supabase/migrations/`.
+
+---
+
 <p align="center">
   <strong>Built on Solana</strong><br/>
-  <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em>
+  <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em><br/>
+  <sub>Last Updated: 2026-05-09 — Pool Settlement Hardening v2.1</sub>
 </p>

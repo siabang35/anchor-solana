@@ -59,6 +59,8 @@ The **Market Pool & Settlement System** is the core prize distribution engine fo
      └────────────────────────────────────────────────┘
 ```
 
+> **v2 Upgrade (2026-05-09):** Smart contract now uses `invoke_signed` PDA signing for vault withdrawals instead of raw lamport manipulation. The `admin_disburse_prize` instruction was registered for automated backend-driven disbursement. The 1.5x `POOL_MULTIPLIER` was removed from `claim_pool_prize` to prevent vault over-drain. Platform fee (2%) is deducted at stake time, not at disbursement.
+
 ## Treasury Keypair & On-Chain Operations
 
 > ⚠️ **SECURITY**: The Treasury **private key** (`SOLANA_TREASURY_PRIVATE_KEY`) is stored exclusively in the API `.env` file, which is `.gitignored`. **NEVER** commit, log, or expose the private key in documentation, frontend code, or version control.
@@ -202,7 +204,10 @@ Where:
 | Instruction | Description |
 |-------------|-------------|
 | `stake_pool` | Transfer SOL to competition pool vault PDA |
-| `claim_pool_prize` | Claim winnings from settled pool vault |
+| `claim_pool_prize` | Claim winnings from settled pool vault (proportional share, no multiplier) |
+| `admin_disburse_prize` | Admin-only: disburse prize from vault to winner wallet (used by settlement cron) |
+
+> **v2 Fix:** `claim_pool_prize` no longer applies the 1.5x `POOL_MULTIPLIER`. Prizes are now `(user_stake / total_staked) × distributable_pool`, ensuring total claims never exceed vault balance. Both claim instructions now use `invoke_signed` with PDA seeds for secure vault withdrawal.
 
 ### PDA Seeds
 
@@ -369,27 +374,27 @@ Cross-platform pool display with:
 | `update_pool_on_stake()` | Trigger: auto-update pool totals |
 | `auto_create_competition_pool()` | Trigger: auto-create pool for new competitions |
 
-## Migration File
+## Migration Files
 
-`api/supabase/migrations/070_pool_settlement.sql` — 21 sections covering:
-1. Pool settlement status enum
-2. Competition pool ledger
-3. Pool stakes table
-4. Pool winners table
-5. Global leaderboard materialized view
-6. Settlement audit log
-7. Comprehensive indexes
-8. Row Level Security policies
-9. Anti-whale stake guard trigger
-10. Auto-update pool totals trigger
-11. Auto-create pool trigger
-12. Settlement function with locking
-13. Pool + winners query function
-14. Sector pool summary function
-15. Global pool summary function
-16. Realtime publication
-17. Updated_at triggers
-18. Refresh leaderboard function
-19. Backfill existing competitions
-20. Grants
-21. Comments
+| Migration | Description |
+|-----------|-------------|
+| `070_pool_settlement.sql` | Core pool system: ledger, stakes, winners, settlement, RLS, triggers |
+| `073_fix_pool_stake_count_drift.sql` | Drift-proof triggers using `COUNT(*)` + `SUM()` aggregates |
+| `074_fix_competition_lifecycle.sql` | Fixed false-cap violations on horizon limits |
+| `075_competition_data_tracking.sql` | Anti-recycling source tracking for ETL data |
+
+## Startup Graceful Settlement
+
+> **v2 Fix (2026-05-09):** On server restart, the system now **settles pools before cancelling** any active competitions. Previously, `cancelAllAndSeedFresh()` would cancel non-expired competitions without pool settlement, causing user stakes to be stranded forever. The new flow:
+
+1. For each remaining active/upcoming competition:
+   - Generate CSPRNG outcome + HMAC integrity hash
+   - Update competition status to `settled` with metadata
+   - Call `poolService.settlePool()` to determine winners and disburse prizes
+2. If settlement fails for any competition, fall back to cancellation with error reason
+3. Seed fresh competitions after all pools are settled
+
+## HMAC Security Hardening
+
+> **v2 Fix (2026-05-09):** The `COMPETITION_HMAC_SECRET` no longer falls back to a hardcoded string (`'exoduze-integrity-key-v2'`). If the environment variable is not set or is too short (<32 chars), a CSPRNG ephemeral key is generated per process with a prominent console warning. For production, set `COMPETITION_HMAC_SECRET` (32+ chars) in `.env`.
+

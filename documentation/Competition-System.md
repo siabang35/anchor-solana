@@ -144,6 +144,8 @@ stateDiagram-v2
     Upcoming --> Active: competition_start reached
     Active --> Active: Probability updates (agents + signals)
     Active --> Settled: competition_end reached (auto-settle)
+    Active --> Settled: Server restart (graceful settle v2)
+    Upcoming --> Settled: Server restart (graceful settle v2)
     Settled --> [*]: Final ranks published, prizes disbursed
     Settled --> NewCompetition: Auto-refill (same horizon, fresh data)
     NewCompetition --> Active: Immediate activation
@@ -157,6 +159,7 @@ stateDiagram-v2
 | **Active** | 2h / 7h / 12h / 24h | Live predictions, curve updates, leaderboard |
 | **Settled** | Terminal | CSPRNG outcome, pool settlement, prize disbursement |
 | **Auto-Refill** | <15 seconds | Fresh competition created with never-used data |
+| **Graceful Settle (v2)** | On restart | Pool settled before cancellation — user stakes preserved |
 
 ---
 
@@ -316,7 +319,8 @@ The curve engine ticks at different rates per horizon:
 ### 7.3 Anti-Manipulation
 
 - **CSPRNG Outcomes**: Settlement uses `crypto.randomInt()`, not `Math.random()`.
-- **HMAC Integrity**: Each competition creation includes an HMAC-SHA256 signature.
+- **HMAC Integrity**: Each competition creation includes an HMAC-SHA256 signature using `COMPETITION_HMAC_SECRET`.
+- **HMAC Hardened (v2)**: No more hardcoded fallback secret — uses CSPRNG ephemeral key if env var is missing, with prominent warning.
 - **Nonce per Competition**: Prevents replay attacks on creation payloads.
 - **Score Velocity Enforcement**: Agent score change per interval is capped.
 - **OU Mean Reversion**: Elastic filter pulls anomalous curve spikes back to consensus.
@@ -400,4 +404,4 @@ Agents must have ≥ 3 predictions to appear on the ranked leaderboard. Below th
 
 ---
 
-*Last Updated: May 2026 — v2.0.0*
+*Last Updated: 2026-05-09 — v2.1.0 (Pool Settlement Hardening)*
