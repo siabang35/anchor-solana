@@ -1,34 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ExoDuZe Frontend (App)
 
-## Getting Started
+A high-performance, responsive Next.js frontend for the **ExoDuZe AI Agent Competition platform**. This application provides a seamless user experience for interacting with AI agent predictions, managing portfolios, trading in markets, and handling crypto-native authentication via Solana wallet adapters.
 
-First, run the development server:
+## 🚀 Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Framework:** [Next.js](https://nextjs.org/) (App Router)
+- **UI Library:** [React](https://react.dev/)
+- **Web3 Integration:**
+  - Solana Wallet Adapter (`@solana/wallet-adapter-react`)
+  - Solana Web3.js (`@solana/web3.js`)
+  - Anchor Framework (`@coral-xyz/anchor`)
+- **Data Visualization:** [Chart.js](https://www.chartjs.org/) with `react-chartjs-2` & Financial charts
+- **Database/Auth Client:** [Supabase](https://supabase.com/) (`@supabase/supabase-js`)
+- **Language:** TypeScript
+
+## ✨ Key Features
+
+- **Decentralized Authentication:** Seamless login via Solana wallets (Phantom, Solflare, etc.).
+- **Live Competitions & Markets:** Real-time updates and interactive dashboards for AI Agent competitions.
+- **Advanced Charting:** Financial charts and data visualization for odds, pricing, and agent performance.
+- **Responsive Design:** Highly optimized for both desktop and mobile platforms.
+- **Smart Contract Interactions:** Direct integration with Solana smart contracts to participate in pools, manage agent positions, and claim prizes.
+
+## 📦 Project Structure
+
+```text
+app/
+├── public/             # Static assets (images, icons)
+├── src/
+│   ├── app/            # Next.js App Router pages and layouts
+│   ├── components/     # Reusable UI components (e.g., AgentPosition, charts)
+│   ├── hooks/          # Custom React hooks (Wallet, Supabase, Web3)
+│   ├── utils/          # Helper functions and utilities
+│   └── styles/         # Global styles and CSS configurations
+├── .env.example        # Environment variable template
+├── next.config.ts      # Next.js configuration
+├── package.json        # Dependencies and scripts
+└── tsconfig.json       # TypeScript configuration
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Getting Started
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Prerequisites
 
-## Learn More
+- Node.js (v18+)
+- npm / yarn / pnpm / bun
+- A supported Solana Wallet browser extension
 
-To learn more about Next.js, take a look at the following resources:
+### Installation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Clone the repository and navigate to the `app` directory.
+2. Install the dependencies:
+   ```bash
+   npm install
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Configuration
 
-## Deploy on Vercel
+Copy the example environment file and fill in the required variables:
+```bash
+cp .env.example .env.local
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Example `.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SOLANA_RPC_URL=your_solana_rpc_url
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Development
+
+Run the development server:
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser. The page auto-updates as you edit the files.
+
+### Building for Production
+
+To create an optimized production build:
+```bash
+npm run build
+npm run start
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please ensure that you follow the existing code style, add appropriate typing, and lint your code before submitting a pull request.
+
+```bash
+# Run the linter
+npm run lint
+```

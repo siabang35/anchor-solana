@@ -11,9 +11,6 @@ coverage/
 # Environment files (NEVER COMMIT)
 # ==========================
 .env
-.env.*
-*.env
-
 # ==========================
 # Logs
 # ==========================
