@@ -98,6 +98,12 @@ export const envSchema = z.object({
     GROQ_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().optional(),
 
+    // NLP Sentiment Analysis
+    NLP_SENTIMENT_ENABLED: z.string().transform(val => val === 'true').default('false'),
+    NLP_SENTIMENT_MODEL: z.enum(['finbert', 'distilbert']).default('finbert'),
+    NLP_SENTIMENT_CONCURRENCY: z.string().transform(Number).pipe(z.number().positive()).default('5'),
+    NLP_SENTIMENT_CACHE_TTL_MS: z.string().transform(Number).pipe(z.number().positive()).default('3600000'),
+
     // Sports API Keys
     APIFOOTBALL_API_KEY: z.string().optional(),
     THESPORTSDB_API_KEY: z.string().optional(),

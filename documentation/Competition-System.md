@@ -136,7 +136,15 @@ To eliminate cold-start latency, a separate `@Cron('*/2 * * * *')` job monitors 
 
 This ensures the 15s settlement cron can act instantly — replacement data is already validated.
 
-### 3.4 Lifecycle State Diagram
+### 3.4 Synthetic Fallback Generator
+
+To guarantee that each category maintains exactly 4 active slots (100% capacity) even when external APIs (NewsAPI, GDELT) impose rate limits or when strict anti-recycling filters exhaust the available ETL candidates, the system employs a **Synthetic Fallback Generator**.
+When no fresh data is available:
+- It injects template-based, high-quality synthetic market topics into the clustering engine.
+- Synthetic topics are distinctively tagged with a unique 4-character suffix (e.g., `[1a07]`) to prevent collision.
+- This ensures the UI remains fully populated and agents always have continuous competitions to predict on.
+
+### 3.5 Lifecycle State Diagram
 
 ```mermaid
 stateDiagram-v2
@@ -258,7 +266,8 @@ The `RealtimeCompetitionSeederService` creates competitions from ETL data using 
 graph TD
     A["ETL data items<br/>(market_data_items, market_signals,<br/>trending_topics)"] --> B["Filter: active, high/critical impact"]
     B --> C["Anti-recycling filter<br/>(title dedup + source-ID check)"]
-    C --> D["TF-IDF vectorization"]
+    C --> NLP["NLP Sentiment Analysis<br/>(HuggingFace FinBERT/DistilBERT with PostgreSQL Cache)"]
+    NLP --> D["TF-IDF vectorization"]
     D --> E["K-Means clustering<br/>(k = missing_slots + 3)"]
     E --> F["Select best representative<br/>per cluster (priority: signal > market > trending)"]
     F --> G["Intra-cluster Jaccard dedup<br/>(threshold: 0.55)"]
@@ -268,7 +277,14 @@ graph TD
     J --> K["Bind initial news_cluster"]
 ```
 
-### 6.2 Sector-Specific Data Sources
+### 6.2 Professional NLP Sentiment Pipeline
+
+Instead of naive keyword matching, the platform utilizes a robust NLP sentiment pipeline:
+1. **HuggingFace Inference**: Text is analyzed asynchronously using `ProsusAI/finbert` (finance/crypto) or `distilbert-base-uncased-finetuned-sst-2-english` (general news).
+2. **PostgreSQL Caching**: Results are stored in the `nlp_sentiment_cache` table using SHA-256 hashes of the text to minimize expensive API calls and rate limits.
+3. **Continuous Scoring**: The generated continuous sentiment scores (-1.0 to 1.0) dictate the base probability of new competitions and drive the dynamic Bayesian UI metrics ($S(t)$, $M(t)$, $V(t)$).
+
+### 6.3 Sector-Specific Data Sources
 
 | Sector | Primary Sources | Fallback Sources |
 |--------|----------------|-----------------|
@@ -280,7 +296,7 @@ graph TD
 | **Science** | market_data_items | science_papers, science_breakthroughs |
 | **Sports** | sports_events (with team resolution) | live events fallback |
 
-### 6.3 Uniqueness Enforcement
+### 6.4 Uniqueness Enforcement
 
 Competition deduplication is enforced at multiple levels:
 

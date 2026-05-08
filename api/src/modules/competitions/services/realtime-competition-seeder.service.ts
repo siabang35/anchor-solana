@@ -378,7 +378,8 @@ export class RealtimeCompetitionSeederService {
                 await this.seedCategory(category);
             }
 
-            // Step 6: Verify all slots filled — retry any gaps once
+            // Step 6: Verify all slots filled — retry any gaps once (with delay for DB consistency)
+            await new Promise(resolve => setTimeout(resolve, 2000));
             let totalMissing = 0;
             for (const category of CATEGORIES) {
                 const missing = await this.compManager.getMissingHorizonSlots(category);
@@ -389,6 +390,7 @@ export class RealtimeCompetitionSeederService {
                         this.creationCooldowns.delete(`${category}::${h}`);
                     }
                     await this.seedCategory(category);
+                    await new Promise(resolve => setTimeout(resolve, 500));
                     totalMissing += (await this.compManager.getMissingHorizonSlots(category)).length;
                 }
             }
@@ -484,8 +486,29 @@ export class RealtimeCompetitionSeederService {
                 break;
             }
 
+            // SYNTHETIC FALLBACK: If all ETL candidates were rejected by dedup,
+            // generate a fresh synthetic candidate for this specific slot
             if (!bestTopic) {
-                this.logger.debug(`  ⏭ [${category}/${horizon}] No fresh candidate available`);
+                this.logger.warn(`  🔧 [${category}/${horizon}] All ETL candidates rejected by dedup — generating synthetic`);
+                const synthCandidates = this.generateSyntheticCandidates(category, 1);
+                if (synthCandidates.length > 0) {
+                    const synth = synthCandidates[0];
+                    bestTopic = {
+                        title: synth.cleanTitle,
+                        description: synth.description,
+                        category: synth.category,
+                        baseProbability: synth.baseProbability,
+                        urgencyScore: 0.5,
+                        clusterSize: 1,
+                        articleUrls: [],
+                        signals: [],
+                        consumedSources: [],
+                    };
+                }
+            }
+
+            if (!bestTopic) {
+                this.logger.error(`  ❌ [${category}/${horizon}] Could not generate any candidate`);
                 continue;
             }
 

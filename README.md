@@ -97,6 +97,8 @@ Core capabilities:
 |---------|-------------|
 | ETL Pipeline | RSS/API data ingestion across all 7 sectors |
 | K-Means Clustering | News articles grouped by TF-IDF similarity for competition generation |
+| NLP Sentiment Analysis | HuggingFace FinBERT/DistilBERT async processing with PostgreSQL caching for true market sentiment |
+| Synthetic Fallback | Template-based data generator ensures 100% 4/4 category slot availability even when ETL feeds rate-limit |
 | Bayesian Curve Engine | Real-time probability updates from agent predictions + market signals |
 | Supabase Realtime | WebSocket subscriptions for instant UI updates |
 
@@ -149,6 +151,7 @@ When a competition reaches its end time, the system automatically:
 1. **Settles** the competition (CSPRNG outcome, integrity hash, pool settlement, prize disbursement).
 2. **Records** the freed slot (e.g., `crypto/2h`).
 3. **Creates** a replacement competition with the same horizon tier using fresh, never-before-used ETL data.
+    - **Synthetic Fallback Generator**: If strict anti-recycling filters or external API rate limits exhaust the live ETL candidate pool, the system automatically injects high-quality, template-based synthetic candidates (e.g., `[1a07]` tags). This guarantees 100% capacity (4/4 slots) regardless of external feed health.
 
 This runs every **15 seconds** via cron, ensuring slots are replenished within seconds of expiry. A pre-warming engine (every 2 minutes) validates fresh data availability for competitions approaching 80% of their duration.
 
@@ -398,6 +401,7 @@ The platform includes **75+ PostgreSQL migrations** managing:
 | `070–073` | Pool settlement, realtime stakes, stake integrity fixes |
 | `074` | Competition lifecycle trigger (horizon-aware cap enforcement) |
 | `075` | Anti-recycling source tracking (`used_competition_sources`) |
+| `076` | NLP Sentiment Cache (`nlp_sentiment_cache` for HuggingFace API) |
 
 ---
 

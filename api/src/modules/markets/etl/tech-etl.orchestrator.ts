@@ -59,7 +59,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             await this.storeHNStories(hnStories);
 
             // Transform to market items
-            const hnItems = hnStories.map(s => this.transformHNToItem(s));
+            const hnItems = await Promise.all(hnStories.map(s => this.transformHNToItem(s)));
 
             // Enrich HN items with scraped images (fallback to topic-based images)
             await this.enrichItemsWithImages(hnItems, (title) => this.getTechImageUrl(title));
@@ -77,7 +77,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             const techNews = await this.fetchTechNews();
             recordsFetched += techNews.length;
 
-            const newsItems = techNews.map(n => this.transformNewsToItem(n));
+            const newsItems = await Promise.all(techNews.map(n => this.transformNewsToItem(n)));
 
             // Enrich news items with scraped images (fallback to topic-based images)
             await this.enrichItemsWithImages(newsItems, (title) => this.getTechImageUrl(title));
@@ -198,8 +198,8 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
         }
     }
 
-    private transformHNToItem(story: any): MarketDataItem {
-        const sentiment = this.analyzeSentiment(story.title);
+    private async transformHNToItem(story: any): Promise<MarketDataItem> {
+        const sentiment = await this.analyzeSentimentAsync(story.title);
         // Note: imageUrl not set here - enrichItemsWithImages will scrape first, then fallback
 
         return {
@@ -224,7 +224,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
         };
     }
 
-    private transformNewsToItem(article: any): MarketDataItem {
+    private async transformNewsToItem(article: any): Promise<MarketDataItem> {
         const transformed = this.newsApi.transformToMarketDataItem(article, 'tech');
         // Note: Keep NewsAPI image if available, but don't set fallback here
         // enrichItemsWithImages will handle fallback if no image
@@ -232,7 +232,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
         return {
             ...transformed,
             // Keep NewsAPI image only if it exists, let fallback be applied later
-            sentiment: this.analyzeSentiment(article.title).sentiment,
+            sentiment: (await this.analyzeSentimentAsync(article.title)).sentiment,
         };
     }
 

@@ -64,7 +64,7 @@ export class FinanceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             recordsFetched += financeNews.length + yahooItems.length;
 
             const newsItems = [
-                ...financeNews.map(n => this.transformNewsToItem(n)),
+                ...(await Promise.all(financeNews.map(n => this.transformNewsToItem(n)))),
                 ...yahooItems
             ];
 
@@ -213,11 +213,11 @@ export class FinanceETLOrchestrator extends BaseETLOrchestrator implements OnMod
         return allItems;
     }
 
-    private transformNewsToItem(article: any): MarketDataItem {
+    private async transformNewsToItem(article: any): Promise<MarketDataItem> {
         const transformed = this.newsApi.transformToMarketDataItem(article, 'finance');
         return {
             ...transformed,
-            sentiment: this.analyzeSentiment(article.title).sentiment,
+            sentiment: (await this.analyzeSentimentAsync(article.title)).sentiment,
         };
     }
 }

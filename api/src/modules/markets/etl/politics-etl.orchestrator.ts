@@ -115,7 +115,7 @@ export class PoliticsETLOrchestrator extends BaseETLOrchestrator implements OnMo
             // Combine and Transform all items
             const allItems = [
                 ...gdeltNews.map(n => this.transformGDELTToItem(n)),
-                ...newsApiItems.map(n => this.transformNewsToItem(n)),
+                ...(await Promise.all(newsApiItems.map(n => this.transformNewsToItem(n)))),
                 ...rssItems
             ];
 
@@ -252,12 +252,12 @@ export class PoliticsETLOrchestrator extends BaseETLOrchestrator implements OnMo
         };
     }
 
-    private transformNewsToItem(article: any): MarketDataItem {
+    private async transformNewsToItem(article: any): Promise<MarketDataItem> {
         const transformed = this.newsApi.transformToMarketDataItem(article, 'politics');
         const entities = this.extractAllEntities(article.title + ' ' + (article.description || ''));
         return {
             ...transformed,
-            sentiment: this.analyzeSentiment(article.title).sentiment,
+            sentiment: (await this.analyzeSentimentAsync(article.title)).sentiment,
             impact: this.calculatePoliticalImpact(article.title),
             metadata: {
                 entities,

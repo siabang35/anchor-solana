@@ -271,13 +271,13 @@ export abstract class BaseETLOrchestrator {
     }
 
     /**
-     * Extract sentiment from text
+     * Extract sentiment from text synchronously (fallback)
      */
     protected analyzeSentiment(text: string): { sentiment: 'bearish' | 'neutral' | 'bullish'; score: number } {
         const lowerText = text.toLowerCase();
 
-        const bullishWords = ['gain', 'rise', 'surge', 'bullish', 'growth', 'positive', 'success', 'win', 'breakthrough'];
-        const bearishWords = ['loss', 'fall', 'crash', 'bearish', 'decline', 'negative', 'fail', 'crisis', 'risk'];
+        const bullishWords = ['gain', 'rise', 'surge', 'bullish', 'growth', 'positive', 'success', 'win', 'breakthrough', 'upgrade', 'outperform'];
+        const bearishWords = ['loss', 'fall', 'crash', 'bearish', 'decline', 'negative', 'fail', 'crisis', 'risk', 'downgrade', 'underperform'];
 
         let score = 0;
         for (const word of bullishWords) {
@@ -293,6 +293,100 @@ export abstract class BaseETLOrchestrator {
             sentiment: score > 0.1 ? 'bullish' : score < -0.1 ? 'bearish' : 'neutral',
             score,
         };
+    }
+
+    /**
+     * Advanced NLP Sentiment Analysis via HuggingFace API with Database Caching.
+     * Uses FinBERT for finance/crypto and generic models for others.
+     */
+    protected async analyzeSentimentAsync(text: string): Promise<{ sentiment: 'bearish' | 'neutral' | 'bullish'; score: number }> {
+        if (!text || text.trim().length === 0) return { sentiment: 'neutral', score: 0 };
+        
+        const enabled = process.env.NLP_SENTIMENT_ENABLED === 'true';
+        const token = process.env.HUGGINGFACE_TOKEN;
+        
+        // Fallback to keyword matching if disabled or missing token
+        if (!enabled || !token) {
+            return this.analyzeSentiment(text);
+        }
+
+        // Generate cache key
+        const crypto = require('crypto');
+        const hash = crypto.createHash('sha256').update(text.trim()).digest('hex');
+        const model = process.env.NLP_SENTIMENT_MODEL === 'distilbert' 
+            ? 'distilbert-base-uncased-finetuned-sst-2-english' 
+            : 'ProsusAI/finbert';
+
+        try {
+            // 1. Check Database Cache First
+            const { data: cached } = await this.supabase
+                .from('nlp_sentiment_cache')
+                .select('sentiment, sentiment_score')
+                .eq('content_hash', hash)
+                .single();
+
+            if (cached) {
+                return {
+                    sentiment: cached.sentiment as 'bearish' | 'neutral' | 'bullish',
+                    score: parseFloat(cached.sentiment_score)
+                };
+            }
+
+            // 2. Call HuggingFace Inference API
+            const response = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ inputs: text.substring(0, 500) }), // truncate for safety
+            });
+
+            if (!response.ok) {
+                throw new Error(`HF API returned ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            // Parse result based on model type
+            let sentiment: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+            let score = 0;
+
+            if (Array.isArray(result) && Array.isArray(result[0])) {
+                const predictions = result[0]; // e.g. [{label: "positive", score: 0.9}]
+                
+                if (model === 'ProsusAI/finbert') {
+                    // FinBERT outputs: positive, negative, neutral
+                    const pos = predictions.find((p: any) => p.label === 'positive')?.score || 0;
+                    const neg = predictions.find((p: any) => p.label === 'negative')?.score || 0;
+                    score = pos - neg;
+                } else {
+                    // DistilBERT outputs: POSITIVE, NEGATIVE
+                    const pos = predictions.find((p: any) => p.label === 'POSITIVE')?.score || 0;
+                    const neg = predictions.find((p: any) => p.label === 'NEGATIVE')?.score || 0;
+                    score = pos - neg;
+                }
+                
+                score = Math.max(-1, Math.min(1, score));
+                sentiment = score > 0.15 ? 'bullish' : score < -0.15 ? 'bearish' : 'neutral';
+            }
+
+            // 3. Save to DB Cache
+            await this.supabase.from('nlp_sentiment_cache').upsert({
+                content_hash: hash,
+                text_content: text.substring(0, 1000), // store up to 1000 chars
+                sentiment,
+                sentiment_score: score,
+                model_used: model,
+                analyzed_at: new Date().toISOString()
+            }, { onConflict: 'content_hash' });
+
+            return { sentiment, score };
+
+        } catch (error: any) {
+            this.logger.warn(`NLP Sentiment analysis failed (${error.message}) - falling back to keyword matching`);
+            return this.analyzeSentiment(text);
+        }
     }
 
     /**
