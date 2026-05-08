@@ -36,8 +36,7 @@ const CATEGORIES = ['politics', 'finance', 'crypto', 'tech', 'economy', 'science
  */
 const COMPETITION_HORIZON_SLOTS: HorizonTier[] = ['2h', '7h', '12h', '24h'];
 
-/** Intra-cluster Jaccard threshold — raised from 0.40 to 0.55 to allow more diversity */
-const INTRA_CLUSTER_JACCARD_THRESHOLD = 0.55;
+
 
 interface ETLCandidate {
     title: string;
@@ -75,10 +74,12 @@ export class RealtimeCompetitionSeederService {
     private isSeeding = false;
     private isSettling = false;
     private isRefreshingClusters = false;
+    /** Track synthetic fallback index per category to avoid reuse */
+    private readonly syntheticIndexMap = new Map<string, number>();
 
     /** Anti-throttling: per slot cooldown map (key: `category::horizon`) */
     private readonly creationCooldowns = new Map<string, number>();
-    private static readonly CREATION_COOLDOWN_MS = 60_000; // 1 min min between same slot
+    private static readonly CREATION_COOLDOWN_MS = 180_000; // 3 min between same slot — prevents loop
 
     constructor(
         private readonly supabaseService: SupabaseService,
@@ -99,15 +100,14 @@ export class RealtimeCompetitionSeederService {
         }, 5000);
     }
 
-    /** Every 3 minutes: scan all categories and fill any missing horizon slots */
-    @Cron('*/3 * * * *')
+    /** Every 5 minutes: scan all categories and fill any missing horizon slots */
+    @Cron('*/5 * * * *')
     async handleCron() {
         await this.seedAllCategories();
     }
 
-    /** Every 15 seconds: settle expired + immediately replenish freed slots.
-     *  Reduced from 30s to 15s for faster auto-refill of short horizons (2h). */
-    @Cron('*/15 * * * * *')
+    /** Every 30 seconds: settle expired + immediately replenish freed slots. */
+    @Cron('*/30 * * * * *')
     async settleAndReplenishCron() {
         await this.settleAndReplenish();
     }
@@ -368,10 +368,32 @@ export class RealtimeCompetitionSeederService {
             // Step 3: Small delay to let DB constraints settle
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Step 4: Seed fresh competitions for ALL categories
+            // Step 4: Clear ALL cooldowns for a clean startup seed
+            this.creationCooldowns.clear();
+            this.syntheticIndexMap.clear();
+
+            // Step 5: Seed fresh competitions for ALL categories
             this.logger.log(`🚀 Startup: seeding fresh competitions for ${CATEGORIES.length} categories...`);
             for (const category of CATEGORIES) {
                 await this.seedCategory(category);
+            }
+
+            // Step 6: Verify all slots filled — retry any gaps once
+            let totalMissing = 0;
+            for (const category of CATEGORIES) {
+                const missing = await this.compManager.getMissingHorizonSlots(category);
+                if (missing.length > 0) {
+                    this.logger.warn(`⚠️ [${category}] Still missing ${missing.length} slot(s) after initial seed: [${missing.join(', ')}]`);
+                    // Clear cooldowns for missing slots and retry
+                    for (const h of missing) {
+                        this.creationCooldowns.delete(`${category}::${h}`);
+                    }
+                    await this.seedCategory(category);
+                    totalMissing += (await this.compManager.getMissingHorizonSlots(category)).length;
+                }
+            }
+            if (totalMissing > 0) {
+                this.logger.warn(`⚠️ ${totalMissing} slot(s) still unfilled after retry — will be picked up by cron`);
             }
 
             this.logger.log(`✅ Startup: fresh seed complete — all categories should have 4 competitions each`);
@@ -435,8 +457,17 @@ export class RealtimeCompetitionSeederService {
         await this.collectCategoryETL(supabase, category, allCandidates, usedSourceTitles, usedSourceIdMap);
 
         if (allCandidates.length === 0) {
-            this.logger.debug(`[${category}] No fresh ETL data available`);
-            return;
+            this.logger.warn(`[${category}] No fresh ETL data — using synthetic fallback`);
+            const syntheticCandidates = this.generateSyntheticCandidates(category, slotsToFill.length);
+            allCandidates.push(...syntheticCandidates);
+        }
+
+        // If still not enough candidates, supplement with synthetics
+        if (allCandidates.length < slotsToFill.length) {
+            const deficit = slotsToFill.length - allCandidates.length;
+            this.logger.warn(`[${category}] Only ${allCandidates.length} candidates for ${slotsToFill.length} slots — adding ${deficit} synthetic`);
+            const syntheticCandidates = this.generateSyntheticCandidates(category, deficit);
+            allCandidates.push(...syntheticCandidates);
         }
 
         // 5. Cluster candidates
@@ -936,7 +967,7 @@ export class RealtimeCompetitionSeederService {
 
                     let tooSimilar = false;
                     for (const existing of usedNormalizedTitles) {
-                        if (this.jaccardSimilarity(normalized, existing) > INTRA_CLUSTER_JACCARD_THRESHOLD) {
+                        if (this.jaccardSimilarity(normalized, existing) > 0.55) {
                             tooSimilar = true;
                             break;
                         }
@@ -987,6 +1018,112 @@ export class RealtimeCompetitionSeederService {
         const longPatterns = /\b(election|month|policy|bill|quarter|season|legislation|long-term|annual|campaign|monthly|yearly|decade)\b/g;
         score -= (lower.match(longPatterns) || []).length * 0.1;
         return Math.max(0, Math.min(1, score));
+    }
+
+    /**
+     * SYNTHETIC FALLBACK: Generate competition candidates when ETL data is exhausted.
+     * Uses category-specific topic templates with timestamp-based uniqueness
+     * to guarantee every category can always fill all 4 horizon slots.
+     */
+    private generateSyntheticCandidates(category: string, count: number): ETLCandidate[] {
+        const templates: Record<string, string[]> = {
+            politics: [
+                'Government Policy Impact Assessment',
+                'Legislative Agenda Progress Forecast',
+                'Political Leadership Confidence Index',
+                'Regulatory Reform Outcome Prediction',
+                'Diplomatic Relations Shift Analysis',
+                'Election Cycle Momentum Tracker',
+                'Congressional Approval Rating Forecast',
+                'International Summit Outcome Analysis',
+            ],
+            finance: [
+                'Market Volatility Index Forecast',
+                'Interest Rate Decision Prediction',
+                'Equity Market Direction Analysis',
+                'Bond Yield Movement Forecast',
+                'Sector Rotation Pattern Prediction',
+                'Corporate Earnings Surprise Index',
+                'Currency Pair Movement Forecast',
+                'IPO Market Sentiment Tracker',
+            ],
+            tech: [
+                'AI Industry Adoption Rate Forecast',
+                'Tech Sector Innovation Index',
+                'Semiconductor Supply Chain Outlook',
+                'Cloud Computing Growth Prediction',
+                'Cybersecurity Threat Level Forecast',
+                'Tech IPO Pipeline Analysis',
+                'Software Revenue Growth Prediction',
+                'Hardware Market Share Shift Forecast',
+            ],
+            crypto: [
+                'Bitcoin Market Sentiment Analysis',
+                'DeFi Protocol Adoption Forecast',
+                'Crypto Regulatory Compliance Outlook',
+                'Blockchain Network Activity Prediction',
+                'Stablecoin Market Cap Forecast',
+                'NFT Market Volume Prediction',
+                'Layer 2 Scaling Adoption Tracker',
+                'Crypto Institutional Flow Analysis',
+            ],
+            sports: [
+                'Championship Contender Performance Forecast',
+                'League Standings Movement Prediction',
+                'Player Transfer Market Impact Analysis',
+                'Tournament Bracket Outcome Forecast',
+                'Team Form Momentum Tracker',
+                'Injury Impact Assessment Prediction',
+                'Season Playoff Race Analysis',
+                'Athletic Performance Index Forecast',
+            ],
+            economy: [
+                'GDP Growth Rate Forecast',
+                'Inflation Trajectory Prediction',
+                'Employment Market Outlook Analysis',
+                'Consumer Spending Pattern Forecast',
+                'Trade Balance Direction Prediction',
+                'Housing Market Momentum Tracker',
+                'Manufacturing Output Forecast',
+                'Supply Chain Resilience Index',
+            ],
+            science: [
+                'Climate Research Impact Assessment',
+                'Medical Research Breakthrough Forecast',
+                'Space Exploration Milestone Prediction',
+                'Renewable Energy Adoption Tracker',
+                'Biotech Innovation Pipeline Forecast',
+                'Quantum Computing Progress Index',
+                'Genomics Research Impact Prediction',
+                'Environmental Policy Effect Forecast',
+            ],
+        };
+
+        const categoryTemplates = templates[category] || templates['economy'];
+        const idx = this.syntheticIndexMap.get(category) || 0;
+        const now = Date.now();
+        const candidates: ETLCandidate[] = [];
+
+        for (let i = 0; i < count; i++) {
+            const templateIdx = (idx + i) % categoryTemplates.length;
+            const uniqueSuffix = ((now + i) % 100000).toString(36);
+            const title = `${categoryTemplates[templateIdx]} [${uniqueSuffix}]`;
+
+            candidates.push({
+                title,
+                cleanTitle: this.cleanTitle(title),
+                description: `Live prediction market: ${categoryTemplates[templateIdx]}`,
+                baseProbability: 0.45 + Math.random() * 0.1,
+                textRaw: `${title} ${category} prediction market forecast analysis`,
+                source: 'trending',
+                category,
+                urgencyHints: `${category} forecast analysis prediction`,
+            });
+        }
+
+        this.syntheticIndexMap.set(category, idx + count);
+        this.logger.log(`[${category}] Generated ${count} synthetic candidate(s)`);
+        return candidates;
     }
 
     private cleanTitle(rawTitle: string): string {
@@ -1042,7 +1179,7 @@ export class RealtimeCompetitionSeederService {
      * ANTI-CHUNKING: All settlements processed atomically before replenishment.
      */
     private async settleAndReplenish(): Promise<void> {
-        if (this.isSettling) return;
+        if (this.isSettling || this.isSeeding) return;
         this.isSettling = true;
 
         try {
@@ -1149,26 +1286,29 @@ export class RealtimeCompetitionSeederService {
             await this.promoteUpcoming(supabase);
 
             // --- PHASE 4: IMMEDIATE AUTO-REFILL of freed slots ---
-            //     This is the key auto-refill mechanism:
-            //     For each settled competition, create a NEW one with the SAME horizon
-            //     but completely FRESH data that was NEVER used before.
-            if (freedSlots.length > 0) {
-                this.logger.log(`🔄 Auto-refilling ${freedSlots.length} freed slot(s): [${freedSlots.map(s => `${s.category}/${s.horizon}`).join(', ')}]`);
+            if (freedSlots.length > 0 && !this.isSeeding) {
+                this.isSeeding = true; // Acquire seed mutex for refill
+                try {
+                    this.logger.log(`🔄 Auto-refilling ${freedSlots.length} freed slot(s): [${freedSlots.map(s => `${s.category}/${s.horizon}`).join(', ')}]`);
 
-                // Group by category to seed efficiently
-                const categoriesToSeed = new Set(freedSlots.map(s => s.category));
-                for (const category of categoriesToSeed) {
-                    const categorySlots = freedSlots.filter(s => s.category === category);
-                    this.logger.log(`  🌱 [${category}] Refilling ${categorySlots.length} slot(s): [${categorySlots.map(s => s.horizon).join(', ')}]`);
-                    try {
-                        // Clear cooldown for freed slots so they can be immediately refilled
-                        for (const slot of categorySlots) {
-                            this.creationCooldowns.delete(`${slot.category}::${slot.horizon}`);
+                    // Small delay to let DB constraints settle after settlement
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    const categoriesToSeed = new Set(freedSlots.map(s => s.category));
+                    for (const category of categoriesToSeed) {
+                        const categorySlots = freedSlots.filter(s => s.category === category);
+                        this.logger.log(`  🌱 [${category}] Refilling ${categorySlots.length} slot(s): [${categorySlots.map(s => s.horizon).join(', ')}]`);
+                        try {
+                            for (const slot of categorySlots) {
+                                this.creationCooldowns.delete(`${slot.category}::${slot.horizon}`);
+                            }
+                            await this.seedCategory(category);
+                        } catch (err: any) {
+                            this.logger.error(`Auto-refill error for ${category}: ${err.message}`);
                         }
-                        await this.seedCategory(category);
-                    } catch (err: any) {
-                        this.logger.error(`Auto-refill error for ${category}: ${err.message}`);
                     }
+                } finally {
+                    this.isSeeding = false; // Release seed mutex
                 }
             }
 
