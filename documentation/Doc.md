@@ -918,9 +918,9 @@ anchor deploy --provider.cluster devnet
 
 | Role | Contact |
 |------|---------|
-| Lead Engineer | engineering@exoduze.io |
-| Security | security@exoduze.io |
-| DevOps | devops@exoduze.io |
+| Lead Engineer | [siabang35@gmail.com] |
+| Developer | [kenzonutss@gmail.com] |
+| Support | [support@exoduze.com] |
 
 ---
 
