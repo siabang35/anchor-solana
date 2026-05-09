@@ -8,7 +8,10 @@ interface SentimentAnalysisProps {
 }
 
 export default function SentimentAnalysis({ competitionId }: SentimentAnalysisProps) {
-    const { clusters, loading } = useClusterData(competitionId || 'all');
+    // Prevent fetching globally if competitionId is explicitly undefined (e.g. still loading or no active comp)
+    // If we want global, we should explicitly pass 'all'
+    const queryId = competitionId === undefined ? 'skip' : competitionId;
+    const { clusters, loading } = useClusterData(queryId === 'skip' ? 'skip' : queryId);
 
     const pipeline = useMemo(() => {
         if (!clusters || clusters.length === 0) {

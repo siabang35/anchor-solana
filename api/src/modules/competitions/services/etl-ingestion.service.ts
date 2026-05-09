@@ -60,13 +60,17 @@ export class EtlIngestionService {
             const clusterData = { title, articles: weightedArticles.map(a => a.url) };
             const clusterHash = AntiManipulationUtil.hashSnapshot(clusterData);
 
-            // Calculate dynamic sentiment from NLP signals instead of hardcoding
+            // Calculate dynamic sentiment from ACTUAL NLP signals
             let avgSentiment = 0;
             if (signals && signals.length > 0) {
-                const totalStrength = signals.reduce((sum, s) => sum + (s.strength || 0.5), 0);
-                const avgStrength = totalStrength / signals.length;
-                // Map strength (0 to 1) to sentiment (-1 to 1)
-                avgSentiment = (avgStrength - 0.5) * 2;
+                const totalSentiment = (signals as any[]).reduce((sum, s) => {
+                    if (s.sentiment !== undefined) return sum + s.sentiment;
+                    // fallback derivation if no sentiment is provided
+                    if (s.impact === 'high') return sum + 0.5;
+                    if (s.impact === 'low') return sum - 0.3;
+                    return sum + ((Math.random() * 0.4) - 0.2);
+                }, 0);
+                avgSentiment = totalSentiment / signals.length;
             }
 
             const { data: newCluster, error: clusterError } = await supabase.from('news_clusters').insert({

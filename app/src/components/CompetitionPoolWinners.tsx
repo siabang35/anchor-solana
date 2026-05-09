@@ -76,18 +76,18 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                 </div>
             </div>
 
-            <div style={{ padding: '1rem 1.25rem' }}>
+            <div style={{ padding: '0.6rem 1rem' }}>
                 {loading ? (
-                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        <div style={{ animation: 'pulse 1.5s infinite', fontSize: '1.2rem', marginBottom: '0.3rem' }}>💎</div>
+                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        <div style={{ animation: 'pulse 1.5s infinite', fontSize: '1.2rem', marginBottom: '0.2rem' }}>💎</div>
                         Loading pool data...
                     </div>
                 ) : (
                     <>
                         {/* Pool Amount - Hero Display with Fee Breakdown */}
-                        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '0.6rem' }}>
                             <div style={{
-                                fontSize: '2rem', fontWeight: 900,
+                                fontSize: '1.6rem', fontWeight: 900,
                                 fontFamily: 'var(--font-mono)',
                                 background: `linear-gradient(135deg, ${sectorColor}, ${sectorColor}99)`,
                                 WebkitBackgroundClip: 'text',
@@ -98,8 +98,8 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                 {distributable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} SOL
                             </div>
                             <div style={{
-                                fontSize: '0.6rem', color: 'var(--text-muted)',
-                                marginTop: '0.25rem', letterSpacing: '0.04em',
+                                fontSize: '0.55rem', color: 'var(--text-muted)',
+                                marginTop: '0.15rem', letterSpacing: '0.04em',
                             }}>
                                 DISTRIBUTABLE PRIZE POOL
                             </div>
@@ -108,25 +108,25 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                         {/* Stats Grid with Fee Breakdown */}
                         <div style={{
                             display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
-                            gap: '0.4rem', marginBottom: '1rem',
+                            gap: '0.4rem', marginBottom: '0.6rem',
                         }}>
-                            <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
+                            <div style={{ padding: '0.4rem', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
                                 <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px', textTransform: 'uppercase' }}>Total Staked</div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: sectorColor, fontFamily: 'var(--font-mono)' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: sectorColor, fontFamily: 'var(--font-mono)' }}>
                                     {totalStaked.toFixed(4)}
                                 </div>
                                 <div style={{ fontSize: '0.4rem', color: 'var(--text-muted)' }}>SOL</div>
                             </div>
-                            <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
+                            <div style={{ padding: '0.4rem', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
                                 <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px', textTransform: 'uppercase' }}>Fee (2%)</div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#ef4444', fontFamily: 'var(--font-mono)' }}>
                                     {platformFee.toFixed(4)}
                                 </div>
                                 <div style={{ fontSize: '0.4rem', color: 'var(--text-muted)' }}>SOL</div>
                             </div>
-                            <div style={{ padding: '0.5rem', borderRadius: '10px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
+                            <div style={{ padding: '0.4rem', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-card)' }}>
                                 <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '2px', textTransform: 'uppercase' }}>Stakers</div>
-                                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
                                     {stakeCount}
                                 </div>
                                 <div style={{ fontSize: '0.4rem', color: 'var(--text-muted)' }}>users</div>
@@ -136,9 +136,9 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                         {/* Fee Calculation Display */}
                         {totalStaked > 0 && (
                             <div style={{
-                                padding: '0.5rem 0.7rem', borderRadius: '8px',
+                                padding: '0.4rem 0.6rem', borderRadius: '6px',
                                 background: `${sectorColor}06`, border: `1px dashed ${sectorColor}25`,
-                                marginBottom: '0.8rem', fontSize: '0.55rem',
+                                marginBottom: '0.6rem', fontSize: '0.55rem',
                                 fontFamily: 'var(--font-mono)',
                             }}>
                                 <div style={{ color: 'var(--text-muted)', marginBottom: '3px', fontWeight: 600, fontSize: '0.45rem', textTransform: 'uppercase' }}>

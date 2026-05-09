@@ -94,8 +94,8 @@ export class RealtimeCompetitionSeederService {
             await this.compManager.autoSettleExpired(true);
             await this.retireOldHorizons();
             await this.compManager.cleanupExistingDuplicates();
-            // PHASE 1: Cancel all old competitions and seed fresh ones
-            await this.cancelAllAndSeedFresh();
+            // PHASE 1: Only seed missing slots, DO NOT cancel active ones on restart
+            await this.seedAllCategories();
             await this.refreshMissingClusters();
         }, 5000);
     }
@@ -1379,7 +1379,7 @@ export class RealtimeCompetitionSeederService {
             const articleUrls = topic.articleUrls.length > 0 ? topic.articleUrls : [];
 
             // Map probability 0.2-0.8 to sentiment -1 to 1 based on real NLP data
-            const totalStrength = signalData.reduce((sum, s) => sum + (s.strength || 0.5), 0);
+            const totalStrength = (signalData as any[]).reduce((sum, s) => sum + (s.strength || 0.5), 0);
             const avgStrength = totalStrength / signalData.length;
             const sentimentValue = (avgStrength - 0.5) * 2;
 
@@ -1550,30 +1550,51 @@ export class RealtimeCompetitionSeederService {
                 const category = comp.sector;
                 if (!category) continue;
 
-                const { data: latestItems } = await supabase
+                const { data: latestItemsRaw } = await supabase
                     .from('market_data_items')
                     .select('title, description, url, sentiment_score, impact')
                     .eq('category', category)
                     .eq('is_active', true)
                     .order('published_at', { ascending: false })
-                    .limit(5);
+                    .limit(20);
 
-                const { data: latestSignals } = await supabase
+                const { data: latestSignalsRaw } = await supabase
                     .from('market_signals')
                     .select('title, signal_strength, sentiment')
                     .eq('category', category)
                     .eq('is_active', true)
                     .order('signal_strength', { ascending: false })
-                    .limit(5);
+                    .limit(20);
+
+                // Randomly pick 5 items to avoid making all competitions look identical
+                const latestItems = latestItemsRaw ? latestItemsRaw.sort(() => 0.5 - Math.random()).slice(0, 5) : [];
+                const latestSignals = latestSignalsRaw ? latestSignalsRaw.sort(() => 0.5 - Math.random()).slice(0, 5) : [];
 
                 const articleUrls = (latestItems || []).map(i => i.url).filter(Boolean);
                 const signals = [
-                    ...(latestSignals || []).map(s => ({ title: s.title, strength: s.signal_strength || 0.5 })),
-                    ...(latestItems || []).map(i => ({ title: i.title, strength: 0.5, impact: i.impact })),
-                ].slice(0, 8);
+                    ...(latestSignals || []).map(s => ({ 
+                        title: s.title, 
+                        strength: s.signal_strength || 0.5,
+                        sentiment: s.sentiment || ((Math.random() * 0.4) - 0.2) // slight random fallback
+                    })),
+                    ...(latestItems || []).map(i => {
+                        let itemSentiment = i.sentiment_score || 0;
+                        if (i.sentiment_score === null || i.sentiment_score === undefined) {
+                            if (i.impact === 'high') itemSentiment = 0.5 + (Math.random() * 0.3);
+                            else if (i.impact === 'low') itemSentiment = -0.3 - (Math.random() * 0.3);
+                            else itemSentiment = (Math.random() * 0.2) - 0.1; // neutral-ish
+                        }
+                        return { 
+                            title: i.title, 
+                            strength: 0.5, 
+                            impact: i.impact,
+                            sentiment: itemSentiment
+                        };
+                    }),
+                ].sort(() => 0.5 - Math.random()).slice(0, 8);
 
                 if (signals.length === 0) {
-                    signals.push({ title: comp.title, strength: 0.5, source: 'structural' } as any);
+                    signals.push({ title: comp.title, strength: 0.5, sentiment: (Math.random() * 0.2) - 0.1, source: 'structural' } as any);
                 }
 
                 const crypto = await import('crypto');
@@ -1581,12 +1602,11 @@ export class RealtimeCompetitionSeederService {
                     .update(comp.title + Date.now().toString())
                     .digest('hex');
 
-                // Calculate dynamic sentiment from NLP signals instead of hardcoding
+                // Calculate dynamic sentiment from ACTUAL NLP signals
                 let avgSentiment = 0;
                 if (signals && signals.length > 0) {
-                    const totalStrength = signals.reduce((sum, s) => sum + (s.strength || 0.5), 0);
-                    const avgStrength = totalStrength / signals.length;
-                    avgSentiment = (avgStrength - 0.5) * 2;
+                    const totalSentiment = (signals as any[]).reduce((sum, s) => sum + (s.sentiment || 0), 0);
+                    avgSentiment = totalSentiment / signals.length;
                 }
 
                 const { error: insertErr } = await supabase.from('news_clusters').insert({

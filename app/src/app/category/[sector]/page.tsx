@@ -351,6 +351,11 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     probHistory={probHistory}
                 />
 
+                {/* Global Leaderboard (Desktop & Mobile) */}
+                <div style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
+                    <Leaderboard sector={sector} limit={10} />
+                </div>
+
                 {/* Competitions Grid */}
                 <section className="glass-card card-body animate-in">
                     <div className="section-header">
@@ -691,7 +696,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                 </div>
 
                 {/* Main Content Layout (Masonry 2-Column) */}
-                <div className="grid-2" style={{ alignItems: 'start', gap: '1rem' }}>
+                <div className="grid-2" style={{ gap: '1rem' }}>
                     {/* LEFT COLUMN */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <SentimentAnalysis competitionId={activeComp?.id} />
@@ -700,14 +705,17 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                         ) : (
                             <CategoryPoolWinners sector={sector} />
                         )}
-                        <ValueCreationPool sector={sector} />
                     </div>
 
                     {/* RIGHT COLUMN */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <DeployAgent initialCategory={sector} />
-                        <Leaderboard sector={sector} limit={10} style={{ flex: 1, minHeight: '350px' }} />
                     </div>
+                </div>
+
+                {/* FULL-WIDTH FOOTER SECTION */}
+                <div style={{ marginTop: '1rem' }}>
+                    <ValueCreationPool sector={sector} />
                 </div>
             </main>
         </>

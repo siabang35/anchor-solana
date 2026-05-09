@@ -37,47 +37,47 @@ export default function ValueCreationPool({ sector = 'all' }: { sector?: string 
                 </div>
             ) : (
                 <>
-                    <div className="pool-amount">{pool.totalPool.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</div>
+                    <div className="pool-amount" style={{ fontSize: '1.6rem', margin: '0.5rem 0' }}>{pool.totalPool.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</div>
 
-                    <div className="pool-bar">
+                    <div className="pool-bar" style={{ margin: '0.5rem 0' }}>
                         <div className="pool-fill" style={{ width: `${fillPercent}%` }} />
                     </div>
                     <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        fontSize: '0.65rem',
+                        fontSize: '0.55rem',
                         color: 'var(--text-muted)',
-                        marginBottom: '1rem',
+                        marginBottom: '0.6rem',
                     }}>
                         <span>Distributed: {pool.distributed.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</span>
                         <span>Remaining: {pool.remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</span>
                     </div>
 
-                    <div className="stat-row">
+                    <div className="stat-row" style={{ padding: '0.4rem 0' }}>
                         <span className="stat-label">Active Contributors</span>
                         <span className="stat-value indigo">{pool.contributors.toLocaleString()}</span>
                     </div>
-                    <div className="stat-row">
+                    <div className="stat-row" style={{ padding: '0.4rem 0' }}>
                         <span className="stat-label">Avg Contribution</span>
                         <span className="stat-value cyan">{avgContribution} SOL</span>
                     </div>
-                    <div className="stat-row">
+                    <div className="stat-row" style={{ padding: '0.4rem 0', borderBottom: 'none' }}>
                         <span className="stat-label">Pool Multiplier</span>
                         <span className="stat-value green">{pool.multiplier}x</span>
                     </div>
 
                     <div style={{
-                        marginTop: '1rem',
-                        padding: '0.75rem',
+                        marginTop: 'auto',
+                        padding: '0.5rem',
                         borderRadius: 'var(--radius-xs)',
                         background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)',
                         border: '1px solid rgba(99, 102, 241, 0.15)',
                         textAlign: 'center',
                     }}>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                             Reward Formula
                         </div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-indigo)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-indigo)' }}>
                             Accuracy × Exposure × Prob Shift × {pool.multiplier}x
                         </div>
                     </div>
