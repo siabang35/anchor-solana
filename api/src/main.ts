@@ -213,9 +213,12 @@ async function bootstrap() {
 
     // ===================
     // Swagger Documentation
-    // SECURITY: Only available in explicit development mode
+    // SECURITY: Strictly disabled on Render (anti-hack) and only available in explicit dev mode
     // ===================
-    if (nodeEnv === 'development') {
+    const isRender = process.env.RENDER === 'true';
+    const isDev = nodeEnv === 'development' && !isRender;
+    
+    if (isDev) {
         try {
             const config = new DocumentBuilder()
                 .setTitle('ExoDuZe API')
@@ -243,11 +246,18 @@ async function bootstrap() {
         const expressApp = app.getHttpAdapter().getInstance();
         expressApp.set('trust proxy', trustedProxies.split(',').map(p => p.trim()));
     }
+    // ===================
+    // OWASP: Anti-Slowloris & Anti-Chunking
+    // ===================
+    // Prevents attackers from holding connections open with slow partial requests (Chunking/Slowloris)
+    const httpServer = app.getHttpServer();
+    httpServer.keepAliveTimeout = 65000; // 65s (Must be higher than load balancer timeouts)
+    httpServer.headersTimeout = 66000;   // 66s (Always larger than keepAliveTimeout)
 
     await app.listen(port);
 
     logger.log(`🚀 ExoDuZe API running on http://localhost:${port}/${apiPrefix}`);
-    if (nodeEnv !== 'production') {
+    if (isDev) {
         logger.log(`📚 Swagger UI: http://localhost:${port}/docs`);
     }
     logger.log(`📝 Environment: ${nodeEnv}`);

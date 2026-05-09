@@ -9,8 +9,11 @@ export default function DataFeeds({ category }: { category?: string }) {
 
     return (
         <div className="glass-card card-body animate-in" style={{ padding: 0, overflow: 'hidden', minWidth: 0 }}>
-            <button
+            <div
                 onClick={() => setIsOpen(!isOpen)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(!isOpen); } }}
                 style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%',
                     background: 'none', border: 'none', cursor: 'pointer', padding: '14px 16px', margin: 0, color: 'inherit', textAlign: 'left'
@@ -74,7 +77,7 @@ export default function DataFeeds({ category }: { category?: string }) {
                         width: '28px', height: '28px',
                     }}>⌄</span>
                 </div>
-            </button>
+            </div>
 
             <div style={{
                 maxHeight: isOpen ? '500px' : '0',
