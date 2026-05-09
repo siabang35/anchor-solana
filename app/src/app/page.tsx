@@ -261,6 +261,11 @@ function HomeInner() {
                     label={activeCompetition?.title || 'Current Competition'}
                 />
 
+                {/* Data Feeds (Live Feed) */}
+                <div style={{ margin: '1rem 0' }}>
+                    <DataFeeds category={activeSector} />
+                </div>
+
                 {/* Sector Feed — Realtime Data */}
                 <SectorFeed sector={activeSector} selectedCompId={activeCompetition?.id} onSelectCompetition={setSelectedCompId} />
 
@@ -271,13 +276,12 @@ function HomeInner() {
                     <SentimentAnalysis competitionId={activeCompetition?.id} />
                 </div>
 
-                {/* Data Feeds + Deploy Agent */}
-                <div style={{ display: 'grid', gridTemplateColumns: activeSector === 'top' ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem', width: '100%', minWidth: 0 }}>
-                    <DataFeeds category={activeSector} />
-                    {activeSector !== 'top' && (
+                {/* Deploy Agent (Only when a specific sector is selected) */}
+                {activeSector !== 'top' && (
+                    <div style={{ width: '100%', minWidth: 0 }}>
                         <DeployAgent initialCategory={activeSector} />
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* Global Pool & Champions + Value Pool + Leaderboard */}
                 <div className="grid-3">
