@@ -71,6 +71,8 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
     useEffect(() => {
         fetchClusters();
 
+        if (competitionId === 'skip') return;
+
         const channelName = isGlobal ? 'clusters-global' : `clusters-${competitionId}`;
         const filter = isGlobal ? undefined : `competition_id=eq.${competitionId}`;
 
