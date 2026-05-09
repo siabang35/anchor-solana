@@ -335,7 +335,7 @@ Environment variables required on Render:
 |----------|-------|
 | `GOOGLE_CLIENT_ID` | From Google Cloud Console |
 | `GOOGLE_CLIENT_SECRET` | From Google Cloud Console |
-| `GOOGLE_CALLBACK_URL` | `https://backend-exoduze.onrender.com/api/v1/auth/google/callback` |
+| `GOOGLE_CALLBACK_URL` | `https://api.exoduze.com/api/v1/auth/google/callback` |
 | `PRIVY_APP_ID` | From Privy Dashboard |
 | `PRIVY_APP_SECRET` | From Privy Dashboard |
 
