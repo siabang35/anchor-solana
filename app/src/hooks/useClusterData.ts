@@ -40,6 +40,12 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
         setLoading(true);
         setError(null);
 
+        if (competitionId === 'skip') {
+            setClusters([]);
+            setLoading(false);
+            return;
+        }
+
         try {
             let query = supabase
                 .from('news_clusters')
