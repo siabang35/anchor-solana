@@ -706,7 +706,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     {/* RIGHT COLUMN */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <DeployAgent initialCategory={sector} />
-                        <Leaderboard sector={sector} limit={3} />
+                        <Leaderboard sector={sector} limit={10} style={{ flex: 1, minHeight: '350px' }} />
                     </div>
                 </div>
             </main>
