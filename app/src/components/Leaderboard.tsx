@@ -22,9 +22,10 @@ interface LeaderboardEntry {
 interface Props {
     sector?: string;
     limit?: number;
+    style?: React.CSSProperties;
 }
 
-export default function Leaderboard({ sector = 'all', limit = 10 }: Props = {}) {
+export default function Leaderboard({ sector = 'all', limit = 10, style }: Props = {}) {
     const [players, setPlayers] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRealtime, setIsRealtime] = useState(false);
@@ -129,7 +130,7 @@ export default function Leaderboard({ sector = 'all', limit = 10 }: Props = {}) 
     const hasWeighted = players.some(p => p.weighted_score !== null);
 
     return (
-        <div className="glass-card card-body animate-in">
+        <div className="glass-card card-body animate-in" style={style}>
             <div className="section-header">
                 <h3 className="section-title">
                     <span className="icon">🏆</span> {sector && sector !== 'all' && sector !== 'top' ? `${sector.charAt(0).toUpperCase() + sector.slice(1)} Leaderboard` : 'Live Leaderboard'}
@@ -151,6 +152,7 @@ export default function Leaderboard({ sector = 'all', limit = 10 }: Props = {}) 
                 borderBottom: '1px solid var(--border-glass)',
                 paddingBottom: '0.5rem',
                 marginBottom: '0.25rem',
+                gridTemplateColumns: hasWeighted ? '40px 1fr 50px 80px 60px 40px' : '40px 1fr 60px 80px 40px'
             }}>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>#</span>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>AGENT</span>
@@ -188,6 +190,7 @@ export default function Leaderboard({ sector = 'all', limit = 10 }: Props = {}) 
                                 transition: 'all 0.5s ease',
                                 background: isFlash ? 'rgba(129,140,248,0.12)' : 'transparent',
                                 borderRadius: '8px',
+                                gridTemplateColumns: hasWeighted ? '40px 1fr 50px 80px 60px 40px' : '40px 1fr 60px 80px 40px'
                             }}
                         >
                             <span className={`rank ${rankStyle(player.rank)}`}>

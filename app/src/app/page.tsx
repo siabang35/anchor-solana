@@ -268,11 +268,11 @@ function HomeInner() {
                 {/* AI Positions + NLP Sentiment */}
                 <div className="grid-2">
                     <AgentPosition />
-                    <SentimentAnalysis />
+                    <SentimentAnalysis competitionId={activeCompetition?.id} />
                 </div>
 
                 {/* Data Feeds + Deploy Agent */}
-                <div style={{ display: 'grid', gridTemplateColumns: activeSector === 'top' ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: activeSector === 'top' ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem', width: '100%', minWidth: 0 }}>
                     <DataFeeds category={activeSector} />
                     {activeSector !== 'top' && (
                         <DeployAgent initialCategory={activeSector} />

@@ -22,20 +22,20 @@ export default function SentimentAnalysis({ competitionId }: SentimentAnalysisPr
         }
 
         const sentiments = clusters.map(c => c.sentiment);
-        
+
         // S(t) = average sentiment
         const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
-        
+
         // M(t) = momentum (simple diff between recent half and older half)
         const half = Math.floor(sentiments.length / 2);
         const recentAvg = half > 0 ? sentiments.slice(0, half).reduce((a, b) => a + b, 0) / half : avgSentiment;
         const olderAvg = half > 0 ? sentiments.slice(half).reduce((a, b) => a + b, 0) / (sentiments.length - half) : avgSentiment;
         const momentum = recentAvg - olderAvg;
-        
+
         // V(t) = volatility (std dev)
         const variance = sentiments.reduce((a, b) => a + Math.pow(b - avgSentiment, 2), 0) / sentiments.length;
         const volatility = Math.sqrt(variance);
-        
+
         let regime = 'neutral';
         if (avgSentiment > 0.3 && momentum >= 0) regime = 'bullish';
         else if (avgSentiment < -0.3 && momentum <= 0) regime = 'bearish';
@@ -58,13 +58,13 @@ export default function SentimentAnalysis({ competitionId }: SentimentAnalysisPr
             // sentiment is -1 to 1. map to 0-100% bullish
             const bullishPct = Math.round(((c.sentiment + 1) / 2) * 100);
             const bearishPct = 100 - bullishPct;
-            
+
             let signalText = 'Neutral';
             if (c.sentiment > 0.5) signalText = 'Strong Bullish';
             else if (c.sentiment > 0.1) signalText = 'Bullish';
             else if (c.sentiment < -0.5) signalText = 'Strong Bearish';
             else if (c.sentiment < -0.1) signalText = 'Bearish';
-            
+
             // extract first signal source if exists, else generic
             let sourceName = `Cluster ${c.cluster_hash.slice(0, 6)}`;
             if (c.signals && c.signals.length > 0 && c.signals[0].source) {

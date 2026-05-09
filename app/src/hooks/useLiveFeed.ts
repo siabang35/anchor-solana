@@ -130,7 +130,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
             const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('market_data_items')
-                .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags');
+                .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags, image_url');
 
             if (isCategoryValid) {
                 query = query.eq('category', category);
@@ -155,7 +155,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
             const isCategoryValid = category && category !== 'top' && category !== 'foryou' && category !== 'signals' && category !== 'latest';
             let query = supabase
                 .from('competitions')
-                .select('id, title, description, sector, status, created_at');
+                .select('id, title, description, sector, status, created_at, image_url');
 
             if (isCategoryValid) {
                 query = query.eq('sector', category);
@@ -178,6 +178,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                     category: c.sector,
                     tags: ['competition', c.status],
                     url: '',
+                    image_url: c.image_url || '',
                 }));
                 setFeeds(items);
             }

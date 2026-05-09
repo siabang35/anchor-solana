@@ -8,19 +8,15 @@ export default function ValueCreationPool({ sector = 'all' }: { sector?: string 
     const { competitions, loading } = useCompetitions(sector);
 
     // Aggregate values across all markets
-    // Added small base values so it doesn't look empty if there are few markets
-    const basePool = 2500; 
-    const baseContributors = 150;
-
     const aggregatePool = competitions.reduce((sum, c) => sum + (c.prize_pool || 0), 0);
     const aggregateEntries = competitions.reduce((sum, c) => sum + (c.entry_count || 0), 0);
 
     const pool = {
-        totalPool: basePool + aggregatePool,
-        contributors: baseContributors + aggregateEntries,
+        totalPool: aggregatePool,
+        contributors: aggregateEntries,
         // Approximate distributed/remaining for demo (until smart contract settlement endpoints exist)
-        distributed: (basePool + aggregatePool) * 0.35,
-        remaining: (basePool + aggregatePool) * 0.65,
+        distributed: aggregatePool * 0.35,
+        remaining: aggregatePool * 0.65,
         multiplier: 1.5,
     };
 

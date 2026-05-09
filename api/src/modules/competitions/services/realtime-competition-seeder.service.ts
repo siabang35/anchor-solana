@@ -85,7 +85,7 @@ export class RealtimeCompetitionSeederService {
         private readonly supabaseService: SupabaseService,
         private readonly compManager: CompetitionManagerService,
         @Optional() private readonly poolService?: PoolService,
-    ) {}
+    ) { }
 
     async onModuleInit() {
         this.logger.log(`🌱 RealtimeCompetitionSeeder initialized — ${TARGET_COMPETITIONS_PER_CATEGORY} comps per category (max 1Day)`);
@@ -216,7 +216,7 @@ export class RealtimeCompetitionSeederService {
                     if (this.poolService) {
                         await this.poolService.settlePool(comp.id, 'admin_force_reset');
                     }
-                } catch (_e) {}
+                } catch (_e) { }
                 cancelledCount++;
             }
         }
@@ -288,7 +288,7 @@ export class RealtimeCompetitionSeederService {
                         if (this.poolService) {
                             await this.poolService.settlePool(comp.id, 'startup_fresh_seed');
                         }
-                    } catch (_e) {}
+                    } catch (_e) { }
                 }
                 this.logger.log(`⚖️ Startup: settled ${expired.length} expired competition(s)`);
             }
@@ -936,8 +936,8 @@ export class RealtimeCompetitionSeederService {
                     // RELAXED FALLBACK: If we are here, we are desperate for data.
                     // Only reject if it's an EXACT match, ignore the aggressive token similarity.
                     const norm = deepNormalize(item.title);
-                    if (normalizedUsedSet.has(norm)) continue; 
-                    
+                    if (normalizedUsedSet.has(norm)) continue;
+
                     allCandidates.push({
                         title: item.title,
                         cleanTitle: this.cleanTitle(item.title),
@@ -1303,7 +1303,7 @@ export class RealtimeCompetitionSeederService {
             }
 
             // Refresh leaderboard after settlements
-            try { await supabase.rpc('refresh_global_leaderboard'); } catch (_e) {}
+            try { await supabase.rpc('refresh_global_leaderboard'); } catch (_e) { }
 
             // --- PHASE 3: Promote upcoming → active ---
             await this.promoteUpcoming(supabase);
@@ -1351,7 +1351,7 @@ export class RealtimeCompetitionSeederService {
                 .eq('status', 'upcoming')
                 .lte('competition_start', new Date().toISOString())
                 .gt('competition_end', new Date().toISOString());
-        } catch (_e) {}
+        } catch (_e) { }
     }
 
     /**
@@ -1368,13 +1368,20 @@ export class RealtimeCompetitionSeederService {
 
             // Build signals array — use real signals if available, otherwise create a structural one
             const signalData = topic.signals.length > 0
-                ? topic.signals.map(s => ({ title: s?.title || topic.title, strength: s?.signal_strength || 0.5 }))
+                ? topic.signals.map(s => ({
+                    title: s?.title || topic.title,
+                    strength: s?.sentiment_score || s?.signal_strength || 0.5,
+                    source: s?.source_name || s?.source || 'nlp-analysis'
+                }))
                 : [{ title: topic.title, strength: 0.5, category: topic.category, source: 'etl-cluster' }];
 
             // Build article_urls — use real URLs if available, otherwise empty array (still valid)
             const articleUrls = topic.articleUrls.length > 0 ? topic.articleUrls : [];
 
-            const sentimentValue = topic.baseProbability > 0.5 ? 1 : topic.baseProbability < 0.5 ? -1 : 0;
+            // Map probability 0.2-0.8 to sentiment -1 to 1 based on real NLP data
+            const totalStrength = signalData.reduce((sum, s) => sum + (s.strength || 0.5), 0);
+            const avgStrength = totalStrength / signalData.length;
+            const sentimentValue = (avgStrength - 0.5) * 2;
 
             await supabase.from('news_clusters').insert({
                 competition_id: competitionId,
@@ -1385,7 +1392,7 @@ export class RealtimeCompetitionSeederService {
             });
             this.logger.debug(`✅ Bound initial news_cluster for "${topic.title.substring(0, 50)}..." [${topic.category}]`);
         } catch (e: any) {
-             this.logger.warn(`Failed to bind initial news_cluster: ${e.message}`);
+            this.logger.warn(`Failed to bind initial news_cluster: ${e.message}`);
         }
     }
 
@@ -1574,12 +1581,20 @@ export class RealtimeCompetitionSeederService {
                     .update(comp.title + Date.now().toString())
                     .digest('hex');
 
+                // Calculate dynamic sentiment from NLP signals instead of hardcoding
+                let avgSentiment = 0;
+                if (signals && signals.length > 0) {
+                    const totalStrength = signals.reduce((sum, s) => sum + (s.strength || 0.5), 0);
+                    const avgStrength = totalStrength / signals.length;
+                    avgSentiment = (avgStrength - 0.5) * 2;
+                }
+
                 const { error: insertErr } = await supabase.from('news_clusters').insert({
                     competition_id: comp.id,
                     cluster_hash: clusterHash,
                     article_urls: articleUrls,
                     signals: signals,
-                    sentiment: 0,
+                    sentiment: avgSentiment,
                 });
 
                 if (!insertErr) {
@@ -1598,3 +1613,4 @@ export class RealtimeCompetitionSeederService {
         }
     }
 }
+

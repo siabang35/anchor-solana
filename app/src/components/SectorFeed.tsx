@@ -93,10 +93,74 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                 transition: 'all 0.2s ease',
                 boxShadow: selected ? '0 0 20px rgba(99,102,241,0.15)' : statusConfig.glow,
                 opacity: status === 'ended' ? 0.7 : 1,
+                padding: 0, // Remove padding from article to allow full-width image
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
             }}
             onClick={onClick}
         >
-            <div className="feed-card__content">
+            {/* Animated Interactive Image Banner */}
+            {comp.image_url && (
+                <div style={{
+                    height: '140px',
+                    width: '100%',
+                    position: 'relative',
+                    borderBottom: '1px solid var(--border-glass)',
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                }} className="feed-card-img-container">
+                    <img 
+                        src={comp.image_url} 
+                        alt={comp.title} 
+                        loading="lazy"
+                        className="hover-zoom"
+                        style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover',
+                            transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)'
+                        }} 
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <div style={{
+                        position: 'absolute',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'linear-gradient(to bottom, transparent 40%, rgba(10, 11, 20, 0.95) 100%)',
+                        pointerEvents: 'none'
+                    }} />
+                    <div className="img-overlay-hover" style={{
+                        position: 'absolute',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        backdropFilter: 'blur(2px)',
+                        opacity: 0,
+                        transition: 'all 0.4s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none'
+                    }}>
+                        <span style={{
+                            background: 'rgba(0,0,0,0.6)',
+                            color: '#fff',
+                            padding: '6px 16px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            letterSpacing: '0.05em',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            transform: 'translateY(10px)',
+                            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                        }} className="view-market-pill">
+                            View Market
+                        </span>
+                    </div>
+                </div>
+            )}
+            
+            <div className="feed-card__content" style={{ padding: '1.2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div className="feed-card__header">
                     <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                         <span className="feed-card__badge" style={{
@@ -175,7 +239,28 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                         </div>
                     ))}
                 </div>
-                <div className="feed-card__footer" style={{ marginTop: '0.4rem' }}>
+                
+                {comp.tags && comp.tags.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '0.8rem', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>SOURCES:</span>
+                        {comp.tags.slice(0, 3).map(tag => (
+                            <span key={tag} style={{ 
+                                fontSize: '0.55rem', 
+                                color: 'var(--text-primary)', 
+                                background: 'var(--bg-input)', 
+                                border: '1px solid var(--border-glass)',
+                                padding: '2px 6px', 
+                                borderRadius: '4px',
+                                fontWeight: 500,
+                                textTransform: 'capitalize'
+                            }}>
+                                #{tag}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                <div className="feed-card__footer" style={{ marginTop: '0.6rem' }}>
                     <span className="feed-card__source">
                         💰 {comp.prize_pool} SOL Pool
                     </span>
@@ -191,13 +276,6 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                         👥 {comp.entry_count}/{comp.max_entries} entries
                     </span>
                 </div>
-                {comp.tags && comp.tags.length > 0 && (
-                    <div className="feed-card__tags">
-                        {comp.tags.slice(0, 3).map((tag) => (
-                            <span key={tag} className="feed-card__tag">#{tag}</span>
-                        ))}
-                    </div>
-                )}
             </div>
         </article>
     );
@@ -223,7 +301,7 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
         }}>
             {/* Thumbnail or Icon */}
             {hasImage ? (
-                <div style={{
+                <div className="feed-item-image-wrapper" style={{
                     width: '80px', height: '80px', borderRadius: '10px',
                     overflow: 'hidden', flexShrink: 0,
                     background: 'var(--bg-input)',
@@ -233,6 +311,7 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                         src={item.image_url}
                         alt=""
                         loading="lazy"
+                        className="hover-zoom"
                         style={{
                             width: '100%', height: '100%',
                             objectFit: 'cover',

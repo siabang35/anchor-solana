@@ -7,7 +7,7 @@ export default function DataFeeds({ category }: { category?: string }) {
     const { feeds, loading, connected, refetch } = useLiveFeed(20, category);
 
     return (
-        <div className="glass-card card-body animate-in">
+        <div className="glass-card card-body animate-in" style={{ overflow: 'hidden', minWidth: 0 }}>
             <div className="section-header">
                 <h3 className="section-title">
                     <span className="icon">📡</span> Live Data Feeds
@@ -71,17 +71,86 @@ export default function DataFeeds({ category }: { category?: string }) {
                 </div>
             )}
 
-            <div className="feed-scroll">
-                {feeds.map((item: LiveFeedItem) => (
-                    <div key={item.id} className={`feed-item ${item.impact}`}>
-                        <span className="feed-icon">{item.icon}</span>
-                        <div style={{ flex: 1 }}>
-                            <div className="feed-source">{item.source}</div>
-                            <div className="feed-text">{item.text}</div>
+            <div className="marquee-container" style={{ overflow: 'hidden', position: 'relative', width: '100%', maxWidth: '100%', padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Fade overlays for the edges */}
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '40px', height: '100%', background: 'linear-gradient(to right, var(--bg-card), transparent)', zIndex: 2, pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '40px', height: '100%', background: 'linear-gradient(to left, var(--bg-card), transparent)', zIndex: 2, pointerEvents: 'none' }} />
+
+                {/* Row 1 (Moves Left) */}
+                <div className="marquee-row left" style={{ display: 'flex', width: 'max-content' }}>
+                    {[0, 1].map((setIndex) => (
+                        <div key={`set1-${setIndex}`} style={{ display: 'flex', gap: '1rem', paddingRight: '1rem' }}>
+                            {feeds.filter((_, i) => i % 2 === 0).map((item: LiveFeedItem, idx) => (
+                                <div key={`${item.id}-${idx}`} className={`feed-item ${item.impact}`} style={{
+                                    display: 'flex', gap: '0.8rem', padding: '0.8rem 1rem',
+                                    alignItems: 'center', transition: 'all 0.3s ease',
+                                    border: '1px solid var(--border-glass)',
+                                    borderRadius: '12px', background: 'var(--bg-input)',
+                                    width: '280px', flexShrink: 0
+                                }}>
+                                    {item.image_url ? (
+                                        <div className="feed-item-image-wrapper" style={{
+                                            width: '40px', height: '40px', borderRadius: '10px',
+                                            overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border-glass)'
+                                        }}>
+                                            <img src={item.image_url} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} className="hover-zoom" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
+                                        </div>
+                                    ) : (
+                                        <span className="feed-icon" style={{
+                                            width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            background: 'var(--bg-input)', borderRadius: '10px', fontSize: '1.2rem', border: '1px solid var(--border-glass)', flexShrink: 0
+                                        }}>{item.icon}</span>
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div className="feed-source" style={{ fontWeight: 700, fontSize: '0.65rem', marginBottom: '2px', color: 'var(--text-secondary)' }}>{item.source}</div>
+                                        <div className="feed-text" style={{ fontSize: '0.75rem', lineHeight: 1.3, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</div>
+                                    </div>
+                                    <span className={`feed-impact ${item.impact}`} style={{
+                                        padding: '4px 8px', borderRadius: '12px', fontSize: '0.55rem', fontWeight: 800, letterSpacing: '0.05em', flexShrink: 0
+                                    }}>{item.impact.toUpperCase()}</span>
+                                </div>
+                            ))}
                         </div>
-                        <span className={`feed-impact ${item.impact}`}>{item.impact.toUpperCase()}</span>
-                    </div>
-                ))}
+                    ))}
+                </div>
+
+                {/* Row 2 (Moves Right) */}
+                <div className="marquee-row right" style={{ display: 'flex', width: 'max-content' }}>
+                    {[0, 1].map((setIndex) => (
+                        <div key={`set2-${setIndex}`} style={{ display: 'flex', gap: '1rem', paddingRight: '1rem' }}>
+                            {feeds.filter((_, i) => i % 2 === 1).map((item: LiveFeedItem, idx) => (
+                                <div key={`${item.id}-${idx}-row2`} className={`feed-item ${item.impact}`} style={{
+                                    display: 'flex', gap: '0.8rem', padding: '0.8rem 1rem',
+                                    alignItems: 'center', transition: 'all 0.3s ease',
+                                    border: '1px solid var(--border-glass)',
+                                    borderRadius: '12px', background: 'var(--bg-input)',
+                                    width: '280px', flexShrink: 0
+                                }}>
+                                    {item.image_url ? (
+                                        <div className="feed-item-image-wrapper" style={{
+                                            width: '40px', height: '40px', borderRadius: '10px',
+                                            overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border-glass)'
+                                        }}>
+                                            <img src={item.image_url} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} className="hover-zoom" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
+                                        </div>
+                                    ) : (
+                                        <span className="feed-icon" style={{
+                                            width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            background: 'var(--bg-input)', borderRadius: '10px', fontSize: '1.2rem', border: '1px solid var(--border-glass)', flexShrink: 0
+                                        }}>{item.icon}</span>
+                                    )}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div className="feed-source" style={{ fontWeight: 700, fontSize: '0.65rem', marginBottom: '2px', color: 'var(--text-secondary)' }}>{item.source}</div>
+                                        <div className="feed-text" style={{ fontSize: '0.75rem', lineHeight: 1.3, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.text}</div>
+                                    </div>
+                                    <span className={`feed-impact ${item.impact}`} style={{
+                                        padding: '4px 8px', borderRadius: '12px', fontSize: '0.55rem', fontWeight: 800, letterSpacing: '0.05em', flexShrink: 0
+                                    }}>{item.impact.toUpperCase()}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

@@ -228,19 +228,21 @@ export class LeaderboardScoringService {
         // 4. Get current entry state
         const { data: entry } = await supabase
             .from('agent_competition_entries')
-            .select('weighted_score, prediction_count, score_hash')
+            .select('weighted_score, brier_score, prediction_count, score_hash')
             .eq('agent_id', agentId)
             .eq('competition_id', competitionId)
             .single();
 
         const prevCount = entry?.prediction_count || 0;
         const prevWeightedScore = entry?.weighted_score ? Number(entry.weighted_score) : 0;
+        const prevBrierScore = entry?.brier_score ? Number(entry.brier_score) : 0;
         const prevHash = entry?.score_hash || '';
 
         // 5. Calculate new cumulative weighted score (running weighted average)
         //    cumulative = (prevScore * prevCount + weightedBrier) / (prevCount + 1)
         const newCount = prevCount + 1;
         const newCumulativeScore = (prevWeightedScore * prevCount + weightedBrier) / newCount;
+        const newCumulativeBrier = (prevBrierScore * prevCount + rawBrier) / newCount;
 
         // 6. Generate HMAC hash for integrity chain
         const snapshotData = {
@@ -289,7 +291,7 @@ export class LeaderboardScoringService {
             .from('agent_competition_entries')
             .update({
                 weighted_score: newCumulativeScore,
-                brier_score: rawBrier,
+                brier_score: newCumulativeBrier,
                 prediction_count: newCount,
                 last_scored_at: new Date().toISOString(),
                 score_hash: snapshotHash,
