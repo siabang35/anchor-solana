@@ -81,6 +81,11 @@ To prevent Denial of Service (DoS):
     -   **API**: Global limit of 100 req/min per IP.
     -   **Auth**: stricter limit of 10 req/min for login endpoints.
 
+### 4.3 Connection Security (OWASP A04:2021)
+To mitigate Slowloris and Chunking attacks, the Express/Node.js HTTP Server enforces strict timeouts:
+-   **Keep-Alive Timeout**: `65000ms` (Drops idle connections, optimized to prevent Load Balancer 502s)
+-   **Headers Timeout**: `66000ms` (Enforces rigid header completion bounds)
+
 ---
 
 ## 5. Network & Dependency Security
@@ -178,7 +183,7 @@ Before deploying to production, verify:
 - [ ] All API keys and secrets are unique, strong, and rotated periodically
 - [ ] Database uses connection pooler (port 6543) for production
 - [ ] Rate limiting is configured (global: 300/min, auth: 5/min)
-- [ ] Swagger UI is disabled (`!isProduction` check)
+- [ ] Swagger UI is strictly disabled on production/Render via `!isRender && isDev` logic (Anti-Hack)
 - [ ] File upload limits are enforced (5MB max)
 - [ ] Smart contract is deployed with latest security fixes (`anchor deploy`)
 

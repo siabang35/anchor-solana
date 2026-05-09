@@ -336,6 +336,8 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | **Auth** | Wallet-based authentication + auto-provisioning |
 | **CSP** | Content Security Policy enforcement |
 | **Routing** | Strict `(.*)` wildcard patterns conforming to `path-to-regexp` v8 standard |
+| **API Docs** | Strict Swagger lockout on Render via `process.env.RENDER` (Anti-Hack) |
+| **OWASP** | Anti-Slowloris & Anti-Chunking defenses via 65s/66s NodeJS TCP timeouts |
 | **Keys** | Treasury key in `.env` only — never in code, logs, or frontend |
 | **JWT** | Runtime validation of `JWT_SECRET` with fail-fast on misconfiguration |
 

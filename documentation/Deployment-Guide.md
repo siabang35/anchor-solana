@@ -97,6 +97,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: false
       - key: PORT
         value: 3001
 ```
@@ -123,6 +125,8 @@ npm run start:prod
 |----------|-------------|
 | `PORT` | Server port (default: 3001) |
 | `NODE_ENV` | `development` / `production` |
+| `NPM_CONFIG_PRODUCTION` | Set to `false` on Render to install build tools (`@nestjs/cli`) |
+| `RENDER` | Auto-injected by Render, triggers Anti-Hack Swagger lockdown |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin operations) |
