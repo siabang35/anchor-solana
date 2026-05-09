@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useCompetitions } from '@/hooks/useCompetitions';
 import { useOnChainMarket } from '@/hooks/useOnChainMarket';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
+import { useAgentPredictions } from '@/hooks/useAgentPredictions';
+import { apiFetch } from '@/lib/supabase';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
@@ -27,6 +29,7 @@ function HomeInner() {
     const [activeSector, setActiveSector] = useState('top');
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+    const [competitors, setCompetitors] = useState<any[]>([]);
 
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
@@ -47,6 +50,39 @@ function HomeInner() {
 
     // Market data for the active competition (probability history)
     const { probHistory } = useOnChainMarket(activeCompetition?.id);
+
+    // Real-time agent predictions for the active competition
+    const { predictionsByAgent } = useAgentPredictions(activeCompetition?.id);
+
+    // Build a Map<agentId, AgentPrediction[]> for ProbabilityCurve
+    const agentPredictionsMap = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const [agentId, group] of predictionsByAgent) {
+            map.set(agentId, group.predictions);
+        }
+        return map;
+    }, [predictionsByAgent]);
+
+    // Fetch competitors for the active competition to render on the curve
+    useEffect(() => {
+        if (!activeCompetition?.id) return;
+        let cancelled = false;
+
+        const fetchCompetitors = async () => {
+            try {
+                const res = await apiFetch<any[]>(`/agents/competitors?competition_id=${activeCompetition.id}&limit=50`);
+                if (!cancelled && res) {
+                    setCompetitors(res);
+                }
+            } catch (err) {
+                console.error('Failed to fetch competitors:', err);
+            }
+        };
+
+        fetchCompetitors();
+        const interval = setInterval(fetchCompetitors, 30_000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [activeCompetition?.id]);
 
     // Load theme from localStorage on mount
     useEffect(() => {
@@ -247,11 +283,31 @@ function HomeInner() {
                 <ProbabilityCurve
                     competition={activeCompetition}
                     probHistory={probHistory}
-                    forecasters={filteredForecasters}
+                    forecasters={[
+                        ...filteredForecasters,
+                        ...competitors
+                            .slice(0, 7)
+                            .filter(c => !forecasters.find(f => f.id === c.agent_id))
+                            .map(c => ({
+                                id: c.agent_id,
+                                name: c.agent_name,
+                                user_id: '',
+                                system_prompt: '',
+                                status: c.agent_status || 'active',
+                                model: c.model || 'Competitor',
+                                prompts_used: 0,
+                                max_free_prompts: 7,
+                                created_at: c.deployed_at || new Date().toISOString(),
+                                updated_at: c.deployed_at || new Date().toISOString(),
+                                competitions: [],
+                                isExternal: true,
+                            }))
+                    ] as any[]}
                     onPauseAgent={pauseForecaster}
                     onResumeAgent={resumeForecaster}
                     onStopAgent={stopForecaster}
                     onDeleteAgent={stopForecaster}
+                    agentPredictions={agentPredictionsMap}
                 />
 
                 {/* Competition Timer — real data from backend */}

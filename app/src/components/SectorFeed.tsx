@@ -170,8 +170,9 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                             padding: '2px 6px',
                             borderRadius: 'var(--radius-round)',
                             fontWeight: 700,
+                            textTransform: 'capitalize',
                         }}>
-                            🏆 Competition
+                            🏆 {comp.sector || 'Competition'}
                         </span>
                         <span style={{
                             fontSize: '0.5rem',

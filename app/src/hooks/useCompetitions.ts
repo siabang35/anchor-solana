@@ -160,13 +160,32 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
     // Derive active competition (first active one for the current sector)
     // Filter out any settled/cancelled AND time-expired competitions
     const now = Date.now();
-    const activeComps = competitions.filter(c => {
+    let activeComps = competitions.filter(c => {
         if (c.status !== 'active' && c.status !== 'upcoming') return false;
         // Also exclude competitions whose end time has passed (before settle cron runs)
         if (new Date(c.competition_end).getTime() < now) return false;
         return true;
     });
-    const activeCompetition = activeComps.find((c) => c.status === 'active') || activeComps[0] || null;
+
+    if (sector === 'latest') {
+        activeComps.sort((a, b) => {
+            const statusA = a.status === 'active' ? 0 : 1;
+            const statusB = b.status === 'active' ? 0 : 1;
+            if (statusA !== statusB) return statusA - statusB;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+    } else {
+        // For 'top', 'foryou', 'all', and specific sectors (crypto, tech, etc)
+        // Sort by active status first, then by entry_count descending
+        activeComps.sort((a, b) => {
+            const statusA = a.status === 'active' ? 0 : 1;
+            const statusB = b.status === 'active' ? 0 : 1;
+            if (statusA !== statusB) return statusA - statusB;
+            return (b.entry_count || 0) - (a.entry_count || 0);
+        });
+    }
+
+    const activeCompetition = activeComps[0] || null;
 
     return {
         competitions: activeComps,

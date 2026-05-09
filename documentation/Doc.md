@@ -352,8 +352,8 @@ The frontend is built on **Next.js 16 App Router** with **Vanilla CSS** glassmor
 |---------|----------------|---------|
 | **Framework** | Next.js 16 App Router | SSR, dynamic routes, static export |
 | **Data Fetching** | Supabase Realtime + apiFetch | Live subscriptions + resilient HTTP client |
-| **Charts** | Chart.js + react-chartjs-2 | Real-time 3-outcome probability curves |
-| **State** | React Hooks + Supabase Channels | Per-component state with realtime sync |
+| **Charts** | Chart.js + react-chartjs-2 | Real-time 3-outcome probability curves, unified agent rendering across all views |
+| **State & Sorting** | React Hooks + Smart Sorting | Auto-prioritizes active, high-agent-count competitions by default on dashboards |
 
 ### 5.2 Application Structure
 

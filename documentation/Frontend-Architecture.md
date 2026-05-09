@@ -124,6 +124,7 @@ const {
 - API-first fetching with Supabase fallback
 - Meta-tab support (`all`, `top`, `foryou`, `latest`, `signals` fetch ALL)
 - Realtime INSERT/UPDATE/DELETE handling
+- Smart sorting logic: Auto-selects active competitions with the highest `entry_count` (AI agent participation) by default.
 - Memory cap: max 100 competitions in state
 - Deduplication on INSERT events
 
@@ -233,6 +234,7 @@ The largest component, rendering a real-time 3-outcome probability chart:
 - Shows AI-generated narrative tooltips
 - Smooth gradient fills under each line
 - Auto-scrolling x-axis with time labels
+- Integrates both the user's `forecasters` and external `competitors` (via `useAgentPredictions`) to populate the curve with active AI neural lines on all views, including the Top Markets dashboard.
 - Responsive: adapts to mobile viewports
 
 #### DeployAgent (~57KB)
