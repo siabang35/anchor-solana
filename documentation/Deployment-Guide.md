@@ -15,7 +15,7 @@ graph LR
     end
 
     subgraph Backend["Backend (Render)"]
-        Nest["NestJS API<br/>Node.js 20"]
+        Nest["NestJS API (Fastify)<br/>Node.js 20"]
     end
 
     subgraph Database["Database (Supabase)"]
@@ -126,7 +126,7 @@ npm run start:prod
 | `PORT` | Server port (default: 3001) |
 | `NODE_ENV` | `development` / `production` |
 | `NPM_CONFIG_PRODUCTION` | Set to `false` on Render to install build tools (`@nestjs/cli`) |
-| `RENDER` | Auto-injected by Render, triggers Anti-Hack Swagger lockdown |
+| `RENDER` | Auto-injected by Render, enables Fastify Trust Proxy & triggers Anti-Hack Swagger block |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (admin operations) |

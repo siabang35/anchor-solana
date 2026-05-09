@@ -86,15 +86,15 @@ export class AppModule implements NestModule {
                 SecurityHeadersMiddleware, // Add security headers
                 LoggerMiddleware,          // Log requests with ID
             )
-            .forRoutes('(.*)');
+            .forRoutes('{*path}');
 
         // Apply input sanitizer to routes that accept body
         consumer
             .apply(InputSanitizerMiddleware)
             .forRoutes(
-                { path: '(.*)', method: RequestMethod.POST },
-                { path: '(.*)', method: RequestMethod.PUT },
-                { path: '(.*)', method: RequestMethod.PATCH },
+                { path: '{*path}', method: RequestMethod.POST },
+                { path: '{*path}', method: RequestMethod.PUT },
+                { path: '{*path}', method: RequestMethod.PATCH },
             );
     }
 }

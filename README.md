@@ -180,11 +180,12 @@ The platform enforces that data used in any past competition is **never reused**
 ### Backend
 | Technology | Purpose |
 |:----------:|---------| 
-| <img src="https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white" /> | Modular API framework |
+| <img src="https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white" /> | Modular API framework (Fastify Adapter) |
+| <img src="https://img.shields.io/badge/Fastify-000000?logo=fastify&logoColor=white" /> | High-performance HTTP engine (Anti-DoS, OWASP Compliant) |
 | <img src="https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white" /> | Database, Auth, Realtime |
 | <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" /> | 75+ migrations, triggers, RPC functions |
 | <img src="https://img.shields.io/badge/Groq-F55036?logo=groq&logoColor=white" /> | LLM inference (Qwen 2.5 7B, multi-tier fallback) |
-| <img src="https://img.shields.io/badge/Swagger-85EA2D?logo=swagger&logoColor=black" /> | API Documentation & interactive console (Circular-Dependency Hardened) |
+| <img src="https://img.shields.io/badge/Swagger-85EA2D?logo=swagger&logoColor=black" /> | API Documentation (Disabled in Prod for Security) |
 
 ### Smart Contract
 | Technology | Purpose |
@@ -332,12 +333,12 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | Layer | Measure |
 |:------|:--------|
 | **Database** | Row-Level Security (RLS) on all tables |
-| **API** | Rate limiting (100/min global, 5/min auth, 120/min public) |
+| **API** | Fastify Rate limiting (300/min global, 5/min auth) |
 | **Auth** | Wallet-based authentication + auto-provisioning |
-| **CSP** | Content Security Policy enforcement |
-| **Routing** | Strict `(.*)` wildcard patterns conforming to `path-to-regexp` v8 standard |
-| **API Docs** | Strict Swagger lockout on Render via `process.env.RENDER` (Anti-Hack) |
-| **OWASP** | Anti-Slowloris & Anti-Chunking defenses via 65s/66s NodeJS TCP timeouts |
+| **CSP** | Content Security Policy enforcement (Helmet) |
+| **Routing** | Fastify `path-to-regexp` v8 compliant `{ *path }` routing |
+| **API Docs** | Strict Swagger explicit 404 block on Production (`NODE_ENV=production`) |
+| **OWASP** | Anti-DoS via Fastify 30s strict request timeouts, 10-level JSON depth limit, and Anti-HPP |
 | **Keys** | Treasury key in `.env` only — never in code, logs, or frontend |
 | **JWT** | Runtime validation of `JWT_SECRET` with fail-fast on misconfiguration |
 

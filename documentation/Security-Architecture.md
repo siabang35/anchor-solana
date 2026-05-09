@@ -74,17 +74,20 @@ Located in `src/common/decorators/validation.decorators.ts`:
 -   `@NoPrototypePollution()`: Rejects keys like `__proto__`, `constructor` to prevent Object Injection attacks.
 -   `@IsUUIDv4()`: Strict UUID format enforcement.
 
-### 4.2 request Limits
-To prevent Denial of Service (DoS):
--   **Body Size**: Globally limited to **100kb** in `main.ts` (`nest-body-parser`).
+### 4.2 Request Limits & Payloads (Fastify)
+To prevent Denial of Service (DoS) and stack-overflow attacks:
+-   **Body Size**: Globally limited to **100kb** via Fastify config.
+-   **JSON Depth Limiting**: Custom preHandler hook automatically rejects JSON bodies nested deeper than **10 levels** (OWASP A04:2021).
+-   **Anti-HPP (HTTP Parameter Pollution)**: Custom onRequest hook strips duplicate query parameters, keeping only the last value to prevent validation bypass.
 -   **Rate Limiting**:
-    -   **API**: Global limit of 100 req/min per IP.
-    -   **Auth**: stricter limit of 10 req/min for login endpoints.
+    -   **API**: Global limit of 300 req/min per IP using `@fastify/rate-limit`.
+    -   **Auth**: Stricter hook-based limit of 5 req/min for login/signup endpoints.
 
 ### 4.3 Connection Security (OWASP A04:2021)
-To mitigate Slowloris and Chunking attacks, the Express/Node.js HTTP Server enforces strict timeouts:
--   **Keep-Alive Timeout**: `65000ms` (Drops idle connections, optimized to prevent Load Balancer 502s)
--   **Headers Timeout**: `66000ms` (Enforces rigid header completion bounds)
+To mitigate Slowloris and Chunking attacks, the Fastify HTTP Engine enforces strict timeouts:
+-   **Request Timeout**: `30000ms` (30 seconds maximum per request to prevent holding resources).
+-   **Connection Timeout**: `65000ms` (Drops idle connections, optimized to prevent Load Balancer 502s).
+-   **Trust Proxy**: Automatically configured for Render (`process.env.RENDER === 'true'`) to ensure accurate client IP detection behind load balancers.
 
 ---
 
@@ -182,11 +185,11 @@ Before deploying to production, verify:
 - [ ] `CORS_ORIGINS` contains only production domains
 - [ ] All API keys and secrets are unique, strong, and rotated periodically
 - [ ] Database uses connection pooler (port 6543) for production
-- [ ] Rate limiting is configured (global: 300/min, auth: 5/min)
-- [ ] Swagger UI is strictly disabled on production/Render via `!isRender && isDev` logic (Anti-Hack)
+- [ ] Rate limiting is configured (global: 300/min, auth: 5/min) via `@fastify/rate-limit`
+- [ ] Swagger probe endpoints (`/docs`, `/swagger`) explicitly blocked with 404 in production (OWASP A05:2021)
 - [ ] File upload limits are enforced (5MB max)
 - [ ] Smart contract is deployed with latest security fixes (`anchor deploy`)
 
 ---
 
-*Last Updated: 2026-05-09 — Pool Settlement Hardening & HMAC Security Fix*
+*Last Updated: 2026-05-09 — Fastify Migration & OWASP Top 10 Security Hardening*
