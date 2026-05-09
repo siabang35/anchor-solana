@@ -1,32 +1,41 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 
 export default function DataFeeds({ category }: { category?: string }) {
     const { feeds, loading, connected, refetch } = useLiveFeed(20, category);
+    const [isOpen, setIsOpen] = useState(true);
 
     return (
-        <div className="glass-card card-body animate-in" style={{ overflow: 'hidden', minWidth: 0 }}>
-            <div className="section-header">
-                <h3 className="section-title">
-                    <span className="icon">📡</span> Live Data Feeds
-                    {category && category !== 'top' && category !== 'foryou' && (
-                        <span style={{
-                            marginLeft: '8px',
-                            fontSize: '0.65rem',
-                            opacity: 0.8,
-                            padding: '2px 6px',
-                            background: 'rgba(255,255,255,0.1)',
-                            borderRadius: '4px'
-                        }}>
-                            {category.toUpperCase()}
-                        </span>
-                    )}
-                </h3>
+        <div className="glass-card card-body animate-in" style={{ padding: 0, overflow: 'hidden', minWidth: 0 }}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '14px 16px', margin: 0, color: 'inherit', textAlign: 'left'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <h3 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span className="icon">📡</span> Live Data Feeds
+                        {category && category !== 'top' && category !== 'foryou' && (
+                            <span style={{
+                                marginLeft: '8px',
+                                fontSize: '0.65rem',
+                                opacity: 0.8,
+                                padding: '2px 6px',
+                                background: 'rgba(255,255,255,0.1)',
+                                borderRadius: '4px'
+                            }}>
+                                {category.toUpperCase()}
+                            </span>
+                        )}
+                    </h3>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <button
-                        onClick={() => refetch()}
+                        onClick={(e) => { e.stopPropagation(); refetch(); }}
                         disabled={loading}
                         style={{
                             background: 'transparent',
@@ -53,11 +62,26 @@ export default function DataFeeds({ category }: { category?: string }) {
                         color: connected
                             ? 'var(--accent-green)'
                             : 'var(--accent-amber)',
+                        display: 'inline-flex', alignItems: 'center', gap: '3px',
                     }}>
                         {connected ? '● Live' : '○ Connecting...'}
                     </span>
+                    <span style={{
+                        fontSize: '1.1rem', color: 'var(--text-secondary, #94a3b8)',
+                        transition: 'transform 0.25s ease',
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        width: '28px', height: '28px',
+                    }}>⌄</span>
                 </div>
-            </div>
+            </button>
+
+            <div style={{
+                maxHeight: isOpen ? '500px' : '0',
+                overflow: 'hidden',
+                transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
+                opacity: isOpen ? 1 : 0,
+            }}>
 
             {loading && feeds.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
@@ -151,6 +175,7 @@ export default function DataFeeds({ category }: { category?: string }) {
                         </div>
                     ))}
                 </div>
+            </div>
             </div>
         </div>
     );

@@ -738,7 +738,7 @@ export default function ProbabilityCurve({
                     fontSize: '1.35rem',
                     fontWeight: 800,
                     letterSpacing: '-0.02em',
-                    background: 'linear-gradient(to right, #fff, #a5b4fc)',
+                    background: 'linear-gradient(to right, var(--text-primary), var(--accent-indigo))',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     marginBottom: '0.2rem'
