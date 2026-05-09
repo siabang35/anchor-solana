@@ -1,7 +1,7 @@
 # Stake Integrity System
 
 > **Decoupled Deployment, Verifiable On-Chain Entry, and Anti-Drift Architecture**
-> Version: 1.1.0 | Published: May 2026
+> Version: 1.2.0 | Published: May 2026
 
 ---
 
@@ -137,7 +137,24 @@ The `POOL_MULTIPLIER` (150 = 1.5x) was removed from `claim_pool_prize`. Previous
 | `073_fix_pool_stake_count_drift.sql` | Drift-proof triggers using aggregate queries |
 | `074_fix_competition_lifecycle.sql` | Fixed false-cap violations on horizon limits |
 | `075_competition_data_tracking.sql` | Anti-recycling source tracking for ETL data |
+| `077_update_func.sql` | Dynamic pool logic, distributable_pool sync with 100% risk |
+| `078_fix_settlement_winners.sql` | Multi-winner (Rank 1-3) enforcement ignoring agent termination status |
+
+### 6.4 100% Risk Policy (No Refunds)
+
+The `refund_rate` for all agents was set to `0` (previously `0.5`). This means:
+
+- **100% of the stake** enters the prize pool (`distributable_pool`).
+- There is **no partial refund** for losing agents.
+- The `distributable_pool` = `total_staked - platform_fee` (2% fee), with no refund deductions.
+- This maximizes the reward incentive for winners and simplifies the settlement math.
+
+**Code reference:** `agents.service.ts` line 688 — `refund_rate: 0`
+
+### 6.5 Environment Variable Validation (Zod Schema)
+
+The `SOLANA_TREASURY_PRIVATE_KEY` must be registered in the Zod validation schema at `api/src/config/env.validation.ts`. Without this registration, the NestJS `ConfigService` silently returns `undefined` due to Zod's default `.strip()` behavior, which removes unrecognized keys. This was the root cause of the "SOLANA_TREASURY_PRIVATE_KEY is not set" error that blocked all on-chain prize transfers.
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-09 — Pool Settlement Hardening.*
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-10 — 100% Risk Policy & Multi-Winner Settlement.*

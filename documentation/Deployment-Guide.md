@@ -1,7 +1,7 @@
 # Deployment Guide
 
 > **ExoDuZe Platform — Multi-Service Deployment Architecture**
-> Version: 2.1.0 | Updated: 2026-05-09
+> Version: 2.2.0 | Updated: 2026-05-10
 > Environments: Vercel (Frontend) | Render (Backend) | Solana Devnet (Contract)
 
 ---
@@ -141,6 +141,8 @@ npm run start:prod
 | `COMPETITION_HMAC_SECRET` | 32+ char secret for competition creation integrity |
 | `LEADERBOARD_HMAC_SECRET` | 32+ char secret for leaderboard score chain verification |
 
+> ⚠️ **Zod Validation**: All environment variables must be registered in `api/src/config/env.validation.ts` (Zod schema). Unregistered keys are silently stripped by Zod's default behavior and will return `undefined` from `ConfigService`.
+
 ---
 
 ## 4. Smart Contract — Solana Devnet
@@ -217,6 +219,8 @@ npx supabase db push --db-url postgresql://...
 | 037-051 | Market Data | 8-category schemas (politics, crypto, etc.) |
 | 052-068 | Competitions | Realtime, AI agents, competitions, scoring |
 | 069-075 | Pool & Settlement | Pool ledger, stakes, settlement, anti-drift, lifecycle fixes, data tracking |
+| 076 | NLP Sentiment | PostgreSQL cache for HuggingFace sentiment analysis |
+| 077-078 | Settlement Hardening | Dynamic pool logic, multi-winner (Rank 1-3) enforcement |
 
 ### 5.3 Key Database Functions
 
@@ -309,11 +313,12 @@ anchor deploy --provider.cluster devnet
 - [ ] Rate limiting configured for all endpoints
 - [ ] Smart contract deployed with latest fixes (`anchor deploy`)
 - [ ] IDL synced between contract and frontend
-- [ ] Database migrations applied (up to 075)
+- [ ] Database migrations applied (up to 078)
 - [ ] Health check endpoint responding
 - [ ] SSL/TLS configured on all services
 - [ ] `pool_settlement_audit` table monitored for anomalies
+- [ ] Zod env schema (`env.validation.ts`) includes all required env vars
 
 ---
 
-*Last Updated: 2026-05-09 — Pool Settlement Hardening*
+*Last Updated: 2026-05-10 — 100% Risk Policy, Multi-Winner Settlement & Env Validation Hardening*

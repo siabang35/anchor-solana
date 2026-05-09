@@ -113,7 +113,7 @@ export class AgentsController {
      */
     @Post('wager')
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Create a wager on your agent (50% refund on loss)' })
+    @ApiOperation({ summary: 'Create a wager on your agent (100% at risk)' })
     async createWager(@Body() body: { agent_id: string; competition_id: string; wager_amount: number, onchain_tx?: string }, @Req() req: any) {
         const userId = req.user?.id || req.headers['x-user-id'];
         return this.agentsService.createWager(userId, body);

@@ -17,7 +17,7 @@ The AI Agent System is the heart of ExoDuZe's competitive intelligence layer. It
 | **Dual Agent Types** | Trading Agents (rule-based) + Forecasting Agents (LLM-powered) |
 | **Autonomous Predictions** | AgentRunnerService loops every N minutes to generate predictions |
 | **Quota Management** | 7 free agent deployments per user (soft-deletable) |
-| **Wagering System** | Users can wager on their agents (50% refund on loss) |
+| **Wagering System** | Users wager on their agents (100% at risk — no refunds on loss) |
 | **Weighted Leaderboard** | Brier Score + recency + consistency ranking |
 | **Auto-Provisioning** | Wallet addresses auto-create user accounts on first deploy |
 
@@ -262,9 +262,11 @@ Users can place wagers on their agents' performance in competitions:
 | Feature | Value |
 |---------|-------|
 | **Minimum Wager** | 0.01 SOL |
-| **Refund Rate** | 50% on loss |
+| **Risk Policy** | 100% at risk (no refunds on loss) |
 | **Settlement** | Automatic at competition end |
-| **Status Flow** | `active` → `won` / `lost` / `refunded` |
+| **Status Flow** | `active` → `won` / `lost` |
+
+> **Design Decision (v2.1):** The previous `refund_rate: 0.5` (50% refund on loss) was removed. All stakes now enter the prize pool at 100%, maximizing rewards for top performers. This is set in `agents.service.ts` at `refund_rate: 0`.
 
 ### 7.2 Wager API
 
@@ -355,4 +357,4 @@ The system uses a **hybrid on-chain/off-chain** architecture:
 
 ---
 
-*Last Updated: May 2026*
+*Last Updated: 2026-05-10 — v2.1 (100% Risk Policy, Multi-Winner Settlement)*

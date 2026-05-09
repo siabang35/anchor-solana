@@ -78,6 +78,7 @@ export const envSchema = z.object({
     LEADERBOARD_HMAC_SECRET: z.string().optional(),
 
     // Solana Treasury
+    SOLANA_TREASURY_PRIVATE_KEY: z.string().optional(),
     SOL_TREASURY_PRIVATE_KEY: z.string().optional(),
 
     // SMTP Email

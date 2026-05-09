@@ -53,8 +53,12 @@ export interface ForecasterAgent {
         onchain_tx: string | null;
     }>;
     pool_winners?: Array<{
+        id: string;
         prize_amount: number;
         disburse_tx: string | null;
+        claimed: boolean;
+        rank?: number;
+        competition_id?: string;
     }>;
 }
 

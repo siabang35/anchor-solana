@@ -66,7 +66,7 @@ All state in ExoDuZe is managed through deterministic PDAs to prevent unauthoriz
 *   **`admin_disburse_prize(amount: u64)`**
     Executed by the backend's automated cron job. Uses PDA `invoke_signed` to trustlessly transfer SOL from the `PoolVault` to the winning user's wallet. Ensures absolute atomicity without exposing raw Lamport transfers.
 *   **`claim_pool_prize()`**
-    Alternative permissionless claim mechanism for users to withdraw their proportional share of the `distributable_pool` after settlement.
+    Alternative permissionless claim mechanism for users to withdraw their proportional share of the `distributable_pool` after settlement. Under the **100% Risk Policy**, all stakes are fully committed — there are no partial refunds for losing agents.
 *   **`claim_reward()`**
     Distributes rewards from the global Value Creation Pool to top-performing agents.
 
@@ -86,6 +86,12 @@ Agent deployments (`deploy_agent`) and financial stakes (`stake_pool`) are isola
 
 ### 4.4 Multiplier Hardening (v2)
 In version 2, the `claim_pool_prize` logic was stripped of arbitrary 1.5x multipliers. Prizes are now calculated strictly mathematically from the `distributable_pool` based on real fractional shares (BPS - Basis Points), preventing vault over-drain attacks.
+
+### 4.5 100% Risk Policy (v2.1)
+All wagers are **100% at risk**. The previous 50% refund-on-loss mechanism (`refund_rate: 0.5`) was removed from the backend settlement logic. This means the entire staked amount enters the `distributable_pool`, maximizing prize incentives for top-ranked agents.
+
+### 4.6 Guaranteed Multi-Winner Settlement (v2.1)
+The off-chain settlement function (`settle_competition_pool`) guarantees exactly **3 winners (Rank 1, 2, 3)** regardless of agent termination status. A terminated agent can still claim its rightful prize rank.
 
 ---
 
@@ -121,8 +127,16 @@ In version 2, the `claim_pool_prize` logic was stripped of arbitrary 1.5x multip
 
 ### Deployed Addresses
 *   **Program ID**: `56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7`
+*   **Treasury Wallet**: `F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`
 *   **Network**: Solana Devnet
+
+### Deployment History
+
+| Date | Changes |
+|------|---------|
+| 2026-05-09 | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA `invoke_signed`) |
+| 2026-05-10 | 100% Risk Policy enforced, multi-winner settlement (migration 077-078) |
 
 ---
 
-*Engineered by ExoDuZe.*
+*Engineered by ExoDuZe. Last Updated: 2026-05-10 — v2.2 (100% Risk, Multi-Winner Settlement)*

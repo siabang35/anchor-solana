@@ -68,13 +68,15 @@ Core capabilities:
 | Treasury | `F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE` |
 | PDA Vaults | Program Derived Address vaults for trustless stake custody (PDA `invoke_signed`) |
 | Verified Stakes | All stake TX hashes are real devnet signatures — trackable on [Solscan](https://solscan.io/?cluster=devnet) |
-| Automated Disbursement | SOL prizes auto-transfer from treasury to winner wallets |
-| Admin Disburse (v2) | `admin_disburse_prize` instruction for cron-driven backend settlement |
+| User-Initiated Claim (v2.1) | Highly secure Pull-based prize distribution initiated by winners on the UI, protected by `ClaimRateLimitGuard`. |
+| Admin Disburse | `admin_disburse_prize` instruction for fallback backend settlement |
 
 ### Settlement Engine
 | Feature | Description |
 |---------|-------------|
 | Prize Distribution | 🥇 50% · 🥈 30% · 🥉 20% (after 2% platform fee) |
+| 100% Risk Policy | Full wagers enter the prize pool. No 50% refunds on loss, maximizing pool rewards |
+| Guaranteed Top 3 | Settlement enforces exactly 3 winners regardless of agent count or termination status |
 | Anti-Whale Guard | Max 5 SOL per user per competition, min 0.01 SOL |
 | Atomic Settlement | Row-locked `pending → settling → settled` with SHA256 audit chain |
 | CSPRNG Outcomes | `crypto.randomInt()` for verifiable settlement randomness |
@@ -100,6 +102,7 @@ Core capabilities:
 | NLP Sentiment Analysis | HuggingFace FinBERT/DistilBERT async processing with PostgreSQL caching for true market sentiment |
 | Synthetic Fallback | Template-based data generator ensures 100% 4/4 category slot availability even when ETL feeds rate-limit |
 | Bayesian Curve Engine | Real-time probability updates from agent predictions + market signals |
+| Value Creation Pool | Live tracking of historical Total Value Locked (TVL) and lifetime distributed SOL per sector |
 | Supabase Realtime | WebSocket subscriptions for instant UI updates |
 
 ---
@@ -348,10 +351,12 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 |:-----------|:---------------|
 | **CSPRNG Outcomes** | Settlement uses `crypto.randomInt()`, not `Math.random()` |
 | **HMAC Integrity** | Every competition creation carries an HMAC-SHA256 signature |
+| **Concurrency Locks** | `claimLocks` Set prevents parallel race-condition claim exploits |
 | **Anti-Whale** | Max 5 SOL per user per competition (DB trigger) |
 | **Anti-Drift** | `entry_count` recalculated from `COUNT(*)` — no naive `+1` |
 | **Anti-Ghost** | Only confirmed on-chain TX creates pool entries |
 | **Anti-Recycling** | Dual-layer dedup (title Jaccard + source-ID tracking) |
+| **Claim Guard** | IP/Wallet-based `ClaimRateLimitGuard` prevents brute-forcing |
 | **Settlement Lock** | Row-level `FOR UPDATE` locking during settlement |
 | **Audit Chain** | SHA256 hash chain in `pool_settlement_audit` |
 | **Score Velocity** | Clamped prediction intervals prevent rapid manipulation |
@@ -407,6 +412,7 @@ The platform includes **75+ PostgreSQL migrations** managing:
 | `074` | Competition lifecycle trigger (horizon-aware cap enforcement) |
 | `075` | Anti-recycling source tracking (`used_competition_sources`) |
 | `076` | NLP Sentiment Cache (`nlp_sentiment_cache` for HuggingFace API) |
+| `077-078` | Dynamic pool logic, multi-winner (Rank 1-3) enforcement ignoring agent termination status |
 
 ---
 
@@ -427,5 +433,5 @@ The platform includes **75+ PostgreSQL migrations** managing:
 <p align="center">
   <strong>Built on Solana</strong><br/>
   <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em><br/>
-  <sub>Last Updated: 2026-05-09 — Pool Settlement Hardening v2.1</sub>
+  <sub>Last Updated: 2026-05-10 — 100% Risk Policy, Multi-Winner Settlement & Sector Stats API v2.2</sub>
 </p>

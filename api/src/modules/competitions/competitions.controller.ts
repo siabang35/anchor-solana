@@ -98,6 +98,15 @@ export class CompetitionsController {
     }
 
     /**
+     * Get historical sector stats (total volume, distributed, etc)
+     */
+    @Get('sectors/:sector/stats')
+    @ApiOperation({ summary: 'Get historical stats for a sector' })
+    async getSectorStats(@Param('sector') sector: string) {
+        return this.competitionsService.getSectorStats(sector);
+    }
+
+    /**
      * Get competitions by sector
      */
     @Get('sector/:sector')

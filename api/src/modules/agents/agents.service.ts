@@ -327,7 +327,7 @@ export class AgentsService {
 
         let query = supabase
             .from('agents')
-            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx), pool_winners(prize_amount, disburse_tx)', { count: 'exact' })
+            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx), pool_winners(id, prize_amount, disburse_tx, claimed, rank, competition_id)', { count: 'exact' })
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -688,7 +688,7 @@ export class AgentsService {
                 user_id: userId,
                 competition_id: data.competition_id,
                 wager_amount: data.wager_amount,
-                refund_rate: 0.5, // 50% refund on loss
+                refund_rate: 0, // 0% refund, full risk
                 status: 'active',
             })
             .select('*')
@@ -929,15 +929,14 @@ export class AgentsService {
         if (!userId) return [];
         const supabase = this.supabaseService.getClient();
 
-        // Verify ownership
+        // Verify ownership (allow both resolved profile ID and raw wallet address)
         const { data: agent } = await supabase
             .from('agents')
-            .select('id')
+            .select('id, user_id')
             .eq('id', agentId)
-            .eq('user_id', userId)
             .single();
 
-        if (!agent) {
+        if (!agent || (agent.user_id !== userId && agent.user_id !== rawUserId)) {
             throw new NotFoundException('Agent not found');
         }
 

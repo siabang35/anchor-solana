@@ -41,6 +41,51 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
     // History state
     const [historyData, setHistoryData] = useState<Record<string, any[]>>({});
     const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
+    const [claimingId, setClaimingId] = useState<string | null>(null);
+
+    const handleClaim = async (winnerId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!publicKey) {
+            alert('Please connect your Solana wallet to claim this prize.');
+            return;
+        }
+
+        if (claimingId === winnerId) return; // Anti-double-click debounce
+
+        // Anti-manipulation: Explicit user confirmation
+        const confirmed = window.confirm(
+            'Confirm Claim Request\n\n' +
+            'You are about to claim this prize to your connected wallet.\n' +
+            `Wallet: ${publicKey.toString().slice(0, 8)}...${publicKey.toString().slice(-6)}\n\n` +
+            'Do you want to proceed?'
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setClaimingId(winnerId);
+            const res = await apiFetch<any>('/pool/claim', {
+                method: 'POST',
+                body: JSON.stringify({ winner_id: winnerId }),
+                headers: { 'x-user-id': publicKey.toString() }
+            });
+            
+            if (res.success) {
+                alert(`✅ Prize claimed successfully!\n\nTransaction: ${res.tx}`);
+                // Simple page reload to refresh agent list state
+                window.location.reload();
+            } else {
+                throw new Error(res.message || 'Unknown error occurred during claim');
+            }
+        } catch (err: any) {
+            console.error('Claim Error:', err);
+            // Handle HTTP error responses gracefully
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to claim prize';
+            alert(`❌ Claim Failed\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
+        } finally {
+            setClaimingId(null);
+        }
+    };
 
     const filtered = useMemo(() => {
         if (filter === 'all') return forecasters;
@@ -494,36 +539,65 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                             </div>
                                         )}
 
-                                        {/* On-Chain Disbursed Prize */}
-                                        {agent.pool_winners && agent.pool_winners.length > 0 && agent.pool_winners[0].disburse_tx && (
-                                            <div className="animate-in" style={{
-                                                background: 'linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
-                                                border: '1px solid rgba(251,191,36,0.3)',
-                                                borderRadius: '8px', padding: '0.6rem', marginBottom: '0.75rem',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                boxShadow: '0 2px 10px rgba(251,191,36,0.1)'
-                                            }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                                    <span style={{ fontSize: '0.55rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                        <span>🏆</span> Prize Won & Settled
-                                                    </span>
-                                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                        +{Number(agent.pool_winners[0].prize_amount).toFixed(4)} SOL
-                                                    </span>
-                                                </div>
-                                                <a 
-                                                    href={`https://solscan.io/tx/${agent.pool_winners[0].disburse_tx}?cluster=devnet`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    style={{
-                                                        fontSize: '0.65rem', color: '#f59e0b', textDecoration: 'none',
-                                                        display: 'flex', alignItems: 'center', gap: '4px',
-                                                        padding: '5px 10px', background: 'rgba(251,191,36,0.15)', borderRadius: '6px',
-                                                        fontWeight: 600, transition: 'all 0.2s', border: '1px solid rgba(251,191,36,0.2)'
-                                                    }}
-                                                >
-                                                    View Payout TX ↗
-                                                </a>
+                                        {/* On-Chain Disbursed Prize / Claimable Prize */}
+                                        {agent.pool_winners && agent.pool_winners.length > 0 && (
+                                            <div className="animate-in" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                                {agent.pool_winners.map((winner, idx) => {
+                                                    // Try to match the winner to a competition to get the correct title/sector
+                                                    const comp = agent.competitions?.find((c: any) => c.competition_id === winner.competition_id) || mainComp;
+                                                    return (
+                                                        <div key={winner.id || idx} style={{
+                                                            background: 'linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
+                                                            border: '1px solid rgba(251,191,36,0.3)',
+                                                            borderRadius: '8px', padding: '0.6rem',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                            boxShadow: '0 2px 10px rgba(251,191,36,0.1)'
+                                                        }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                                <span style={{ fontSize: '0.55rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                                    <span>{winner.rank === 1 ? '🥇' : winner.rank === 2 ? '🥈' : winner.rank === 3 ? '🥉' : '🏆'}</span> PRIZE WON: {comp?.sector || 'COMPETITION'}
+                                                                </span>
+                                                                <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                                    +{Number(winner.prize_amount).toFixed(4)} SOL
+                                                                </span>
+                                                                {comp?.title && (
+                                                                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '2px' }}>
+                                                                        {comp.title}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            
+                                                            {winner.disburse_tx ? (
+                                                                <a 
+                                                                    href={`https://solscan.io/tx/${winner.disburse_tx}?cluster=devnet`}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    style={{
+                                                                        fontSize: '0.65rem', color: '#f59e0b', textDecoration: 'none',
+                                                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                                                        padding: '5px 10px', background: 'rgba(251,191,36,0.15)', borderRadius: '6px',
+                                                                        fontWeight: 600, transition: 'all 0.2s', border: '1px solid rgba(251,191,36,0.2)'
+                                                                    }}
+                                                                >
+                                                                    View Payout TX ↗
+                                                                </a>
+                                                            ) : !winner.claimed && winner.id ? (
+                                                                <button 
+                                                                    onClick={(e) => handleClaim(winner.id, e)}
+                                                                    disabled={claimingId === winner.id}
+                                                                    style={{
+                                                                        fontSize: '0.65rem', color: '#fff', textDecoration: 'none',
+                                                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                                                        padding: '5px 10px', background: 'var(--accent-green)', borderRadius: '6px',
+                                                                        fontWeight: 600, transition: 'all 0.2s', border: 'none', cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {claimingId === winner.id ? 'Claiming...' : 'Claim Reward 💰'}
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
 

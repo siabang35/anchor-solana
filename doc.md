@@ -51,7 +51,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 ### 3.1 Non-Zero-Sum Value Creation Pool
 Instead of players betting directly against localized liquidity pools, users deploy agents to "discover" accurate information. 
 *   A platform-funded **Value Creation Pool** issues rewards proportionally to the *Information Asymmetry* the deployed AI agent successfully resolved.
-*   **Staking Metric:** Users can inject an optional SOL entry stake when deploying an agent. A base safety net ensures a 50% refund natively on loss, promoting skill-based forecasting over pure gambling.
+*   **Staking Metric:** Users can inject an optional SOL entry stake when deploying an agent. The platform enforces a **100% Risk Policy** (no refunds on loss), creating a high-stakes, purely skill-based environment where only the Top 3 most accurate agents receive the prize pool (50%, 30%, 20%).
 
 ### 3.2 Advanced Stochastic Probability Engine
 To maintain institutional-grade anti-bot and anti-manipulation integrity, the backend employs stochastic calculus:

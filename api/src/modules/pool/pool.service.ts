@@ -37,6 +37,21 @@ export class PoolService {
             return { pool: {}, winners: [], stakes: [] };
         }
 
+        if (data && data.winners && data.winners.length > 0) {
+            // The RPC doesn't currently return the 'id' field for winners, so we fetch it here
+            const { data: winnerIds } = await supabase
+                .from('pool_winners')
+                .select('id, agent_id')
+                .eq('competition_id', competitionId);
+            
+            if (winnerIds) {
+                data.winners = data.winners.map((w: any) => {
+                    const match = winnerIds.find(wid => wid.agent_id === w.agent_id);
+                    return { ...w, id: match?.id };
+                });
+            }
+        }
+
         return data || { pool: {}, winners: [], stakes: [] };
     }
 
@@ -261,176 +276,345 @@ export class PoolService {
             throw new BadRequestException(`Settlement failed: ${error.message}`);
         }
 
-        this.logger.log(`Pool settled in DB for competition ${competitionId} by ${settledBy}`);
+        this.logger.log(`Pool settled in DB for competition ${competitionId} by ${settledBy}. Awaiting user claim.`);
 
-        // Step 2: On-chain prize disbursement to winner wallets
-        await this.disburseOnChain(competitionId);
-
-        // Step 3: Refresh global leaderboard
+        // Step 2: Refresh global leaderboard
         try { await supabase.rpc('refresh_global_leaderboard'); } catch (_e) { /* ignore */ }
 
         return settlementResult;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // CLAIM PRIZE — Enterprise-Grade Pull Mechanism
+    // Security: Concurrency Lock + Settlement Check + Wallet Auth
+    //           + Pessimistic Double-Check + Failed Attempt Audit
+    // ═══════════════════════════════════════════════════════════════
+
+    /** In-memory concurrency lock to prevent race-condition double-claims */
+    private readonly claimLocks = new Set<string>();
+
     /**
-     * Disburse prizes on-chain via Solana devnet transfers.
-     * Sends SOL from pool vault PDA → winner wallets.
-     * Each transfer is a separate TX for auditability.
+     * User-initiated claim prize logic (Pull mechanism) — HARDENED
+     *
+     * Security layers:
+     * 1. In-memory mutex lock (anti race-condition double-spend)
+     * 2. Competition settlement status verification
+     * 3. Multi-layer wallet ownership verification
+     * 4. Pessimistic re-check after on-chain TX (anti-parallel exploit)
+     * 5. Failed attempt audit logging for forensics
      */
-    private async disburseOnChain(competitionId: string): Promise<void> {
+    async claimPrize(winnerId: string, requestingWallet: string, req?: any): Promise<any> {
         const supabase = this.supabaseService.getAdminClient();
+        const claimStartTime = Date.now();
 
-        // Get winners for this competition
-        const { data: winners } = await supabase
-            .from('pool_winners')
-            .select('id, rank, user_id, agent_id, prize_amount, agent_name')
-            .eq('competition_id', competitionId)
-            .order('rank', { ascending: true });
-
-        if (!winners || winners.length === 0) {
-            this.logger.warn(`No winners to disburse for competition ${competitionId}`);
-            return;
+        // ── Layer 1: Concurrency Lock (in-memory mutex) ──
+        // Prevents two parallel requests from claiming the same prize
+        if (this.claimLocks.has(winnerId)) {
+            this.logger.warn(`⚠️ Concurrent claim blocked for winner ${winnerId}`);
+            throw new BadRequestException('Claim already in progress. Please wait.');
         }
+        this.claimLocks.add(winnerId);
 
-        // Get pool vault balance by looking up stakes' on-chain txs
-        const { data: poolData } = await supabase
-            .from('competition_pools')
-            .select('total_staked, distributable_pool, onchain_pool_pubkey')
-            .eq('competition_id', competitionId)
-            .single();
+        try {
+            // ── Layer 2: Fetch & validate winner record ──
+            const { data: winner, error: winnerError } = await supabase
+                .from('pool_winners')
+                .select('*')
+                .eq('id', winnerId)
+                .single();
 
-        const disburseTxs: any[] = [];
-
-        for (const winner of winners) {
-            try {
-                // Resolve winner's wallet address from user's profile/auth
-                const winnerWallet = await this.resolveWalletAddress(winner.user_id);
-                if (!winnerWallet) {
-                    this.logger.warn(`No wallet found for winner user ${winner.user_id}, skipping on-chain disburse`);
-                    continue;
-                }
-
-                const prizeAmount = Number(winner.prize_amount);
-                if (prizeAmount <= 0) continue;
-
-                const prizeLamports = Math.floor(prizeAmount * LAMPORTS_PER_SOL);
-
-                // Send SOL from platform treasury to winner
-                const txSignature = await this.sendPrizeTransfer(winnerWallet, prizeLamports);
-
-                if (txSignature) {
-                    // Record TX in pool_winners
-                    await supabase
-                        .from('pool_winners')
-                        .update({
-                            disburse_tx: txSignature,
-                            winner_wallet: winnerWallet,
-                            claimed: true,
-                            claimed_at: new Date().toISOString(),
-                        })
-                        .eq('id', winner.id);
-
-                    disburseTxs.push({
-                        rank: winner.rank,
-                        agent_name: winner.agent_name,
-                        wallet: winnerWallet,
-                        amount: prizeAmount,
-                        tx: txSignature,
-                        solscan: `https://solscan.io/tx/${txSignature}?cluster=devnet`,
-                    });
-
-                    this.logger.log(`🏆 Prize disbursed: ${prizeAmount} SOL → ${winnerWallet} (Rank #${winner.rank}) TX: ${txSignature}`);
-
-                    // Audit log
-                    await supabase.from('pool_settlement_audit').insert({
-                        pool_id: (await supabase.from('competition_pools').select('id').eq('competition_id', competitionId).single()).data?.id,
-                        competition_id: competitionId,
-                        event_type: 'prize_disbursed',
-                        agent_id: winner.agent_id || null,
-                        user_id: winner.user_id,
-                        amount: prizeAmount,
-                        details: { rank: winner.rank, tx: txSignature, wallet: winnerWallet },
-                        event_hash: Buffer.from(txSignature).toString('base64').slice(0, 64),
-                    });
-                }
-            } catch (err: any) {
-                this.logger.error(`Failed to disburse prize to rank #${winner.rank}: ${err.message}`);
+            if (winnerError || !winner) {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'winner_not_found', req);
+                throw new NotFoundException('Winner record not found');
             }
-        }
 
-        // Store all disburse TXs in the competition pool record
-        if (disburseTxs.length > 0) {
+            // ── Layer 3: Double-claim check (database level) ──
+            if (winner.claimed) {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'already_claimed', req);
+                throw new BadRequestException('Prize already claimed');
+            }
+
+            // ── Layer 4: Competition settlement verification ──
+            // Only settled competitions can have prizes claimed
+            const { data: pool } = await supabase
+                .from('competition_pools')
+                .select('settlement_status')
+                .eq('competition_id', winner.competition_id)
+                .single();
+
+            if (!pool || pool.settlement_status !== 'settled') {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'pool_not_settled', req);
+                throw new BadRequestException('Competition pool has not been settled yet');
+            }
+
+            // ── Layer 5: Multi-layer wallet ownership verification ──
+            const isOwner = await this.verifyWalletOwnership(winner.user_id, requestingWallet);
+            if (!isOwner) {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'wallet_mismatch', req);
+                this.logger.error(`🚨 UNAUTHORIZED claim attempt: winner=${winnerId} expected_user=${winner.user_id} got_wallet=${requestingWallet.slice(0, 12)}...`);
+                throw new BadRequestException('Unauthorized: Connected wallet does not match the winner');
+            }
+
+            // ── Layer 6: Validate prize amount ──
+            const prizeAmount = Number(winner.prize_amount);
+            if (!prizeAmount || prizeAmount <= 0 || !isFinite(prizeAmount)) {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'invalid_prize_amount', req);
+                throw new BadRequestException('Prize amount is invalid');
+            }
+
+            // Safety cap: prevent absurd disbursements (max 100 SOL per claim)
+            if (prizeAmount > 100) {
+                this.logger.error(`🚨 SAFETY CAP: Prize ${prizeAmount} SOL exceeds 100 SOL limit for winner ${winnerId}`);
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'safety_cap_exceeded', req);
+                throw new BadRequestException('Prize amount exceeds safety limit. Contact support.');
+            }
+
+            const prizeLamports = Math.floor(prizeAmount * LAMPORTS_PER_SOL);
+
+            // ── Layer 7: On-chain transfer ──
+            this.logger.log(`💸 Initiating on-chain transfer: ${prizeAmount} SOL → ${requestingWallet.slice(0, 12)}...`);
+            const txSignature = await this.sendPrizeTransfer(requestingWallet, prizeLamports);
+
+            if (!txSignature) {
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'transfer_failed', req);
+                throw new BadRequestException('On-chain transfer failed. Please try again later.');
+            }
+
+            // ── Layer 8: Pessimistic re-check AFTER transfer ──
+            // Another request may have snuck through — verify claimed is still false
+            const { data: recheck } = await supabase
+                .from('pool_winners')
+                .select('claimed')
+                .eq('id', winnerId)
+                .single();
+
+            if (recheck?.claimed) {
+                // Extremely rare edge case — TX sent but someone else already marked it
+                this.logger.error(`🚨 RACE CONDITION detected: winner ${winnerId} claimed during transfer. TX: ${txSignature}`);
+                // Still return success since we already sent the SOL — but log for manual review
+                return { success: true, tx: txSignature, amount: prizeAmount, warning: 'race_condition_detected' };
+            }
+
+            // ── Layer 9: Record successful claim ──
+            await supabase
+                .from('pool_winners')
+                .update({
+                    disburse_tx: txSignature,
+                    winner_wallet: requestingWallet,
+                    claimed: true,
+                    claimed_at: new Date().toISOString(),
+                })
+                .eq('id', winner.id)
+                .eq('claimed', false); // Extra safety: only update if still unclaimed
+
+            const claimDuration = Date.now() - claimStartTime;
+            this.logger.log(`🏆 Prize CLAIMED: ${prizeAmount} SOL → ${requestingWallet.slice(0, 12)}... (Rank #${winner.rank}) TX: ${txSignature} [${claimDuration}ms]`);
+
+            // ── Layer 10: Immutable audit trail ──
+            const poolId = (await supabase.from('competition_pools').select('id').eq('competition_id', winner.competition_id).single()).data?.id;
+            
+            await supabase.from('pool_settlement_audit').insert({
+                pool_id: poolId,
+                competition_id: winner.competition_id,
+                event_type: 'prize_claimed',
+                agent_id: winner.agent_id || null,
+                user_id: winner.user_id,
+                amount: prizeAmount,
+                details: {
+                    rank: winner.rank,
+                    tx: txSignature,
+                    wallet: requestingWallet,
+                    claim_duration_ms: claimDuration,
+                    ip: req?.ip || req?.headers?.['x-forwarded-for'] || 'unknown',
+                    user_agent: req?.headers?.['user-agent']?.slice(0, 100) || 'unknown',
+                },
+                event_hash: Buffer.from(txSignature).toString('base64').slice(0, 64),
+            });
+
+            // ── Layer 11: Append to pool disburse TX array ──
+            const { data: poolData } = await supabase
+                .from('competition_pools')
+                .select('onchain_disburse_txs')
+                .eq('competition_id', winner.competition_id)
+                .single();
+                
+            const existingTxs = poolData?.onchain_disburse_txs || [];
+            existingTxs.push({
+                rank: winner.rank,
+                agent_name: winner.agent_name,
+                wallet: requestingWallet,
+                amount: prizeAmount,
+                tx: txSignature,
+                solscan: `https://solscan.io/tx/${txSignature}?cluster=devnet`,
+                claimed_by_user: true,
+                claimed_at: new Date().toISOString(),
+            });
+
             await supabase
                 .from('competition_pools')
-                .update({ onchain_disburse_txs: disburseTxs })
-                .eq('competition_id', competitionId);
+                .update({ onchain_disburse_txs: existingTxs })
+                .eq('competition_id', winner.competition_id);
 
-            this.logger.log(`📋 ${disburseTxs.length} prize disbursement TXs recorded for competition ${competitionId}`);
+            return { success: true, tx: txSignature, amount: prizeAmount };
+
+        } finally {
+            // Always release the lock
+            this.claimLocks.delete(winnerId);
+        }
+    }
+
+    /**
+     * Multi-layer wallet ownership verification.
+     * Checks: direct match → wallet_addresses table → profiles table
+     */
+    private async verifyWalletOwnership(userId: string, requestingWallet: string): Promise<boolean> {
+        // Direct match: user_id IS the wallet pubkey (most common in ExoDuZe)
+        if (userId === requestingWallet) return true;
+
+        const supabase = this.supabaseService.getAdminClient();
+
+        // Check wallet_addresses table
+        const { data: walletRecord } = await supabase
+            .from('wallet_addresses')
+            .select('user_id')
+            .eq('address', requestingWallet.toLowerCase())
+            .eq('user_id', userId)
+            .limit(1)
+            .maybeSingle();
+
+        if (walletRecord) return true;
+
+        // Check profiles.wallet_addresses JSONB array
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('wallet_addresses')
+            .eq('id', userId)
+            .single();
+
+        if (profile?.wallet_addresses) {
+            const wallets = Array.isArray(profile.wallet_addresses) ? profile.wallet_addresses : [];
+            const match = wallets.some((w: any) =>
+                w.address?.toLowerCase() === requestingWallet.toLowerCase()
+            );
+            if (match) return true;
+        }
+
+        // Fallback: resolveWalletAddress (legacy path)
+        const resolved = await this.resolveWalletAddress(userId);
+        return resolved === requestingWallet;
+    }
+
+    /**
+     * Log failed/suspicious claim attempts for forensic analysis.
+     * Stored in pool_settlement_audit with event_type = 'claim_attempt_failed'.
+     */
+    private async logClaimAttempt(
+        supabase: any,
+        winnerId: string,
+        wallet: string,
+        reason: string,
+        req?: any,
+    ): Promise<void> {
+        try {
+            await supabase.from('pool_settlement_audit').insert({
+                pool_id: '00000000-0000-0000-0000-000000000000', // placeholder for failed attempts
+                competition_id: '00000000-0000-0000-0000-000000000000',
+                event_type: 'claim_attempt_failed',
+                details: {
+                    winner_id: winnerId,
+                    wallet: wallet?.slice(0, 16) + '...',
+                    reason,
+                    ip: req?.ip || req?.headers?.['x-forwarded-for'] || 'unknown',
+                    user_agent: req?.headers?.['user-agent']?.slice(0, 100) || 'unknown',
+                    timestamp: new Date().toISOString(),
+                },
+                event_hash: Buffer.from(`${winnerId}:${wallet}:${reason}:${Date.now()}`).toString('base64').slice(0, 64),
+            });
+        } catch (err: any) {
+            this.logger.warn(`Failed to log claim attempt: ${err.message}`);
         }
     }
 
     /**
      * Send SOL from platform treasury keypair to a winner wallet.
-     * Uses the platform admin keypair (stored in env) as the payer.
+     * REAL TRANSFERS ONLY — no simulations, no fallbacks to airdrop.
+     * 
+     * Flow:
+     * 1. Decode Treasury keypair from env
+     * 2. Check Treasury has sufficient balance
+     * 3. Execute SystemProgram.transfer on Solana Devnet
+     * 4. Confirm with 'confirmed' commitment
+     * 5. Return real TX signature (verifiable on Solscan)
      */
     private async sendPrizeTransfer(recipientWallet: string, lamports: number): Promise<string | null> {
-        try {
-            // Get platform treasury keypair from env
-            const treasuryKeyEnv = this.configService.get<string>('SOLANA_TREASURY_PRIVATE_KEY');
-            if (!treasuryKeyEnv) {
-                this.logger.warn('SOLANA_TREASURY_PRIVATE_KEY not set — using simulated disbursement');
-                // Generate a simulated TX hash for demo/devnet
-                return this.simulateDisbursement(recipientWallet, lamports);
-            }
-
-            const treasuryKeypair = Keypair.fromSecretKey(bs58.decode(treasuryKeyEnv));
-            const recipientPubkey = new PublicKey(recipientWallet);
-
-            const tx = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: treasuryKeypair.publicKey,
-                    toPubkey: recipientPubkey,
-                    lamports,
-                })
-            );
-
-            const signature = await sendAndConfirmTransaction(this.connection, tx, [treasuryKeypair], {
-                commitment: 'confirmed',
-            });
-
-            return signature;
-        } catch (err: any) {
-            this.logger.error(`On-chain transfer failed: ${err.message}`);
-            // Fallback to simulated disbursement for devnet
-            return this.simulateDisbursement(recipientWallet, lamports);
-        }
-    }
-
-    /**
-     * Simulate disbursement for devnet demo mode.
-     * Creates a real SOL airdrop record (signature is from devnet faucet if possible).
-     */
-    private async simulateDisbursement(recipientWallet: string, lamports: number): Promise<string | null> {
-        try {
-            const recipientPubkey = new PublicKey(recipientWallet);
-
-            // Request airdrop on devnet as prize simulation
-            const airdropSignature = await this.connection.requestAirdrop(recipientPubkey, lamports);
-
-            // Confirm the airdrop
-            const latestBlockhash = await this.connection.getLatestBlockhash();
-            await this.connection.confirmTransaction({
-                signature: airdropSignature,
-                blockhash: latestBlockhash.blockhash,
-                lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-            }, 'confirmed');
-
-            this.logger.log(`💸 Devnet airdrop as prize: ${lamports / LAMPORTS_PER_SOL} SOL → ${recipientWallet} TX: ${airdropSignature}`);
-            return airdropSignature;
-        } catch (err: any) {
-            this.logger.error(`Airdrop failed: ${err.message}`);
+        const treasuryKeyEnv = this.configService.get<string>('SOLANA_TREASURY_PRIVATE_KEY');
+        if (!treasuryKeyEnv) {
+            this.logger.error('❌ SOLANA_TREASURY_PRIVATE_KEY is not set. Cannot send real prize transfer.');
             return null;
         }
+
+        let treasuryKeypair: Keypair;
+        try {
+            treasuryKeypair = Keypair.fromSecretKey(bs58.decode(treasuryKeyEnv));
+        } catch (err: any) {
+            this.logger.error(`❌ Treasury keypair decode failed — check .env format: ${err.message}`);
+            return null;
+        }
+
+        // Pre-flight: check treasury balance
+        try {
+            const balance = await this.connection.getBalance(treasuryKeypair.publicKey);
+            const requiredWithFee = lamports + 10000; // 10k lamports for TX fee
+            if (balance < requiredWithFee) {
+                this.logger.error(
+                    `❌ Treasury insufficient balance: ${balance / LAMPORTS_PER_SOL} SOL available, ` +
+                    `need ${requiredWithFee / LAMPORTS_PER_SOL} SOL. ` +
+                    `Fund treasury: ${treasuryKeypair.publicKey.toString()}`
+                );
+                return null;
+            }
+            this.logger.log(`💰 Treasury balance OK: ${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL (need ${(requiredWithFee / LAMPORTS_PER_SOL).toFixed(4)} SOL)`);
+        } catch (err: any) {
+            this.logger.error(`❌ Failed to check treasury balance: ${err.message}`);
+            return null;
+        }
+
+        // Execute real transfer with retry
+        const MAX_RETRIES = 2;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const recipientPubkey = new PublicKey(recipientWallet);
+
+                const tx = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: treasuryKeypair.publicKey,
+                        toPubkey: recipientPubkey,
+                        lamports,
+                    })
+                );
+
+                const signature = await sendAndConfirmTransaction(
+                    this.connection, tx, [treasuryKeypair],
+                    { commitment: 'confirmed' },
+                );
+
+                this.logger.log(
+                    `✅ REAL prize transfer confirmed: ${lamports / LAMPORTS_PER_SOL} SOL → ${recipientWallet.slice(0, 12)}... ` +
+                    `TX: ${signature} | Solscan: https://solscan.io/tx/${signature}?cluster=devnet`
+                );
+                return signature;
+
+            } catch (err: any) {
+                this.logger.error(`❌ Transfer attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+                if (attempt < MAX_RETRIES) {
+                    // Wait 2s before retry (transient network error)
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+        }
+
+        this.logger.error(`❌ All ${MAX_RETRIES} transfer attempts failed for ${recipientWallet.slice(0, 12)}...`);
+        return null;
     }
 
     /**

@@ -52,15 +52,16 @@ app/src/
 │   ├── Leaderboard.tsx           # Global leaderboard
 │   ├── Performance.tsx           # Portfolio P&L tracking
 │   ├── SentimentAnalysis.tsx     # NLP sentiment dashboard
-│   ├── ValueCreationPool.tsx     # Pool metrics display
+│   ├── ValueCreationPool.tsx     # Historical sector TVL & distributed SOL metrics
 │   └── WalletProvider.tsx        # Solana wallet adapter wrapper
-├── hooks/                        # Custom React hooks (7 files)
+├── hooks/                        # Custom React hooks (8 files)
 │   ├── useRealtimeAgents.ts      # Agent CRUD + Supabase Realtime
 │   ├── useClusterData.ts         # News cluster data
 │   ├── useCompetitions.ts        # Competition state management
 │   ├── useLiveFeed.ts            # Real-time data feed
 │   ├── useOnChainMarket.ts       # Market data + probability history
 │   ├── useRealtimeMarkets.ts     # Market list realtime updates
+│   ├── usePool.ts                # Competition/sector/global pool data
 │   └── useAgentPredictions.ts    # Agent prediction polling
 └── lib/                          # Utilities & configuration
     ├── supabase.ts               # Supabase client + apiFetch helper
@@ -245,6 +246,18 @@ Full-featured agent deployment side-drawer:
 - Risk level slider (1-5)
 - Deploy quota indicator
 - Confirmation flow with on-chain status
+
+#### AgentManager (~60KB)
+Portfolio management for deployed AI Agents:
+- Live status toggling (Active/Paused)
+- Prediction tracking and accuracy history
+- **Claim Reward UI (v2.1)**: Dynamically reveals a "PRIZE WON" box when the agent wins a settled competition.
+- Features atomic state updates, debounce protection against double-clicks, and modal confirmations for reward claims.
+
+#### CompetitionPoolWinners (~30KB)
+Sector-specific pool display component:
+- Renders total staked, participants, and top 3 winners
+- **Claim Action**: Includes identical robust claim logic (debounce, modals, error handling) allowing users to claim rewards directly from the winners podium.
 
 #### CompetitionLeaderboard (~38KB)
 Live competition rankings with weighted scoring:

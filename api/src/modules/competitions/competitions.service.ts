@@ -153,6 +153,52 @@ export class CompetitionsService {
     }
 
     /**
+     * Get historical aggregated stats for a sector (Volume, Distributed, Contributors)
+     */
+    async getSectorStats(sector: string): Promise<any> {
+        const supabase = this.supabaseService.getClient();
+
+        let query = supabase
+            .from('competition_pools')
+            .select('total_staked, distributable_pool, stake_count, competitions!inner(sector, status)');
+
+        if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest' && sector !== 'signals') {
+            query = query.eq('competitions.sector', sector);
+        }
+
+        const { data, error } = await query;
+        
+        if (error) {
+            this.logger.error(`Failed to fetch sector stats: ${error.message}`);
+            return { total_volume: 0, total_distributed: 0, contributors: 0 };
+        }
+
+        let total_volume = 0;
+        let total_distributed = 0;
+        let contributors = 0;
+
+        for (const row of data || []) {
+            const pool = parseFloat(row.distributable_pool) || 0;
+            const entries = parseInt(row.stake_count) || 0;
+            
+            total_volume += pool;
+            contributors += entries;
+            
+            const comp = Array.isArray(row.competitions) ? row.competitions[0] : row.competitions;
+            if (comp?.status === 'settled') {
+                total_distributed += pool;
+            }
+        }
+
+        return {
+            sector,
+            total_volume,
+            total_distributed,
+            contributors
+        };
+    }
+
+    /**
      * Find active competitions for a specific sector + horizon
      */
     async findActiveByHorizon(sector: string, timeHorizon: string): Promise<CompetitionResponseDto[]> {

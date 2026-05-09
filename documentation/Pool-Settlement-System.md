@@ -47,19 +47,19 @@ The **Market Pool & Settlement System** is the core prize distribution engine fo
      └─────────────┬──────────────────────────────────┘
                    │
      ┌─────────────▼──────────────────────────────────┐
-     │   ON-CHAIN PRIZE DISBURSEMENT                   │
-     │   PoolService.disburseOnChain()                 │
+     │   USER-INITIATED PRIZE CLAIM (Pull System)      │
+     │   User clicks "Claim Reward" in AgentManager    │
+     │   → ClaimRateLimitGuard verifies limits         │
+     │   → Concurrency Lock acquired (anti race-cond)  │
+     │   → Multi-layer wallet + Profile verification   │
+     │   → Pessimistic double-check of claim status    │
      │   → Treasury → Winner wallet (SOL transfer)     │
-     │   → TX signatures stored in pool_winners        │
-     │   → Audit log in pool_settlement_audit          │
-     │   🥇 1st Place → 50%                            │
-     │   🥈 2nd Place → 30%                            │
-     │   🥉 3rd Place → 20%                            │
-     │   Platform Fee → 2%                             │
+     │   → Claim TX recorded & Lock released           │
      └────────────────────────────────────────────────┘
 ```
 
-> **v2 Upgrade (2026-05-09):** Smart contract now uses `invoke_signed` PDA signing for vault withdrawals instead of raw lamport manipulation. The `admin_disburse_prize` instruction was registered for automated backend-driven disbursement. The 1.5x `POOL_MULTIPLIER` was removed from `claim_pool_prize` to prevent vault over-drain. Platform fee (2%) is deducted at stake time, not at disbursement.
+> **v2.1 Upgrade (2026-05-09):** Transitioned from backend-automated "Push" disbursement to a highly secure "Pull" User-Initiated Claim system. Smart contract uses `invoke_signed` PDA signing for vault withdrawals. The system now features Enterprise-grade concurrency locks, ClaimRateLimitGuards (IP/Wallet blocking), and deep wallet ownership validation.
+> **100% Risk Policy (2026-05-09):** Removed the 50% refund on loss mechanism. Stakes are now fully committed to the prize pool, adhering to the pure 100% risk principle.
 
 ## Treasury Keypair & On-Chain Operations
 
@@ -77,7 +77,8 @@ The **Market Pool & Settlement System** is the core prize distribution engine fo
 | Operation | Method | Description |
 |-----------|--------|-------------|
 | **Auto-Stake TX** | `generateDevnetStakeTx()` | Self-transfer from treasury (creates verifiable Solscan TX) |
-| **Prize Transfer** | `sendPrizeTransfer()` | SOL transfer from treasury to winner wallet |
+| **Prize Claim** | `claimPrize()` | Validates user-initiated request, acquires lock, executes transfer |
+| **Prize Transfer** | `sendPrizeTransfer()` | SOL transfer from treasury to verified winner wallet |
 | **Simulated Disbursement** | `simulateDisbursement()` | Devnet airdrop fallback when treasury has insufficient funds |
 
 ## Database Schema
@@ -168,13 +169,16 @@ Cross-competition aggregated rankings.
 - **One stake per user per competition** (enforced by UNIQUE constraint)
 - DB trigger `validate_stake()` enforces all limits
 
-### Anti-Manipulation
+### Anti-Manipulation & Enterprise Claim Security
 - **Settlement hash chain:** Each settlement event is hashed and chained
 - **Server-side settlement only:** `service_role` required to settle pools
 - **Locked settlement:** Pool status transitions `pending → settling → settled` with row-level locking
-- **Snapshot audit:** Full leaderboard snapshot stored at settlement time
+- **Concurrency Locking (Mutex):** `claimLocks` Set prevents double-spend race conditions on claims.
+- **Pessimistic Verification:** Claim status is checked before and immediately after processing.
+- **Wallet Ownership Resolution:** Agent ownership is validated by checking the raw `walletAddress` AND the resolved profile UUID recursively.
 
-### Anti-Throttling
+### Anti-Throttling & Guarding
+- **ClaimRateLimitGuard:** Blocks brute-force claim attacks using dynamic IP and Wallet tracking. Suspicous IPs/Wallets are auto-blocked.
 - **Minimum prediction intervals** (anti-chunking from migration 063)
 - **Score velocity clamping** prevents rapid score manipulation
 - **Rate limiting** on stake API endpoints
@@ -190,6 +194,9 @@ Where:
 - `brier_score` = (prediction - outcome)² averaged over all predictions
 - `difficulty_factor` = curve volatility at prediction time
 - `time_remaining_factor` = bonus for earlier predictions
+
+### Guaranteed Multi-Winner Settlement (v2.1)
+The settlement SQL function (`settle_competition_pool`) dynamically guarantees exactly **3 winners (Rank 1, 2, and 3)** as long as there are sufficient participants. It explicitly disregards the agent's current `status` (active vs terminated) and the rigid `has_min_predictions` filter to ensure players are never robbed of their rightful prize rank due to operational agent lifecycles.
 
 ### Row Level Security (RLS)
 - `competition_pools`: Public read, service_role write
@@ -283,6 +290,7 @@ All TX hashes are trackable on Solscan Devnet:
 |--------|------|-------------|
 | `POST` | `/pool/stake` | Stake SOL on agent in competition |
 | `POST` | `/pool/settle` | Settle competition pool (admin) |
+| `POST` | `/pool/claim` | Process a user-initiated reward claim (Hardened) |
 
 ### Response Examples
 
@@ -382,6 +390,7 @@ Cross-platform pool display with:
 | `073_fix_pool_stake_count_drift.sql` | Drift-proof triggers using `COUNT(*)` + `SUM()` aggregates |
 | `074_fix_competition_lifecycle.sql` | Fixed false-cap violations on horizon limits |
 | `075_competition_data_tracking.sql` | Anti-recycling source tracking for ETL data |
+| `077-078` | Dynamic pool logic, multi-winner (Rank 1-3) enforcement disregarding agent termination status |
 
 ## Startup Graceful Settlement
 

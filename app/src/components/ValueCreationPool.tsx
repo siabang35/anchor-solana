@@ -1,27 +1,44 @@
 'use client';
 
-import React from 'react';
-import { useCompetitions } from '@/hooks/useCompetitions';
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '@/lib/supabase';
 
 export default function ValueCreationPool({ sector = 'all' }: { sector?: string }) {
-    // Fetch all active/upcoming competitions to aggregate metrics for the pool
-    const { competitions, loading } = useCompetitions(sector);
+    const [stats, setStats] = useState({ total_volume: 0, total_distributed: 0, contributors: 0 });
+    const [loading, setLoading] = useState(true);
 
-    // Aggregate values across all markets
-    const aggregatePool = competitions.reduce((sum, c) => sum + (c.prize_pool || 0), 0);
-    const aggregateEntries = competitions.reduce((sum, c) => sum + (c.entry_count || 0), 0);
+    useEffect(() => {
+        let isMounted = true;
+        const fetchStats = async () => {
+            setLoading(true);
+            try {
+                // Determine which sector to fetch (if 'all' or specific tab like 'top', just use 'all' for total platform stats)
+                const targetSector = ['all', 'top', 'foryou', 'latest', 'signals'].includes(sector) ? 'all' : sector;
+                const data = await apiFetch<any>(`/competitions/sectors/${targetSector}/stats`);
+                if (isMounted && data) {
+                    setStats(data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch sector stats:", err);
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        fetchStats();
+        return () => { isMounted = false; };
+    }, [sector]);
 
     const pool = {
-        totalPool: aggregatePool,
-        contributors: aggregateEntries,
-        // Approximate distributed/remaining for demo (until smart contract settlement endpoints exist)
-        distributed: aggregatePool * 0.35,
-        remaining: aggregatePool * 0.65,
+        totalPool: stats.total_volume || 0,
+        contributors: stats.contributors || 0,
+        distributed: stats.total_distributed || 0,
+        remaining: (stats.total_volume || 0) - (stats.total_distributed || 0),
         multiplier: 1.5,
     };
 
     const avgContribution = pool.contributors > 0 ? (pool.totalPool / pool.contributors).toFixed(2) : '0';
-    const fillPercent = ((pool.distributed / pool.totalPool) * 100).toFixed(0);
+    const fillPercent = pool.totalPool > 0 ? ((pool.distributed / pool.totalPool) * 100).toFixed(0) : '0';
 
     return (
         <div className="glass-card card-body animate-in">
@@ -37,7 +54,7 @@ export default function ValueCreationPool({ sector = 'all' }: { sector?: string 
                 </div>
             ) : (
                 <>
-                    <div className="pool-amount" style={{ fontSize: '1.6rem', margin: '0.5rem 0' }}>{pool.totalPool.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</div>
+                    <div className="pool-amount" style={{ fontSize: '1.6rem', margin: '0.5rem 0' }}>{pool.totalPool.toLocaleString(undefined, { maximumFractionDigits: 2 })} SOL</div>
 
                     <div className="pool-bar" style={{ margin: '0.5rem 0' }}>
                         <div className="pool-fill" style={{ width: `${fillPercent}%` }} />
@@ -49,8 +66,8 @@ export default function ValueCreationPool({ sector = 'all' }: { sector?: string 
                         color: 'var(--text-muted)',
                         marginBottom: '0.6rem',
                     }}>
-                        <span>Distributed: {pool.distributed.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</span>
-                        <span>Remaining: {pool.remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })} SOL</span>
+                        <span>Distributed: {pool.distributed.toLocaleString(undefined, { maximumFractionDigits: 2 })} SOL</span>
+                        <span>Remaining: {pool.remaining.toLocaleString(undefined, { maximumFractionDigits: 2 })} SOL</span>
                     </div>
 
                     <div className="stat-row" style={{ padding: '0.4rem 0' }}>

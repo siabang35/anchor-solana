@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { useCompetitionPool, PoolStake } from '@/hooks/usePool';
+import { apiFetch } from '@/lib/supabase';
 
 const SECTOR_COLORS: Record<string, string> = {
     politics: '#818cf8',
@@ -36,8 +38,52 @@ interface Props {
 }
 
 export default function CompetitionPoolWinners({ competitionId, sector }: Props) {
-    const { pool, winners, stakes, loading } = useCompetitionPool(competitionId);
+    const { publicKey } = useWallet();
+    const { pool, winners, stakes, loading, refetch } = useCompetitionPool(competitionId);
     const sectorColor = SECTOR_COLORS[sector] || '#818cf8';
+    const [claimingId, setClaimingId] = useState<string | null>(null);
+
+    const handleClaim = async (winnerId: string) => {
+        if (!publicKey) {
+            alert('Please connect your Solana wallet to claim this prize.');
+            return;
+        }
+
+        if (claimingId === winnerId) return; // Anti-double-click debounce
+
+        // Anti-manipulation: Explicit user confirmation
+        const confirmed = window.confirm(
+            'Confirm Claim Request\n\n' +
+            'You are about to claim this prize to your connected wallet.\n' +
+            `Wallet: ${publicKey.toString().slice(0, 8)}...${publicKey.toString().slice(-6)}\n\n` +
+            'Do you want to proceed?'
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setClaimingId(winnerId);
+            const res = await apiFetch<any>('/pool/claim', {
+                method: 'POST',
+                body: JSON.stringify({ winner_id: winnerId }),
+                headers: { 'x-user-id': publicKey.toString() }
+            });
+            
+            if (res.success) {
+                alert(`✅ Prize claimed successfully!\n\nTransaction: ${res.tx}`);
+                refetch();
+            } else {
+                throw new Error(res.message || 'Unknown error occurred during claim');
+            }
+        } catch (err: any) {
+            console.error('Claim Error:', err);
+            // Handle HTTP error responses gracefully
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to claim prize';
+            alert(`❌ Claim Failed\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
+        } finally {
+            setClaimingId(null);
+        }
+    };
 
     if (!competitionId) return null;
 
@@ -266,8 +312,7 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                         <span>{winner.prediction_count} preds</span>
                                                         <span>·</span>
                                                         <span style={{ color: '#10b981', fontWeight: 700 }}>{winner.final_accuracy?.toFixed(1) || '0.0'}%</span>
-                                                        {/* On-chain TX link */}
-                                                        {winner.disburse_tx && (
+                                                        {winner.disburse_tx ? (
                                                             <>
                                                                 <span>·</span>
                                                                 <button
@@ -282,7 +327,22 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                                     TX: {shortTx(winner.disburse_tx)} ↗
                                                                 </button>
                                                             </>
-                                                        )}
+                                                        ) : publicKey && ((winner as any).user_id === publicKey.toString() || winner.winner_wallet === publicKey.toString()) && !winner.claimed ? (
+                                                            <>
+                                                                <span>·</span>
+                                                                <button
+                                                                    onClick={() => handleClaim((winner as any).id)}
+                                                                    disabled={claimingId === (winner as any).id}
+                                                                    style={{
+                                                                        background: 'var(--accent-green)', border: 'none', cursor: 'pointer',
+                                                                        color: '#fff', fontSize: '0.5rem', fontFamily: 'var(--font-mono)',
+                                                                        padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold'
+                                                                    }}
+                                                                >
+                                                                    {claimingId === (winner as any).id ? 'Claiming...' : 'Claim Prize'}
+                                                                </button>
+                                                            </>
+                                                        ) : null}
                                                     </div>
                                                 </div>
 

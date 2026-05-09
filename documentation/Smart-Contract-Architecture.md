@@ -14,7 +14,7 @@ The ExoDuZe smart contract is the on-chain backbone of the probability trading p
 
 | Principle | Implementation |
 |-----------|---------------|
-| **Non-Zero-Sum** | Even losing positions receive 50% refund from the pool |
+| **100% Risk** | All stakes are fully committed to the prize pool — no refunds on loss |
 | **Bonding Curve Pricing** | Position cost increases with market supply (linear approximation) |
 | **Agent Quota System** | Per-user PDA limits agent deploys (10 free tier) |
 | **Competition Timing** | Markets enforce `competition_start` and `competition_end` timestamps |
@@ -315,12 +315,12 @@ reward_with_multiplier = base_reward × 1.5
 total_payout = original_amount + reward_with_multiplier
 ```
 
-**Non-Zero-Sum (Incorrect Direction):**
+**Incorrect Direction (100% Risk Policy — v2.1):**
 ```
-refund = original_amount × 50%
+refund = 0  // No refund. 100% of the stake is forfeited to the prize pool.
 ```
 
-Even losing traders receive 50% of their position back, ensuring the platform operates on a non-zero-sum basis.
+> **v2.1 Change:** The previous 50% refund for losing positions was removed. All stakes are now fully at risk, maximizing prize pool incentives for winners.
 
 ---
 
@@ -501,7 +501,8 @@ The generated IDL is stored at `app/src/lib/idl/exoduze.json` and is used by the
 | Date | TX Signature | Type | Changes |
 |------|-------------|------|---------|
 | 2026-05-09 | `4a5gM86T...8b2Vo` | Upgrade | Added `admin_disburse_prize`, fixed `claim_pool_prize` (removed 1.5x multiplier, PDA invoke_signed), registered pool subsystem |
+| 2026-05-10 | — | Backend | 100% Risk Policy enforced (`refund_rate: 0`), multi-winner settlement (migration 077-078), Zod env validation fix for treasury key |
 
 ---
 
-*Last Updated: 2026-05-09 — Pool Settlement Hardening*
+*Last Updated: 2026-05-10 — 100% Risk Policy, Multi-Winner Settlement & Env Validation Hardening*

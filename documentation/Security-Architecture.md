@@ -82,6 +82,7 @@ To prevent Denial of Service (DoS) and stack-overflow attacks:
 -   **Rate Limiting**:
     -   **API**: Global limit of 300 req/min per IP using `@fastify/rate-limit`.
     -   **Auth**: Stricter hook-based limit of 5 req/min for login/signup endpoints.
+    -   **Claim API (`ClaimRateLimitGuard`)**: Strict domain-specific threshold of 10 requests / 5 mins per IP + Wallet, with automatic IP/Wallet blocking (anti-brute-force).
 
 ### 4.3 Connection Security (OWASP A04:2021)
 To mitigate Slowloris and Chunking attacks, the Fastify HTTP Engine enforces strict timeouts:
@@ -157,14 +158,17 @@ The platform uses a **Solana Devnet Treasury Keypair** for automated on-chain op
 | **UI Truncation** | Display-only truncation (`shortTx()`) with full hash in `title` attribute and `href` |
 | **Fallback Chain** | Treasury TX → Devnet Airdrop → `null` (graceful degradation) |
 
-### 7.3 Prize Disbursement Security
+### 7.3 Prize Disbursement Security (Pull System)
+
+In v2.1, the system migrated from a cron-driven "Push" disbursement to a highly secure, user-initiated "Pull" Claim system.
 
 | Control | Description |
 |---------|-------------|
-| **Server-Side Only** | Disbursement triggered exclusively by `RealtimeCompetitionSeederService` (cron) |
-| **Double-Spend Prevention** | Pool status transitions `pending → settling → settled` with PostgreSQL row-level locking |
-| **Audit Trail** | Every disbursement TX is recorded in `pool_winners.disburse_tx` and `pool_settlement_audit` |
-| **Wallet Resolution** | Winner wallets resolved from authenticated user profiles — never from client input |
+| **Concurrency Locking (Mutex)** | In-memory `claimLocks` Set prevents parallel requests from double-claiming the same prize. |
+| **Pessimistic Double-Check** | Claim status (`claimed = false`) and pool status (`settlement_status = settled`) are verified immediately before and after the on-chain transaction. |
+| **Multi-Layer Validation** | Validates the requesting wallet against the agent's raw `walletAddress` AND the `user_id` profile recursively. |
+| **Audit Trail** | Both successful transfers and blocked attempts (e.g., race conditions, unauthorized) are logged to `pool_settlement_audit`. |
+| **ClaimRateLimitGuard** | Blocks IP/Wallets that attempt rapid, brute-force claim injections across multiple endpoints. |
 | **Amount Validation** | Prize amounts calculated server-side from `distributable_pool × share_bps / 10000` |
 | **PDA Signing (v2)** | Smart contract uses `invoke_signed` with PDA seeds for vault withdrawal — no raw lamport manipulation |
 | **1.5x Multiplier Removed (v2)** | `claim_pool_prize` no longer applies `POOL_MULTIPLIER`, preventing vault over-drain |
@@ -190,6 +194,14 @@ Before deploying to production, verify:
 - [ ] File upload limits are enforced (5MB max)
 - [ ] Smart contract is deployed with latest security fixes (`anchor deploy`)
 
+### 8.1 Zod Environment Validation (Critical)
+
+The backend uses a **Zod schema** (`api/src/config/env.validation.ts`) to validate all environment variables at startup. Zod's default behavior is to **strip unrecognized keys** — any variable NOT registered in the schema will be silently discarded by `ConfigService`.
+
+> ⚠️ **Gotcha**: If you add a new secret (e.g., `MY_NEW_API_KEY`) to `.env` but forget to add it to the Zod schema, `ConfigService.get('MY_NEW_API_KEY')` will return `undefined` at runtime with **no error message**. This was the root cause of the `SOLANA_TREASURY_PRIVATE_KEY is not set` production incident.
+
+**Rule**: Every new environment variable **must** be registered in `envSchema` in `env.validation.ts` before it can be accessed via `ConfigService`.
+
 ---
 
-*Last Updated: 2026-05-09 — Fastify Migration & OWASP Top 10 Security Hardening*
+*Last Updated: 2026-05-10 — Fastify Migration, OWASP Top 10 Security Hardening & Zod Env Validation*

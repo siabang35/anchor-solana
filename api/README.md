@@ -13,7 +13,7 @@ A robust, highly scalable [NestJS](https://nestjs.com/) backend powering the **E
   - Solana (`@solana/web3.js`, `@coral-xyz/anchor`)
   - Ethereum/EVM (`ethers.js`)
   - Sui (`@mysten/sui.js`)
-- **Security:** Helmet, Express Rate Limit, Fastify integration
+- **Security:** `@fastify/helmet` (CSP/XSS protection), `@fastify/rate-limit` (Anti-DDoS), and Zod (Strict Environment Validation).
 - **Documentation:** Swagger OpenAPI
 - **Language:** TypeScript
 
@@ -130,6 +130,7 @@ This project is configured for automated deployment on [Render](https://render.c
 
 ## 🛡️ Security Best Practices
 
-- **Rate Limiting:** Global rate limiting is applied to prevent DDoS attacks.
-- **Data Validation:** Strict payload validation using `class-validator` and `zod`.
-- **Headers Security:** Protection against common vulnerabilities via `@fastify/helmet`.
+- **Rate Limiting:** Global rate limiting is applied via `@fastify/rate-limit` to prevent DDoS attacks.
+- **Environment Validation:** Strict startup validation using `Zod` to ensure all critical keys (RPC, Treasuries, JWT) are securely formatted.
+- **Data Validation:** Strict payload validation using `class-validator`.
+- **Headers Security:** Protection against common vulnerabilities and HPP (HTTP Parameter Pollution) via `@fastify/helmet`.

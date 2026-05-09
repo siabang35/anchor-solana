@@ -43,11 +43,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
     while (true) {
         try {
             const res = await fetch(`${API_BASE_URL}${sanitizedPath}`, {
+                ...options,
                 headers: {
                     'Content-Type': 'application/json',
                     ...(options?.headers || {}),
                 },
-                ...options,
             });
 
             if (!res.ok) {
