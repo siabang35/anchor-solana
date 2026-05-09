@@ -33,6 +33,7 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
 *   **Security & Guarding:** 
     *   Enforces strict payload validation, JWT Guards (`JwtAuthGuard`), and Custom Wallet/Solana Authentication interceptors.
     *   **Robust Rate Limiting:** Global rate limiters (100 req/min), Authentication API limiters (5 req/min), and Anti-Scraping Public API limiters (120 req/min for UI polling protection).
+    *   **Strict Routing & API Contracts:** Implements explicit `(.*)` wildcard paths compatible with Express 5+ / `path-to-regexp` v8 standard. Exposes a circular-dependency hardened Swagger OpenAPI documentation interface at `/docs` (`/api/v1/docs`) utilizing explicit string-typed enum resolution to maintain SchemaObjectFactory stability.
 
 ### 2.3 Database Layer (PostgreSQL / Supabase)
 *   **Purpose:** High-performance persistence layer with Real-Time pub/sub enabled.

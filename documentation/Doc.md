@@ -169,6 +169,7 @@ sequenceDiagram
 | **BaaS** | Supabase | Latest | Auth, Database, Realtime |
 | **Smart Contract** | Anchor | 0.32.1 | Solana program framework |
 | **Language** | TypeScript / Rust | 5.x / 1.79+ | Type safety |
+| **Documentation** | Swagger/OpenAPI | Latest | Hardened API documentation interface |
 
 ### 3.2 Security & Auth
 

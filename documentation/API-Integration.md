@@ -884,5 +884,30 @@ const DATA_SOURCE_PRIORITY: Record<DataSource, number> = {
 
 ---
 
-*Last Updated: January 15, 2026*
-*Version: 2.0 - Multi-Sport API Integration*
+## API Documentation & Routing
+
+### Swagger OpenAPI
+
+The API documentation is accessible at `/docs` (or `/api/v1/docs`). It provides interactive endpoints for all 7 sports categories, market pipelines, and AI agent triggers.
+
+**Important Note on Swagger Enums:**
+To prevent NestJS `SchemaObjectFactory` circular dependency crashes when traversing heavily nested enum values like `SportType`, all Swagger decorators (`@ApiProperty`, `@ApiQuery`, `@ApiParam`) must explicitly declare `type: 'string'` alongside their `enum` array.
+
+```typescript
+@ApiParam({ 
+    name: 'sport', 
+    type: 'string', 
+    enum: ['afl', 'baseball', 'basketball', 'football', 'formula1', 'handball', 'hockey', 'mma', 'nba', 'nfl', 'rugby', 'volleyball'], 
+    description: 'Sport type (e.g., football, nba)' 
+})
+```
+
+### Express Routing
+
+All wildcard routes within the `AppModule` middleware configurations strictly adhere to `path-to-regexp` v8 standard utilized by Express 5+. 
+Paths are explicitly matched using regex groupings `(.*)` instead of deprecated naked asterisks `*` to resolve `LegacyRouteConverter` warnings and ensure reliable middleware application across all API requests.
+
+---
+
+*Last Updated: May 09, 2026*
+*Version: 2.1 - Multi-Sport API & Documentation Integration*

@@ -227,6 +227,7 @@ async function bootstrap() {
             SwaggerModule.setup('docs', app, document);
             logger.log('📚 Swagger UI enabled (development mode only)');
         } catch (swaggerErr: any) {
+            console.error('SWAGGER ERROR STACK:', swaggerErr.stack || swaggerErr);
             logger.warn(`⚠️ Swagger document generation failed (non-critical): ${swaggerErr.message}`);
             logger.warn('   API will run without Swagger UI. Fix enum circular deps to restore docs.');
         }

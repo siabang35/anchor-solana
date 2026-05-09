@@ -184,6 +184,7 @@ The platform enforces that data used in any past competition is **never reused**
 | <img src="https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white" /> | Database, Auth, Realtime |
 | <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" /> | 75+ migrations, triggers, RPC functions |
 | <img src="https://img.shields.io/badge/Groq-F55036?logo=groq&logoColor=white" /> | LLM inference (Qwen 2.5 7B, multi-tier fallback) |
+| <img src="https://img.shields.io/badge/Swagger-85EA2D?logo=swagger&logoColor=black" /> | API Documentation & interactive console (Circular-Dependency Hardened) |
 
 ### Smart Contract
 | Technology | Purpose |
@@ -334,6 +335,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | **API** | Rate limiting (100/min global, 5/min auth, 120/min public) |
 | **Auth** | Wallet-based authentication + auto-provisioning |
 | **CSP** | Content Security Policy enforcement |
+| **Routing** | Strict `(.*)` wildcard patterns conforming to `path-to-regexp` v8 standard |
 | **Keys** | Treasury key in `.env` only — never in code, logs, or frontend |
 | **JWT** | Runtime validation of `JWT_SECRET` with fail-fast on misconfiguration |
 
