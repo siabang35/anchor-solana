@@ -16,9 +16,9 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 const RANK_CONFIG = [
-    { emoji: '🥇', label: '1st Place', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', glow: 'rgba(251,191,36,0.3)', color: '#fbbf24', share: '50%' },
-    { emoji: '🥈', label: '2nd Place', gradient: 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)', glow: 'rgba(148,163,184,0.25)', color: '#94a3b8', share: '30%' },
-    { emoji: '🥉', label: '3rd Place', gradient: 'linear-gradient(135deg, #cd7f32 0%, #a0522d 100%)', glow: 'rgba(205,127,50,0.25)', color: '#cd7f32', share: '20%' },
+    { emoji: '🥇', label: '1st Place', gradient: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', glow: 'rgba(251,191,36,0.3)', color: '#fbbf24' },
+    { emoji: '🥈', label: '2nd Place', gradient: 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)', glow: 'rgba(148,163,184,0.25)', color: '#94a3b8' },
+    { emoji: '🥉', label: '3rd Place', gradient: 'linear-gradient(135deg, #cd7f32 0%, #a0522d 100%)', glow: 'rgba(205,127,50,0.25)', color: '#cd7f32' },
 ];
 
 /** Open Solscan in new tab for a devnet TX */
@@ -225,6 +225,19 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                 <span style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: sectorColor }}>
                                                     {Number(s.stake_amount).toFixed(2)} SOL
                                                 </span>
+                                                {s.verified_onchain ? (
+                                                    <span style={{
+                                                        fontSize: '0.4rem', fontWeight: 800, padding: '1px 4px',
+                                                        borderRadius: '3px', background: 'rgba(20,241,149,0.12)',
+                                                        color: '#14f195', letterSpacing: '0.03em',
+                                                    }}>✓ VERIFIED</span>
+                                                ) : s.onchain_tx ? (
+                                                    <span style={{
+                                                        fontSize: '0.4rem', fontWeight: 700, padding: '1px 4px',
+                                                        borderRadius: '3px', background: 'rgba(245,158,11,0.12)',
+                                                        color: '#f59e0b',
+                                                    }}>ON-CHAIN</span>
+                                                ) : null}
                                             </div>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                                 {s.onchain_tx ? (
@@ -355,7 +368,11 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                     }}>
                                                         {Number(winner.prize_amount || 0).toFixed(4)}
                                                     </div>
-                                                    <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)' }}>SOL ({cfg.share})</div>
+                                                    <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)' }}>
+                                                        SOL {(winner as any).prize_share_bps
+                                                            ? `(${((winner as any).prize_share_bps / 100).toFixed(1)}%)`
+                                                            : ''}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -373,16 +390,14 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                             textAlign: 'center',
                         }}>
                             <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '2px', letterSpacing: '0.04em' }}>
-                                PRIZE DISTRIBUTION (after 2% fee)
+                                PRIZE DISTRIBUTION (Stake × Rank Weighted)
                             </div>
-                            <div style={{ fontSize: '0.65rem', fontWeight: 600, color: sectorColor }}>
-                                🥇 50% · 🥈 30% · 🥉 20%
+                            <div style={{ fontSize: '0.6rem', fontWeight: 600, color: sectorColor }}>
+                                🥇 3.0× Stake · 🥈 2.0× Stake · 🥉 1.0× Stake
                             </div>
-                            {distributable > 0 && (
-                                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
-                                    🥇 {(distributable * 0.5).toFixed(4)} · 🥈 {(distributable * 0.3).toFixed(4)} · 🥉 {(distributable * 0.2).toFixed(4)} SOL
-                                </div>
-                            )}
+                            <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', marginTop: '3px', fontStyle: 'italic' }}>
+                                Prize = (your_stake × rank_weight) ÷ Σ(stakes × weights) × pool
+                            </div>
                         </div>
                     </>
                 )}

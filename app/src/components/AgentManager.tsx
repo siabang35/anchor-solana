@@ -510,34 +510,64 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                 </div>
                                             </div>
                                         )}
-                                        {agent.pool_stakes && agent.pool_stakes.length > 0 && agent.pool_stakes[0].onchain_tx && (
-                                            <div style={{
-                                                background: 'rgba(20,241,149,0.05)', border: '1px solid rgba(20,241,149,0.2)',
-                                                borderRadius: '8px', padding: '0.5rem', marginBottom: '0.75rem',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                                            }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                                    <span style={{ fontSize: '0.55rem', color: '#14f195', textTransform: 'uppercase', fontWeight: 700 }}>
-                                                        🔗 On-Chain Stake
-                                                    </span>
-                                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                                                        {agent.pool_stakes[0].stake_amount} SOL Staked
-                                                    </span>
+                                        {(() => {
+                                            // Find the best pool_stake: prefer verified_onchain, then onchain_tx, then highest amount
+                                            const stakes = agent.pool_stakes || [];
+                                            if (stakes.length === 0) return null;
+                                            const bestStake = stakes.reduce((best: any, s: any) => {
+                                                if (!best) return s;
+                                                // Tier 1: Prefer verified on-chain entry
+                                                if (s.verified_onchain && !best.verified_onchain) return s;
+                                                if (!s.verified_onchain && best.verified_onchain) return best;
+                                                // Tier 2: Prefer entry with on-chain TX
+                                                if (s.onchain_tx && !best.onchain_tx) return s;
+                                                if (!s.onchain_tx && best.onchain_tx) return best;
+                                                // Tier 3: Among same status, prefer higher amount
+                                                return Number(s.stake_amount) > Number(best.stake_amount) ? s : best;
+                                            }, null);
+                                            if (!bestStake) return null;
+                                            const isVerified = bestStake.verified_onchain || !!bestStake.onchain_tx;
+                                            return (
+                                                <div style={{
+                                                    background: isVerified ? 'rgba(20,241,149,0.05)' : 'rgba(245,158,11,0.05)',
+                                                    border: `1px solid ${isVerified ? 'rgba(20,241,149,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                                                    borderRadius: '8px', padding: '0.5rem', marginBottom: '0.75rem',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                                                }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                        <span style={{ fontSize: '0.55rem', color: isVerified ? '#14f195' : '#f59e0b', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                            {isVerified ? '✅' : '🔗'} On-Chain Stake
+                                                            {isVerified && (
+                                                                <span style={{
+                                                                    fontSize: '0.4rem', padding: '1px 4px',
+                                                                    borderRadius: '3px', background: 'rgba(20,241,149,0.15)',
+                                                                    color: '#14f195', fontWeight: 800,
+                                                                }}>VERIFIED</span>
+                                                            )}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                                            {Number(bestStake.stake_amount).toFixed(4)} SOL Staked
+                                                        </span>
+                                                    </div>
+                                                    {bestStake.onchain_tx ? (
+                                                        <a 
+                                                            href={`https://solscan.io/tx/${bestStake.onchain_tx}?cluster=devnet`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style={{
+                                                                fontSize: '0.65rem', color: '#14f195', textDecoration: 'none',
+                                                                display: 'flex', alignItems: 'center', gap: '4px',
+                                                                padding: '4px 8px', background: 'rgba(20,241,149,0.1)', borderRadius: '4px'
+                                                            }}
+                                                        >
+                                                            View Stake ↗
+                                                        </a>
+                                                    ) : (
+                                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>Pending On-Chain</span>
+                                                    )}
                                                 </div>
-                                                <a 
-                                                    href={`https://solscan.io/tx/${agent.pool_stakes[0].onchain_tx}?cluster=devnet`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    style={{
-                                                        fontSize: '0.65rem', color: '#14f195', textDecoration: 'none',
-                                                        display: 'flex', alignItems: 'center', gap: '4px',
-                                                        padding: '4px 8px', background: 'rgba(20,241,149,0.1)', borderRadius: '4px'
-                                                    }}
-                                                >
-                                                    View Stake ↗
-                                                </a>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         {/* On-Chain Disbursed Prize / Claimable Prize */}
                                         {agent.pool_winners && agent.pool_winners.length > 0 && (

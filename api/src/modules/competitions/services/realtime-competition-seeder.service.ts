@@ -53,6 +53,8 @@ interface ETLCandidate {
     sourceTable?: string;
     /** Source-level anti-recycling: unique ID in the source table */
     sourceId?: string;
+    /** Tags for sub-category filtering (e.g., sport type: 'football', 'basketball') */
+    tags?: string[];
 }
 
 interface ClusteredCompetition {
@@ -66,6 +68,8 @@ interface ClusteredCompetition {
     signals: any[];
     /** Tracks which ETL sources were consumed to create this competition */
     consumedSources: Array<{ source_table: string; source_id: string; source_title?: string }>;
+    /** Tags for sub-category filtering (e.g., sport type: 'football', 'basketball') */
+    tags?: string[];
 }
 
 @Injectable()
@@ -519,6 +523,8 @@ export class RealtimeCompetitionSeederService {
                     bestTopic.description,
                     horizon,
                     bestTopic.baseProbability,
+                    undefined, // imageUrl
+                    bestTopic.tags, // sub-category tags (e.g., sport type)
                 );
 
                 if (comp) {
@@ -766,6 +772,9 @@ export class RealtimeCompetitionSeederService {
                         ? (startDate.getTime() - Date.now() < 24 * 60 * 60 * 1000 ? 'today live' : 'tomorrow upcoming')
                         : '';
 
+                    // Map sport type to sub-category ID matching frontend CATEGORIES
+                    const sportSubCategory = this.mapSportToSubCategory(event.sport);
+
                     allCandidates.push({
                         title: title,
                         cleanTitle: this.cleanTitle(title),
@@ -778,6 +787,7 @@ export class RealtimeCompetitionSeederService {
                         payload: event,
                         sourceTable: 'sports_events',
                         sourceId: event.id ? String(event.id) : undefined,
+                        tags: sportSubCategory ? [sportSubCategory, event.sport || 'sports'] : [event.sport || 'sports'],
                     });
                 }
             } else {
@@ -1022,6 +1032,8 @@ export class RealtimeCompetitionSeederService {
                             source_id: c.sourceId!,
                             source_title: c.title?.substring(0, 200),
                         })),
+                    // Propagate tags from best candidate (sport type, sub-category, etc.)
+                    tags: best.tags,
                 });
             }
         } catch (e: any) {
@@ -1091,14 +1103,14 @@ export class RealtimeCompetitionSeederService {
                 'Crypto Institutional Flow Analysis',
             ],
             sports: [
-                'Championship Contender Performance Forecast',
-                'League Standings Movement Prediction',
-                'Player Transfer Market Impact Analysis',
-                'Tournament Bracket Outcome Forecast',
-                'Team Form Momentum Tracker',
-                'Injury Impact Assessment Prediction',
-                'Season Playoff Race Analysis',
-                'Athletic Performance Index Forecast',
+                'Football: Championship Contender Performance Forecast',
+                'Basketball: League Standings Movement Prediction',
+                'Football: Player Transfer Market Impact Analysis',
+                'Cricket: Tournament Bracket Outcome Forecast',
+                'Tennis: Grand Slam Contender Momentum Tracker',
+                'MMA: Injury Impact Assessment Prediction',
+                'Basketball: Season Playoff Race Analysis',
+                'Esports: Championship Performance Index Forecast',
             ],
             economy: [
                 'GDP Growth Rate Forecast',
@@ -1130,17 +1142,30 @@ export class RealtimeCompetitionSeederService {
         for (let i = 0; i < count; i++) {
             const templateIdx = (idx + i) % categoryTemplates.length;
             const uniqueSuffix = ((now + i) % 100000).toString(36);
-            const title = `${categoryTemplates[templateIdx]} [${uniqueSuffix}]`;
+            const templateTitle = categoryTemplates[templateIdx];
+            const title = `${templateTitle} [${uniqueSuffix}]`;
+
+            // For sports: extract sub-category from template prefix (e.g., "Football: ...")
+            let tags: string[] | undefined;
+            if (category === 'sports') {
+                const colonIdx = templateTitle.indexOf(':');
+                if (colonIdx > 0) {
+                    const sportPrefix = templateTitle.substring(0, colonIdx).trim().toLowerCase();
+                    const subCat = this.mapSportToSubCategory(sportPrefix);
+                    if (subCat) tags = [subCat, sportPrefix];
+                }
+            }
 
             candidates.push({
                 title,
                 cleanTitle: this.cleanTitle(title),
-                description: `Live prediction market: ${categoryTemplates[templateIdx]}`,
+                description: `Live prediction market: ${templateTitle}`,
                 baseProbability: 0.45 + Math.random() * 0.1,
                 textRaw: `${title} ${category} prediction market forecast analysis`,
                 source: 'trending',
                 category,
                 urgencyHints: `${category} forecast analysis prediction`,
+                tags,
             });
         }
 
@@ -1159,6 +1184,38 @@ export class RealtimeCompetitionSeederService {
             title = `${title} — outcome prediction?`;
         }
         return title;
+    }
+
+    /**
+     * Maps a raw sport type string (from sports_events.sport) to the frontend's
+     * sub-category ID defined in CATEGORIES (dummy-data.ts).
+     * 
+     * Frontend sub-categories: football, basketball, cfl, cricket, tennis, mma, esports
+     */
+    private mapSportToSubCategory(sport?: string): string | undefined {
+        if (!sport) return undefined;
+        const s = sport.toLowerCase().trim();
+        const map: Record<string, string> = {
+            // Football / Soccer
+            'soccer': 'football', 'football': 'football', 'futbol': 'football',
+            // Basketball
+            'basketball': 'basketball', 'nba': 'basketball',
+            // CFL / American Football
+            'american football': 'cfl', 'cfl': 'cfl', 'nfl': 'cfl', 'rugby': 'cfl',
+            // Cricket
+            'cricket': 'cricket', 'ipl': 'cricket',
+            // Tennis
+            'tennis': 'tennis',
+            // MMA / Boxing
+            'mma': 'mma', 'boxing': 'mma', 'ufc': 'mma', 'fighting': 'mma',
+            // Esports
+            'esports': 'esports', 'gaming': 'esports', 'lol': 'esports',
+            'dota': 'esports', 'csgo': 'esports', 'valorant': 'esports',
+            // Common sports API labels
+            'ice hockey': 'cfl', 'hockey': 'cfl',
+            'baseball': 'cfl', 'motorsport': 'cfl',
+        };
+        return map[s] || undefined;
     }
 
     private normalizeForDedup(title: string): string {

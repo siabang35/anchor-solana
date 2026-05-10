@@ -51,6 +51,7 @@ export interface ForecasterAgent {
     pool_stakes?: Array<{
         stake_amount: number;
         onchain_tx: string | null;
+        verified_onchain: boolean;
     }>;
     pool_winners?: Array<{
         id: string;
@@ -193,7 +194,7 @@ export function useRealtimeAgents(userId: string | null): UseRealtimeAgentsResul
         try {
             await apiFetch(`/agents/forecasters/${agentId}/hard`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
+                headers: { 'x-user-id': userId },
             });
             setForecasters(prev => prev.filter(a => a.id !== agentId));
             // Deleting frees up a slot if the agent wasn't already terminated

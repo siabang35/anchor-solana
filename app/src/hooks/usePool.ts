@@ -8,6 +8,7 @@ export interface PoolStake {
     agent_id: string;
     stake_amount: number;
     onchain_tx: string | null;
+    verified_onchain: boolean;
     staked_at: string;
     status: string;
 }
@@ -106,11 +107,11 @@ export function useSectorPool(sector: string): PoolWithWinners {
                 fetchData();
             })
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: '*',
                 schema: 'public',
                 table: 'pool_stakes',
             }, () => {
-                // Instant refetch when ANY new stake is added
+                // Instant refetch when ANY stake is added, updated, or removed
                 fetchData();
             })
             .subscribe();
@@ -220,14 +221,14 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
                 // Immediately refetch to get updated totals
                 fetchData();
             })
-            // Listen to new stakes being added to this competition
+            // Listen to stake changes (INSERT, UPDATE, DELETE)
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: '*',
                 schema: 'public',
                 table: 'pool_stakes',
                 filter: `competition_id=eq.${competitionId}`
             }, (payload) => {
-                console.log('[Pool Realtime] New stake!', payload.new);
+                console.log('[Pool Realtime] Stake changed:', payload.eventType);
                 // Immediately refetch — the DB trigger will have already updated competition_pools
                 fetchData();
             })

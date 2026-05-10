@@ -662,16 +662,25 @@ export class PoolService {
     }
 
     /**
+     * @deprecated Use the frontend on-chain stake flow + /agents/wager endpoint instead.
+     * This method should NOT be called for new deployments. Pool stakes are created
+     * ONLY after the frontend confirms a real on-chain Solana TX via /agents/wager.
+     *
      * Auto-create a pool stake with a REAL Solana devnet transaction.
-     * Called automatically when an agent is deployed to a competition.
-     * The TX hash is trackable on Solscan.
+     * stakeAmount is REQUIRED — no default to prevent ghost entries with wrong amounts.
      */
     async autoStakeWithDevnetTx(
         competitionId: string,
         userId: string,
         agentId: string,
-        stakeAmount: number = 0.1,
+        stakeAmount: number,
     ): Promise<{ stakeId: string; onchainTx: string | null }> {
+        // Guard: reject calls without an explicit stake amount
+        if (!stakeAmount || stakeAmount <= 0) {
+            this.logger.warn(`autoStakeWithDevnetTx called without valid stakeAmount (${stakeAmount}), skipping`);
+            return { stakeId: '', onchainTx: null };
+        }
+
         const supabase = this.supabaseService.getAdminClient();
 
         // 1. Get or verify pool exists
@@ -722,6 +731,7 @@ export class PoolService {
                 agent_id: agentId,
                 stake_amount: stakeAmount,
                 onchain_tx: onchainTx,
+                verified_onchain: !!onchainTx,
                 status: 'active',
             })
             .select('id')

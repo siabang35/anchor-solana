@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, Max, IsEnum, IsUUID, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsNumber, Min, Max, IsEnum, IsUUID, IsArray } from 'class-validator';
 
 export enum AgentDirection {
     LONG = 'long',
@@ -52,6 +52,12 @@ export class DeployForecastingAgentDto {
     @IsArray()
     @IsUUID('4', { each: true })
     competition_ids?: string[];
+
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Max(5)
+    stake_amount?: number;
 }
 
 export class ToggleAgentDto {

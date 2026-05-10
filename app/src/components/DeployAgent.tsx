@@ -109,15 +109,29 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
     const selectedCategory = useMemo(() => CATEGORIES.find(c => c.id === categoryId), [categoryId]);
     const availableMarkets = useMemo(() => {
-        return competitions
-            .filter(c => c.sector === categoryId)
-            .map(c => ({
+        let filtered = competitions.filter(c => c.sector === categoryId);
+        
+        // If a specific discipline (sub-category) is selected, filter by it using tags
+        if (subCategoryId) {
+            filtered = filtered.filter(c => c.tags && c.tags.includes(subCategoryId));
+        }
+
+        return filtered.map(c => {
+            // Find the sub-category ID from tags to highlight the correct discipline pill
+            let mappedSubCategory: string | undefined = undefined;
+            if (c.tags && selectedCategory?.subCategories) {
+                const matchedCat = selectedCategory.subCategories.find(sub => c.tags?.includes(sub.id));
+                if (matchedCat) mappedSubCategory = matchedCat.id;
+            }
+
+            return {
                 id: c.id,
                 title: c.title,
                 outcomes: c.outcomes || ['Bullish', 'Neutral', 'Bearish'],
-                subCategoryId: undefined,
-            }));
-    }, [competitions, categoryId]);
+                subCategoryId: mappedSubCategory,
+            };
+        });
+    }, [competitions, categoryId, subCategoryId, selectedCategory]);
     const selectedMarket = useMemo(() => availableMarkets.find(m => marketIds.length > 0 && m.id === marketIds[0]), [availableMarkets, marketIds]);
     const selectedTier = useMemo(() => MODEL_TIERS.find(t => t.id === modelTierId) || MODEL_TIERS[0], [modelTierId]);
 
@@ -199,10 +213,12 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             const matchingType = agentTypes.find(t => t.sector === categoryId) || agentTypes[0];
 
             const isForecaster = true; // Always forecaster mode
+            const parsedStake = parseFloat(stakeAmount) || 0;
             const body = {
                 name: agentName.trim(),
                 system_prompt: strategy,
-                competition_ids: marketIds
+                competition_ids: marketIds,
+                stake_amount: parsedStake > 0 ? parsedStake : undefined,
             };
 
             const endpoint = '/agents/deploy-forecaster';
@@ -645,7 +661,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                 {selectedCategory.subCategories.map(sub => (
                                     <button
                                         key={sub.id}
-                                        onClick={() => setSubCategoryId(sub.id)}
+                                        onClick={() => setSubCategoryId(subCategoryId === sub.id ? '' : sub.id)}
                                         style={{
                                             padding: '0.35rem 0.6rem',
                                             borderRadius: 'var(--radius-round)',
@@ -853,8 +869,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                     <span style={{ color: '#14f195', fontWeight: 700 }}>Solana Devnet</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                                    <span>🏆 Prize Pool Split</span>
-                                    <span style={{ fontWeight: 600 }}>🥇50% · 🥈30% · 🥉20%</span>
+                                    <span>🏆 Prize Pool Model</span>
+                                    <span style={{ fontWeight: 600 }}>Stake × Rank Weighted</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
                                     <span>🛡️ Platform Fee</span>

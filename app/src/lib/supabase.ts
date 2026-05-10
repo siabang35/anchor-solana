@@ -45,7 +45,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
             const res = await fetch(`${API_BASE_URL}${sanitizedPath}`, {
                 ...options,
                 headers: {
-                    'Content-Type': 'application/json',
+                    ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
                     ...(options?.headers || {}),
                 },
             });

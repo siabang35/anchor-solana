@@ -12,7 +12,7 @@ import {
 } from './dto/index.js';
 
 const MAX_FREE_DEPLOYS = 7;
-const DEFAULT_AUTO_STAKE = 0.15; // SOL — default stake per agent deploy
+// No default auto-stake — pool_stakes are created only after real on-chain TX via /agents/wager
 
 // Anchor program constants (must match programs/my-project/src/constants.rs)
 const PROGRAM_ID = '56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7';
@@ -189,6 +189,9 @@ export class AgentsService {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) throw new UnauthorizedException('Wallet not connected or missing User ID');
 
+        // DIAGNOSTIC: Log exactly what the frontend sent
+        this.logger.log(`📥 deployForecaster DTO: stake_amount=${dto.stake_amount}, name=${dto.name}, competitions=${dto.competition_ids?.length || 0}`);
+
         // Use admin client to bypass RLS since the backend already authenticated the user
         const supabase = this.supabaseService.getAdminClient();
 
@@ -224,34 +227,21 @@ export class AgentsService {
             throw new BadRequestException(`Failed to deploy forecaster agent: ${insertError.message}`);
         }
 
-        // 3. STAKE-FIRST FLOW: Create stake → wait for confirmation → register in competition
+        // 3. Register agent in competitions — NO auto-stake here.
+        //    Pool stakes are created ONLY after the frontend's real on-chain
+        //    Solana TX is confirmed, via the /agents/wager endpoint.
+        //    This ensures pool_stakes.stake_amount always matches the
+        //    actual SOL deducted from the user's wallet.
         const stakeResults: Array<{ competition_id: string; stake_status: string; tx?: string }> = [];
 
-        if (competitionIds.length > 0 && this.poolService) {
+        if (competitionIds.length > 0) {
             for (const compId of competitionIds) {
-                let stakeOk = false;
-                let txHash: string | undefined;
-
-                // 3a. Create the on-chain stake (synchronous — wait for TX)
-                try {
-                    this.logger.log(`⏳ Creating stake for agent ${agent.id} in competition ${compId}...`);
-                    const stakeResult = await this.poolService.autoStakeWithDevnetTx(
-                        compId, userId, agent.id, DEFAULT_AUTO_STAKE,
-                    );
-                    txHash = stakeResult.onchainTx || undefined;
-                    stakeOk = true;
-                    this.logger.log(`✅ Stake confirmed for agent ${agent.id} in comp ${compId}: TX=${txHash?.slice(0, 20) || 'local'}`);
-                } catch (stakeErr: any) {
-                    this.logger.warn(`⚠️ Stake failed for comp ${compId} (non-blocking): ${stakeErr.message}`);
-                }
-
-                // 3b. Register agent in the competition (regardless of stake outcome)
                 try {
                     const { error: entryError } = await supabase.from('agent_competition_entries').insert({
                         agent_id: agent.id,
                         competition_id: compId,
                         user_id: userId,
-                        status: stakeOk ? 'active' : 'pending',
+                        status: 'active',
                     });
                     if (entryError) {
                         this.logger.warn(`Competition entry insert error: ${entryError.message}`);
@@ -262,35 +252,16 @@ export class AgentsService {
 
                 stakeResults.push({
                     competition_id: compId,
-                    stake_status: stakeOk ? 'confirmed' : 'failed',
-                    tx: txHash,
+                    stake_status: 'pending_onchain', // Will be confirmed when frontend sends /agents/wager
                 });
             }
 
-            // 3c. Activate the agent if any stake succeeded
-            const anyStakeOk = stakeResults.some(r => r.stake_status === 'confirmed');
-            const newAgentStatus = anyStakeOk ? 'active' : 'active'; // Always activate — stake failure shouldn't block the agent
+            // Activate agent immediately — staking is handled separately by the frontend
             try {
-                await supabase.from('agents').update({ status: newAgentStatus }).eq('id', agent.id);
-                agent.status = newAgentStatus;
-            } catch (updateErr: any) {
-                this.logger.warn(`Agent status update failed: ${updateErr.message}`);
-                agent.status = 'active';
-            }
-        } else if (competitionIds.length > 0) {
-            // No pool service — register directly (dev/testing mode)
-            try {
-                const entries = competitionIds.map(compId => ({
-                    agent_id: agent.id,
-                    competition_id: compId,
-                    user_id: userId,
-                    status: 'active',
-                }));
-                await supabase.from('agent_competition_entries').insert(entries);
                 await supabase.from('agents').update({ status: 'active' }).eq('id', agent.id);
                 agent.status = 'active';
-            } catch (directErr: any) {
-                this.logger.warn(`Direct competition registration failed: ${directErr.message}`);
+            } catch (updateErr: any) {
+                this.logger.warn(`Agent status update failed: ${updateErr.message}`);
                 agent.status = 'active';
             }
         }
@@ -327,7 +298,7 @@ export class AgentsService {
 
         let query = supabase
             .from('agents')
-            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx), pool_winners(id, prize_amount, disburse_tx, claimed, rank, competition_id)', { count: 'exact' })
+            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx, verified_onchain, created_at), pool_winners(id, prize_amount, disburse_tx, claimed, rank, competition_id)', { count: 'exact' })
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -655,7 +626,9 @@ export class AgentsService {
     // ========================
 
     /**
-     * Create a wager between two agents on a competition
+     * Create a wager between two agents on a competition.
+     * wager_amount MUST come from the user's input — never use a default.
+     * The on-chain TX hash (onchain_tx) proves the stake was really transferred.
      */
     async createWager(rawUserId: string, data: {
         agent_id: string;
@@ -665,6 +638,15 @@ export class AgentsService {
     }): Promise<any> {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) throw new UnauthorizedException('Missing User ID');
+
+        // Strict validation: wager_amount must be explicitly provided
+        if (!data.wager_amount || data.wager_amount <= 0 || !isFinite(data.wager_amount)) {
+            throw new BadRequestException('wager_amount must be a positive number matching the on-chain stake');
+        }
+
+        const isVerifiedOnchain = !!(data.onchain_tx && data.onchain_tx.length > 20);
+        this.logger.log(`📥 createWager: ${data.wager_amount} SOL | agent=${data.agent_id.slice(0,8)} | onchain=${isVerifiedOnchain ? data.onchain_tx?.slice(0,16) : 'none'}`);
+
         const supabase = this.supabaseService.getClient();
         const adminSupabase = this.supabaseService.getAdminClient();
 
@@ -699,9 +681,11 @@ export class AgentsService {
             throw new BadRequestException(`Failed to create wager: ${error.message}`);
         }
 
-        // ═══ Also add to competition pool_stakes for prize pool tracking ═══
+        // ═══ UPSERT pool_stakes — update existing or create new ═══
+        // The auto-stake during deploy may have already created an entry.
+        // We UPDATE it with the real on-chain TX hash and correct wager amount
+        // instead of creating a duplicate entry.
         try {
-            // Ensure competition pool exists (auto-created by trigger, but be safe)
             const { data: pool } = await adminSupabase
                 .from('competition_pools')
                 .select('id')
@@ -709,24 +693,99 @@ export class AgentsService {
                 .single();
 
             if (pool) {
-                await adminSupabase
+                // Check if pool_stake already exists for this agent + competition
+                // Also check by user_id since the UNIQUE constraint is (user_id, competition_id)
+                const { data: existingStake } = await adminSupabase
                     .from('pool_stakes')
-                    .insert({
-                        pool_id: pool.id,
-                        competition_id: data.competition_id,
-                        user_id: userId,
-                        agent_id: data.agent_id,
-                        stake_amount: data.wager_amount,
-                        onchain_tx: data.onchain_tx || null,
-                        status: 'active',
-                    })
-                    .select('id')
+                    .select('id, stake_amount, onchain_tx, agent_id')
+                    .eq('competition_id', data.competition_id)
+                    .or(`agent_id.eq.${data.agent_id},user_id.eq.${userId}`)
+                    .limit(1)
                     .single();
 
-                this.logger.log(`Pool stake synced: ${data.wager_amount} SOL → pool ${pool.id}`);
+                if (existingStake) {
+                    // UPDATE existing entry with real TX hash, correct amount, and correct agent_id
+                    const { data: updatedStake, error: updateErr } = await adminSupabase
+                        .from('pool_stakes')
+                        .update({
+                            stake_amount: data.wager_amount,
+                            agent_id: data.agent_id,
+                            onchain_tx: data.onchain_tx || existingStake.onchain_tx || null,
+                            verified_onchain: isVerifiedOnchain || (!!existingStake.onchain_tx),
+                        })
+                        .eq('id', existingStake.id)
+                        .select('id, stake_amount, onchain_tx')
+                        .single();
+
+                    if (updateErr) {
+                        this.logger.warn(`Pool stake UPDATE failed: ${updateErr.message} — falling back to DELETE+INSERT`);
+                        // Fallback: delete old entry and insert fresh one
+                        await adminSupabase.from('pool_stakes').delete().eq('id', existingStake.id);
+                        await adminSupabase
+                            .from('pool_stakes')
+                            .insert({
+                                pool_id: pool.id,
+                                competition_id: data.competition_id,
+                                user_id: userId,
+                                agent_id: data.agent_id,
+                                stake_amount: data.wager_amount,
+                                onchain_tx: data.onchain_tx || null,
+                                verified_onchain: isVerifiedOnchain,
+                                status: 'active',
+                            })
+                            .select('id')
+                            .single();
+                        this.logger.log(`Pool stake REPLACED (DELETE+INSERT): ${data.wager_amount} SOL | TX: ${data.onchain_tx?.slice(0, 16) || 'none'}`);
+                    } else {
+                        // Verify the update actually persisted the correct value
+                        if (updatedStake && Number(updatedStake.stake_amount) !== Number(data.wager_amount)) {
+                            this.logger.warn(`Pool stake UPDATE value mismatch: expected ${data.wager_amount}, got ${updatedStake.stake_amount} — forcing DELETE+INSERT`);
+                            await adminSupabase.from('pool_stakes').delete().eq('id', existingStake.id);
+                            await adminSupabase
+                                .from('pool_stakes')
+                                .insert({
+                                    pool_id: pool.id,
+                                    competition_id: data.competition_id,
+                                    user_id: userId,
+                                    agent_id: data.agent_id,
+                                    stake_amount: data.wager_amount,
+                                    onchain_tx: data.onchain_tx || null,
+                                    verified_onchain: isVerifiedOnchain,
+                                    status: 'active',
+                                })
+                                .select('id')
+                                .single();
+                            this.logger.log(`Pool stake REPLACED after mismatch: ${data.wager_amount} SOL`);
+                        } else {
+                            this.logger.log(`Pool stake UPDATED: ${existingStake.stake_amount} → ${data.wager_amount} SOL | TX: ${data.onchain_tx?.slice(0, 16) || 'none'}`);
+                        }
+                    }
+                } else {
+                    // No existing entry — create new
+                    const { error: insertErr } = await adminSupabase
+                        .from('pool_stakes')
+                        .insert({
+                            pool_id: pool.id,
+                            competition_id: data.competition_id,
+                            user_id: userId,
+                            agent_id: data.agent_id,
+                            stake_amount: data.wager_amount,
+                            onchain_tx: data.onchain_tx || null,
+                            verified_onchain: isVerifiedOnchain,
+                            status: 'active',
+                        })
+                        .select('id')
+                        .single();
+
+                    if (insertErr) {
+                        this.logger.error(`Pool stake INSERT failed: ${insertErr.message}`);
+                    } else {
+                        this.logger.log(`Pool stake CREATED: ${data.wager_amount} SOL → pool ${pool.id}`);
+                    }
+                }
             }
         } catch (poolErr: any) {
-            // Non-blocking: wager still works even if pool insert fails
+            // Non-blocking: wager still works even if pool sync fails
             this.logger.warn(`Pool stake sync failed (non-blocking): ${poolErr.message}`);
         }
 
@@ -927,7 +986,7 @@ export class AgentsService {
     async getAgentPredictions(agentId: string, rawUserId: string, limit: number = 20): Promise<any[]> {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) return [];
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
         // Verify ownership (allow both resolved profile ID and raw wallet address)
         const { data: agent } = await supabase
@@ -965,7 +1024,7 @@ export class AgentsService {
     ): Promise<any[]> {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) return [];
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
         // Verify ownership
         const { data: agent } = await supabase
