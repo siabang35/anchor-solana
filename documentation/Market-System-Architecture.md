@@ -156,7 +156,11 @@ All API clients extend this class to inherit enterprise-grade resilience feature
 2.  **Transform**: Data is mapped to a DTO (Data Transfer Object).
 3.  **Deduplicate**: System checks `content_hash` against existing records.
 4.  **Enrich**: 
-    *   AI sentiment analysis or entity extraction.
+    *   **NLP Sentiment Analysis**: The system dynamically routes text to the optimal HuggingFace model based on domain:
+        *   **FinBERT** (`ProsusAI/finbert`): Used exclusively for financial categories (Crypto, Finance, Economy) to accurately parse market terminology.
+        *   **DistilBERT** (`distilbert-base-uncased-finetuned-sst-2-english`): Used for general/non-financial categories (Tech, Science, Politics) to prevent domain-mismatch errors (where FinBERT would wrongly score general text as neutral/0.0).
+        *   **Sports Mapping**: Mathematically maps real-time odds (`base_probability`) directly into sentiment scores to bypass text analysis entirely.
+    *   **Entity Extraction**: Identifies key people, organizations, or assets.
     *   **Image Scraping**: Extracts `og:image` from source URLs with topic-based fallbacks.
 5.  **Persist**:
     *   Insert into `market_data_items`.

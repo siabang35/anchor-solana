@@ -255,9 +255,11 @@ export class PoliticsETLOrchestrator extends BaseETLOrchestrator implements OnMo
     private async transformNewsToItem(article: any): Promise<MarketDataItem> {
         const transformed = this.newsApi.transformToMarketDataItem(article, 'politics');
         const entities = this.extractAllEntities(article.title + ' ' + (article.description || ''));
+        const sentimentResult = await this.analyzeSentimentAsync(article.title);
         return {
             ...transformed,
-            sentiment: (await this.analyzeSentimentAsync(article.title)).sentiment,
+            sentiment: sentimentResult.sentiment,
+            sentimentScore: sentimentResult.score,
             impact: this.calculatePoliticalImpact(article.title),
             metadata: {
                 entities,

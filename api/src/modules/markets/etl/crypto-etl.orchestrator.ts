@@ -81,7 +81,7 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
             recordsFetched += news.length;
 
             // Transform and upsert news
-            const newsItems = news.map(n => this.transformNewsToItem(n));
+            const newsItems = await Promise.all(news.map(n => this.transformNewsToItem(n)));
 
             // Enrich news items with scraped images
             await this.enrichItemsWithImages(newsItems);
@@ -279,10 +279,11 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
     /**
      * Transform crypto news to market data item
      */
-    private transformNewsToItem(news: any): MarketDataItem {
+    private async transformNewsToItem(news: any): Promise<MarketDataItem> {
         // Get the first currency symbol if available for the image
         const primaryCurrency = news.currencies?.[0]?.toLowerCase() || 'btc';
         const fallbackImage = this.getCoinImageUrl(primaryCurrency);
+        const sentimentResult = await this.analyzeSentimentAsync(news.title);
 
         return {
             externalId: `cp_${news.id}`,
@@ -295,7 +296,8 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
             sourceName: news.sourceTitle,
             publishedAt: news.publishedAt,
             tags: news.currencies || [],
-            sentiment: news.sentiment,
+            sentimentScore: sentimentResult.score,
+            sentiment: news.sentiment || sentimentResult.sentiment,
             impact: news.isHot ? 'high' : 'medium',
             metadata: {
                 votes: news.votes,

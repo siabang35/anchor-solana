@@ -313,9 +313,18 @@ export abstract class BaseETLOrchestrator {
         // Generate cache key
         const crypto = require('crypto');
         const hash = crypto.createHash('sha256').update(text.trim()).digest('hex');
-        const model = process.env.NLP_SENTIMENT_MODEL === 'distilbert' 
-            ? 'distilbert-base-uncased-finetuned-sst-2-english' 
-            : 'ProsusAI/finbert';
+        // Determine best NLP model for the category domain
+        let model = 'distilbert-base-uncased-finetuned-sst-2-english';
+        if (['crypto', 'finance', 'economy'].includes(this.category)) {
+            model = 'ProsusAI/finbert';
+        }
+        
+        // Allow explicit override via environment
+        if (process.env.NLP_SENTIMENT_MODEL === 'finbert') {
+            model = 'ProsusAI/finbert';
+        } else if (process.env.NLP_SENTIMENT_MODEL === 'distilbert') {
+            model = 'distilbert-base-uncased-finetuned-sst-2-english';
+        }
 
         try {
             // 1. Check Database Cache First

@@ -77,7 +77,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             const techNews = await this.fetchTechNews();
             recordsFetched += techNews.length;
 
-            const newsItems = await Promise.all(techNews.map(n => this.transformNewsToItem(n)));
+            const newsItems = await Promise.all(techNews.map(n => this.transformNewsToItem(n, model)));
 
             // Enrich news items with scraped images (fallback to topic-based images)
             await this.enrichItemsWithImages(newsItems, (title) => this.getTechImageUrl(title));
@@ -229,10 +229,12 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
         // Note: Keep NewsAPI image if available, but don't set fallback here
         // enrichItemsWithImages will handle fallback if no image
 
+        const sentimentResult = await this.analyzeSentimentAsync(article.title);
         return {
             ...transformed,
             // Keep NewsAPI image only if it exists, let fallback be applied later
-            sentiment: (await this.analyzeSentimentAsync(article.title)).sentiment,
+            sentiment: sentimentResult.sentiment,
+            sentimentScore: sentimentResult.score,
         };
     }
 

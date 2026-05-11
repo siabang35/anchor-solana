@@ -103,7 +103,7 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             const economicNews = await this.fetchEconomicNews();
             recordsFetched += economicNews.length;
 
-            const newsItems = economicNews.map(n => this.transformGDELTToItem(n));
+            const newsItems = await Promise.all(economicNews.map(n => this.transformGDELTToItem(n)));
 
             // 3. Fetch High-Quality Internet Sources (Free RSS)
             this.logger.debug('Fetching high-quality economy news from public internet sources...');
@@ -192,7 +192,8 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
         return allItems;
     }
 
-    private transformGDELTToItem(article: any): MarketDataItem {
+    private async transformGDELTToItem(article: any): Promise<MarketDataItem> {
+        const sentimentResult = await this.analyzeSentimentAsync(article.title);
         return {
             externalId: this.generateContentHash(article.url || article.title, 'gdelt'),
             source: 'gdelt',
@@ -203,8 +204,8 @@ export class EconomyETLOrchestrator extends BaseETLOrchestrator implements OnMod
             imageUrl: article.socialImage,
             sourceName: article.domain,
             publishedAt: article.seenDate,
-            sentimentScore: article.tone ? article.tone / 10 : 0,
-            sentiment: article.tone ? (article.tone > 1 ? 'bullish' : article.tone < -1 ? 'bearish' : 'neutral') : 'neutral',
+            sentimentScore: sentimentResult.score,
+            sentiment: sentimentResult.sentiment,
         };
     }
 

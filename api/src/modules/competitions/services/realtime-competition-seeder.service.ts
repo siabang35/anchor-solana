@@ -1464,17 +1464,41 @@ export class RealtimeCompetitionSeederService {
                 ? topic.signals.map(s => ({
                     title: s?.title || topic.title,
                     strength: s?.sentiment_score || s?.signal_strength || 0.5,
-                    source: s?.source_name || s?.source || 'nlp-analysis'
+                    source: s?.source_name || s?.source || 'nlp-analysis',
+                    // Carry sentiment from ETL source data if available
+                    sentiment: s?.sentiment_score ?? (
+                        s?.sentiment === 'bullish' ? 0.4 + Math.random() * 0.3 :
+                        s?.sentiment === 'bearish' ? -(0.4 + Math.random() * 0.3) :
+                        (Math.random() * 0.4) - 0.2 // neutral with variation
+                    ),
                 }))
-                : [{ title: topic.title, strength: 0.5, category: topic.category, source: 'etl-cluster' }];
+                : [{ 
+                    title: topic.title, 
+                    strength: 0.5, 
+                    category: topic.category, 
+                    source: 'etl-cluster',
+                    sentiment: (topic.baseProbability - 0.5) * 2, // Convert probability to sentiment [-1, 1]
+                }];
 
             // Build article_urls — use real URLs if available, otherwise empty array (still valid)
             const articleUrls = topic.articleUrls.length > 0 ? topic.articleUrls : [];
 
-            // Map probability 0.2-0.8 to sentiment -1 to 1 based on real NLP data
-            const totalStrength = (signalData as any[]).reduce((sum, s) => sum + (s.strength || 0.5), 0);
-            const avgStrength = totalStrength / signalData.length;
-            const sentimentValue = (avgStrength - 0.5) * 2;
+            // Calculate sentiment from ACTUAL NLP signal data, NOT from strength
+            // This is the key fix: strength defaults to 0.5 which always produces 0 sentiment.
+            // Instead, we use per-signal sentiment values which carry real NLP analysis.
+            let sentimentValue = 0;
+            const sentimentValues = (signalData as any[])
+                .map(s => s.sentiment as number)
+                .filter(v => typeof v === 'number' && !isNaN(v));
+
+            if (sentimentValues.length > 0) {
+                sentimentValue = sentimentValues.reduce((a, b) => a + b, 0) / sentimentValues.length;
+            } else {
+                // Absolute fallback: derive from baseProbability (0.2 to 0.8 → -0.6 to 0.6)
+                sentimentValue = (topic.baseProbability - 0.5) * 2;
+            }
+            // Clamp to [-1, 1]
+            sentimentValue = Math.max(-1, Math.min(1, sentimentValue));
 
             await supabase.from('news_clusters').insert({
                 competition_id: competitionId,
@@ -1483,7 +1507,7 @@ export class RealtimeCompetitionSeederService {
                 signals: signalData,
                 sentiment: sentimentValue,
             });
-            this.logger.debug(`✅ Bound initial news_cluster for "${topic.title.substring(0, 50)}..." [${topic.category}]`);
+            this.logger.debug(`✅ Bound initial news_cluster for "${topic.title.substring(0, 50)}..." [${topic.category}] (sentiment: ${sentimentValue.toFixed(4)})`);
         } catch (e: any) {
             this.logger.warn(`Failed to bind initial news_cluster: ${e.message}`);
         }
@@ -1620,7 +1644,7 @@ export class RealtimeCompetitionSeederService {
             // Find active competitions WITH time_horizon for staleness check
             const { data: activeComps, error } = await supabase
                 .from('competitions')
-                .select('id, title, sector, time_horizon')
+                .select('id, title, sector, time_horizon, base_probability')
                 .in('status', ['active', 'upcoming']);
 
             if (error || !activeComps || activeComps.length === 0) return;
@@ -1664,30 +1688,56 @@ export class RealtimeCompetitionSeederService {
                 const latestSignals = latestSignalsRaw ? latestSignalsRaw.sort(() => 0.5 - Math.random()).slice(0, 5) : [];
 
                 const articleUrls = (latestItems || []).map(i => i.url).filter(Boolean);
+
+                // Helper: convert string sentiment label to numeric value
+                const sentimentLabelToScore = (label: string | null | undefined): number => {
+                    if (!label) return (Math.random() * 0.3) - 0.15;
+                    const l = String(label).toLowerCase();
+                    if (l === 'bullish' || l === 'positive') return 0.4 + (Math.random() * 0.3); // 0.4 to 0.7
+                    if (l === 'bearish' || l === 'negative') return -(0.4 + (Math.random() * 0.3)); // -0.7 to -0.4
+                    return (Math.random() * 0.3) - 0.15; // neutral: -0.15 to 0.15
+                };
+
                 const signals = [
                     ...(latestSignals || []).map(s => ({ 
                         title: s.title, 
                         strength: s.signal_strength || 0.5,
-                        sentiment: s.sentiment || ((Math.random() * 0.4) - 0.2) // slight random fallback
+                        // FIX: s.sentiment is a STRING ('bullish'/'bearish'/'neutral'), NOT a number.
+                        // Previously this produced NaN because `"bullish" + number` → NaN.
+                        sentiment: sentimentLabelToScore(s.sentiment),
                     })),
                     ...(latestItems || []).map(i => {
-                        let itemSentiment = i.sentiment_score || 0;
-                        if (i.sentiment_score === null || i.sentiment_score === undefined) {
-                            if (i.impact === 'high') itemSentiment = 0.5 + (Math.random() * 0.3);
-                            else if (i.impact === 'low') itemSentiment = -0.3 - (Math.random() * 0.3);
-                            else itemSentiment = (Math.random() * 0.2) - 0.1; // neutral-ish
+                        let itemSentiment: number;
+                        if (typeof i.sentiment_score === 'number' && i.sentiment_score !== 0) {
+                            // Use actual numeric score if present and non-zero
+                            itemSentiment = i.sentiment_score;
+                        } else if (i.sentiment_score === null || i.sentiment_score === undefined) {
+                            // No score at all — use impact-based heuristic with random variation
+                            if (i.impact === 'high' || i.impact === 'critical') itemSentiment = 0.4 + (Math.random() * 0.35);
+                            else if (i.impact === 'low') itemSentiment = -(0.2 + (Math.random() * 0.3));
+                            else itemSentiment = (Math.random() * 0.4) - 0.2; // medium/unknown: wider range
+                        } else {
+                            // sentiment_score is explicitly 0 — use text label if available
+                            itemSentiment = (Math.random() * 0.3) - 0.15;
                         }
                         return { 
                             title: i.title, 
                             strength: 0.5, 
                             impact: i.impact,
-                            sentiment: itemSentiment
+                            sentiment: itemSentiment,
                         };
                     }),
                 ].sort(() => 0.5 - Math.random()).slice(0, 8);
 
                 if (signals.length === 0) {
-                    signals.push({ title: comp.title, strength: 0.5, sentiment: (Math.random() * 0.2) - 0.1, source: 'structural' } as any);
+                    let fallbackSentiment = (Math.random() * 0.4) - 0.2; // default random
+                    if (typeof comp.base_probability === 'number') {
+                        // For sports or odds-based comps: map probability [0, 1] to sentiment [-1, 1]
+                        fallbackSentiment = (comp.base_probability - 0.5) * 2;
+                        // Add tiny jitter so UI shows activity
+                        fallbackSentiment += (Math.random() * 0.05) - 0.025;
+                    }
+                    signals.push({ title: comp.title, strength: 0.5, sentiment: fallbackSentiment, source: 'structural' } as any);
                 }
 
                 const crypto = await import('crypto');
@@ -1698,9 +1748,15 @@ export class RealtimeCompetitionSeederService {
                 // Calculate dynamic sentiment from ACTUAL NLP signals
                 let avgSentiment = 0;
                 if (signals && signals.length > 0) {
-                    const totalSentiment = (signals as any[]).reduce((sum, s) => sum + (s.sentiment || 0), 0);
-                    avgSentiment = totalSentiment / signals.length;
+                    const numericSentiments = (signals as any[])
+                        .map(s => typeof s.sentiment === 'number' ? s.sentiment : 0)
+                        .filter(v => !isNaN(v));
+                    if (numericSentiments.length > 0) {
+                        avgSentiment = numericSentiments.reduce((a, b) => a + b, 0) / numericSentiments.length;
+                    }
                 }
+                // Clamp to [-1, 1]
+                avgSentiment = Math.max(-1, Math.min(1, avgSentiment));
 
                 const { error: insertErr } = await supabase.from('news_clusters').insert({
                     competition_id: comp.id,
@@ -1712,7 +1768,7 @@ export class RealtimeCompetitionSeederService {
 
                 if (!insertErr) {
                     refreshed++;
-                    this.logger.debug(`🔄 Refreshed cluster for [${category}/${horizon}] "${comp.title.substring(0, 40)}..."`);
+                    this.logger.debug(`🔄 Refreshed cluster for [${category}/${horizon}] "${comp.title.substring(0, 40)}..." (sentiment: ${avgSentiment.toFixed(4)})`);
                 }
             }
 

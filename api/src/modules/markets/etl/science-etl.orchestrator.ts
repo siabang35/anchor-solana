@@ -52,7 +52,7 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             recordsFetched += aiPapers.length;
 
             await this.storePapers(aiPapers);
-            const aiItems = aiPapers.map(p => this.transformPaperToItem(p));
+            const aiItems = await Promise.all(aiPapers.map(p => this.transformPaperToItem(p)));
 
             // Enrich AI papers with scraped images (fallback to topic-based images)
             await this.enrichItemsWithImages(aiItems, (title, desc) => this.getScienceImageUrl(undefined, title, desc));
@@ -71,7 +71,7 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             recordsFetched += arxivPapers.length;
 
             await this.storePapers(arxivPapers);
-            const arxivItems = arxivPapers.map(p => this.transformPaperToItem(p));
+            const arxivItems = await Promise.all(arxivPapers.map(p => this.transformPaperToItem(p)));
 
             // arXiv papers don't have og:image, apply topic-based images directly
             // (Scraping arXiv returns the same arXiv logo for all papers)
@@ -203,8 +203,9 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
         }
     }
 
-    private transformPaperToItem(paper: any): MarketDataItem {
+    private async transformPaperToItem(paper: any): Promise<MarketDataItem> {
         // Note: imageUrl not set here - enrichItemsWithImages will scrape first, then fallback
+        const sentimentResult = await this.analyzeSentimentAsync(paper.title);
 
         return {
             externalId: paper.id,
@@ -220,6 +221,8 @@ export class ScienceETLOrchestrator extends BaseETLOrchestrator implements OnMod
             publishedAt: paper.publicationDate,
             tags: paper.fieldsOfStudy || [],
             impact: paper.citationCount > 100 ? 'high' : paper.citationCount > 10 ? 'medium' : 'low',
+            sentimentScore: sentimentResult.score,
+            sentiment: sentimentResult.sentiment,
             metadata: {
                 citationCount: paper.citationCount,
                 referenceCount: paper.referenceCount,

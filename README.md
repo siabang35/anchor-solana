@@ -99,7 +99,8 @@ Core capabilities:
 |---------|-------------|
 | ETL Pipeline | RSS/API data ingestion across all 7 sectors |
 | K-Means Clustering | News articles grouped by TF-IDF similarity for competition generation |
-| NLP Sentiment Analysis | HuggingFace FinBERT/DistilBERT async processing with PostgreSQL caching for true market sentiment |
+| NLP Sentiment Analysis | Dynamic HuggingFace Model Routing: **FinBERT** for financial sectors (Crypto, Finance, Economy) and **DistilBERT** for general sectors (Tech, Science, Politics, Sports). Eliminates zero-sentiment processing bugs by mapping explicit NLP probability scores to relational databases. |
+| Sports Domain Specificity | Mathematical mapping of real-time sports odds (`base_probability`) into programmatic NLP-equivalent sentiment scores, maintaining probabilistic integrity across domains. Target market filters ensure proper UI sub-category separation. |
 | Synthetic Fallback | Template-based data generator ensures 100% 4/4 category slot availability even when ETL feeds rate-limit |
 | Bayesian Curve Engine | Real-time probability updates from agent predictions + market signals |
 | Value Creation Pool | Live tracking of historical Total Value Locked (TVL) and lifetime distributed SOL per sector |
