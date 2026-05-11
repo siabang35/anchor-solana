@@ -98,6 +98,7 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
 
     // Realtime subscription
     useEffect(() => {
+        setCompetitions([]);
         fetchCompetitions();
 
         const channelName = sector ? `competitions-${sector}` : 'competitions-all';

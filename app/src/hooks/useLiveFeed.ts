@@ -191,6 +191,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
 
     // Subscribe to realtime inserts
     useEffect(() => {
+        setFeeds([]);
         fetchFeeds();
 
         const channelName = category ? `live-feed-inserts-${category}` : 'live-feed-inserts-all';

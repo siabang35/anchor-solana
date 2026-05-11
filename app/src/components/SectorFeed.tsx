@@ -536,16 +536,6 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
 
         return (
             <section className="sector-feed">
-                <style>{`
-                    .circular-spinner {
-                        width: 40px; height: 40px;
-                        border: 3px solid rgba(99,102,241,0.15);
-                        border-top-color: var(--accent-indigo);
-                        border-radius: 50%;
-                        animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-                    }
-                    @keyframes spin { 100% { transform: rotate(360deg); } }
-                `}</style>
                 <SectionHeader sector={sector} liveCount={filteredSignals.length} connected={signalsConnected} />
 
                 {signalsLoading && filteredSignals.length === 0 && (
@@ -574,16 +564,6 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
     // ── Default: Competition cards (top, foryou, latest) ────────
     return (
         <section className="sector-feed">
-            <style>{`
-                .circular-spinner {
-                    width: 40px; height: 40px;
-                    border: 3px solid rgba(99,102,241,0.15);
-                    border-top-color: var(--accent-indigo);
-                    border-radius: 50%;
-                    animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-                }
-                @keyframes spin { 100% { transform: rotate(360deg); } }
-            `}</style>
             {TAB_META[sector] && (
                 <SectionHeader sector={sector} liveCount={liveCount} connected={connected} />
             )}
