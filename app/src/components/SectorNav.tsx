@@ -200,11 +200,6 @@ export default function SectorNav({ activeSector, onSectorChange }: Props) {
                             >
                                 <span className="sector-nav__icon">{sector.icon}</span>
                                 <span className="sector-nav__label">{sector.label}</span>
-                                {count > 0 && (
-                                    <span className="sector-nav__count">
-                                        {count}
-                                    </span>
-                                )}
                             </button>
                         );
                     })}
