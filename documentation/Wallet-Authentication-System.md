@@ -86,27 +86,26 @@ We utilize a **Strategy Pattern** to normalize interactions across disparate blo
 | **Slush (Sui)** | `@mysten/dapp-kit` | Native Move transaction signing |
 | **WalletConnect** | **Reown AppKit v5** | Mobile Deep Linking, QR Scan, Multi-Chain |
 
-### 3.2 Unified Reown & Mobile Strategy
-We utilize **Reown AppKit** (formerly WalletConnect Web3Modal) as the backbone for our unified authentication strategy, ensuring seamless experience across platforms.
+### 3.2 Mobile Deep Linking & Adapter Strategy
+To ensure a seamless experience on mobile browsers (like Chrome or Safari) without forcing users into in-app dapp browsers, we explicitly instantiate targeted wallet adapters.
 
 #### **Desktop Integration**
-- **Primary Method**: Direct injection (EIP-6963) for installed wallets (Metamask, Phantom, etc.).
-- **Fallback**: Reown AppKit modal for users wishing to scan QR codes with their mobile wallets.
+- **Primary Method**: Standard Wallet Standard detection (`@solana/wallet-adapter-react`) for installed extensions (Phantom, Solflare, etc.).
 - **UX Logic**: 
-  - If a wallet is installed: Shows "Recommended" badge.
-  - If not installed: Shows "Install" badge with direct download link (preventing dead clicks).
+  - Automatically detects browser extensions.
+  - Users can connect and sign seamlessly via extension popups.
 
 #### **Mobile Integration**
-- **Architecture**: **Mobile-First Deep Linking**.
-- **Behavior**: 
-  - **Bypass Installation Checks**: On mobile browsers, "isInstalled" checks are bypassed to prevent false negatives.
-  - **Deep Links**: Clicking "Metamask" or "Phantom" directly triggers the app via Universal Links (e.g., `metamask://`), upgrading the experience from a simple web view to a native app interaction.
-  - **AppKit Fallback**: If specific wallet deep links fail, the Reown AppKit modal serves as a universal connector, handling deep links for hundreds of wallets automatically.
+- **Architecture**: **Mobile-First Native Deep Linking**.
+- **Implementation**: 
+  - By explicitly passing `PhantomWalletAdapter` and `SolflareWalletAdapter` (from `@solana/wallet-adapter-wallets`) to the `WalletProvider`'s `wallets` array, we bypass the limitation where standard wallet detection fails on standard mobile browsers.
+  - **Deep Links**: When a user selects Phantom or Solflare on mobile Chrome, the adapters automatically construct Universal Links (e.g., `https://phantom.app/ul/v1/connect` or `phantom://`).
+  - **UX Flow**: The user is seamlessly redirected to their native wallet app to "Sign and Accept", and then automatically redirected back to the Chrome session, maintaining a unified browser experience without needing the wallet's internal dapp browser.
 
 #### **Configuration**
-- **Provider**: `AppKitProvider` wraps the application root.
-- **Project ID**: Configured via `VITE_WALLETCONNECT_PROJECT_ID`.
-- **Chains**: Support for Mainnet, Base, Solana, and SUI via their respective adapters standardizing the connection interface.
+- **Provider**: `@solana/wallet-adapter-react-ui` `WalletModalProvider` combined with `SolanaWalletProvider`.
+- **Chains**: Bound to Solana Devnet via `clusterApiUrl('devnet')`.
+
 
 ---
 
