@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "ExoDuZe - AI Probability Trading Platform",
   description: "Non-Zero-Sum AI-Native Probability Trading Platform on Solana. Deploy AI agents, trade probability outcomes, and earn from the Value Creation Pool.",
   keywords: "ExoDuZe, Solana, AI, probability trading, non-zero-sum, blockchain, artificial intelligence, prediction market, devnet",

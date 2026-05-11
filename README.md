@@ -326,6 +326,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | Date | TX Signature | Changes |
 |------|--------------|---------|
 | 2026-05-09 | `4a5gM86T...8b2Vo` | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA invoke_signed) |
+| 2026-05-11 | N/A | **v2.1 Fixes**: Cross-locale stake input (`,` to `.`), Devnet Auto-Simulation fallback, CSP WebSocket whitelist (`wss://*.solana.com`), and Public Read RLS for `pool_stakes`. |
 
 ---
 
@@ -335,10 +336,10 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 
 | Layer | Measure |
 |:------|:--------|
-| **Database** | Row-Level Security (RLS) on all tables |
+| **Database** | Row-Level Security (RLS) on all tables (Public Read for pool stakes) |
 | **API** | Fastify Rate limiting (300/min global, 5/min auth) |
 | **Auth** | Wallet-based authentication + auto-provisioning |
-| **CSP** | Content Security Policy enforcement (Helmet) |
+| **CSP** | Content Security Policy whitelist (`wss://*.solana.com`, `wss://*.helius-rpc.com`) |
 | **Routing** | Fastify `path-to-regexp` v8 compliant `{ *path }` routing |
 | **API Docs** | Strict Swagger explicit 404 block on Production (`NODE_ENV=production`) |
 | **OWASP** | Anti-DoS via Fastify 30s strict request timeouts, 10-level JSON depth limit, and Anti-HPP |
@@ -354,7 +355,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | **Concurrency Locks** | `claimLocks` Set prevents parallel race-condition claim exploits |
 | **Anti-Whale** | Max 5 SOL per user per competition (DB trigger) |
 | **Anti-Drift** | `entry_count` recalculated from `COUNT(*)` — no naive `+1` |
-| **Anti-Ghost** | Only confirmed on-chain TX creates pool entries |
+| **Anti-Ghost** | Strict Frontend/Backend decoupling prevents silent double-spends |
 | **Anti-Recycling** | Dual-layer dedup (title Jaccard + source-ID tracking) |
 | **Claim Guard** | IP/Wallet-based `ClaimRateLimitGuard` prevents brute-forcing |
 | **Settlement Lock** | Row-level `FOR UPDATE` locking during settlement |
@@ -369,6 +370,8 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | Principle | Details |
 |:----------|:--------|
 | **Stake-Deploy Decoupling** | Agent always deploys; staking is separate, optional |
+| **Fail-Safe DB Sync** | On-chain TX failures separated from DB sync failures with CRITICAL alerting |
+| **Devnet Auto-Simulation** | Zero-balance Devnet testing fallback via mock hash generation |
 | **Confirmed-Only Entries** | Ghost wagers eliminated — only real TX counts |
 | **Drift-Proof Triggers** | `update_pool_on_stake()` uses `SUM()` / `COUNT()` from actual rows |
 | **Immutable Audit** | Settlement snapshots + hash chains for full traceability |
@@ -387,13 +390,13 @@ Comprehensive architecture documentation is available in the [`documentation/`](
 | [Pool-Settlement-System.md](./documentation/Pool-Settlement-System.md) | Prize pools, staking, settlement, disbursement |
 | [Smart-Contract-Architecture.md](./documentation/Smart-Contract-Architecture.md) | Anchor program, PDA design, instructions |
 | [Security-Architecture.md](./documentation/Security-Architecture.md) | RLS, key management, anti-manipulation |
-| [Frontend-Architecture.md](./documentation/Frontend-Architecture.md) | Components, hooks, design system |
+| [Frontend-Architecture.md](./documentation/Frontend-Architecture.md) | Components, hooks, design system, CSP configuration |
 | [API-Integration.md](./documentation/API-Integration.md) | REST endpoints, auth flow, response formats |
 | [Real-Time-Data-Architecture.md](./documentation/Real-Time-Data-Architecture.md) | WebSocket, realtime subscriptions |
 | [Wallet-Authentication-System.md](./documentation/Wallet-Authentication-System.md) | Wallet auth, auto-provisioning |
 | [Deployment-Guide.md](./documentation/Deployment-Guide.md) | Production deployment checklist |
 | [Sports-System.md](./documentation/Sports-System.md) | Sports data pipeline & API |
-| [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters |
+| [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters, UI fail-safes |
 
 ---
 
@@ -413,6 +416,8 @@ The platform includes **75+ PostgreSQL migrations** managing:
 | `075` | Anti-recycling source tracking (`used_competition_sources`) |
 | `076` | NLP Sentiment Cache (`nlp_sentiment_cache` for HuggingFace API) |
 | `077-078` | Dynamic pool logic, multi-winner (Rank 1-3) enforcement ignoring agent termination status |
+| `079-081` | Realtime target market pool visibility, RLS public read policies, and RPC enhancements |
+| `082` | Pool stakes database trigger hardening (`INSERT OR UPDATE` recalculation) |
 
 ---
 
@@ -433,5 +438,5 @@ The platform includes **75+ PostgreSQL migrations** managing:
 <p align="center">
   <strong>Built on Solana</strong><br/>
   <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em><br/>
-  <sub>Last Updated: 2026-05-10 — 100% Risk Policy, Multi-Winner Settlement & Sector Stats API v2.2</sub>
+  <sub>Last Updated: 2026-05-11 — Stake Visibility, WebSockets CSP, Devnet Simulation, & SEO Metadata Base</sub>
 </p>

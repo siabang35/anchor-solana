@@ -310,6 +310,21 @@ export function useRealtimeAgents(userId: string | null): UseRealtimeAgentsResul
                     }
                 },
             )
+            // Listen to pool_stakes changes — when a stake is created/updated,
+            // refresh agents so AgentManager shows the latest stake info
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'pool_stakes',
+                    filter: `user_id=eq.${userId}`,
+                },
+                () => {
+                    // Refetch all agents to get updated pool_stakes nested data
+                    fetchAgents();
+                },
+            )
             .subscribe();
 
         forecasterChannelRef.current = forecasterChannel;

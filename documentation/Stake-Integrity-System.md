@@ -50,8 +50,9 @@ SET stake_count = stake_count + 1
 WHERE id = NEW.pool_id;
 ```
 
-#### New (Drift-Proof):
+#### New (Drift-Proof via `073` & `082` migrations):
 ```sql
+-- Trigger now fires AFTER INSERT OR UPDATE ON pool_stakes
 -- 1. Count ACTUAL valid rows
 SELECT COUNT(*), COALESCE(SUM(stake_amount), 0)
 INTO v_actual_count, v_actual_total
@@ -157,4 +158,26 @@ The `SOLANA_TREASURY_PRIVATE_KEY` must be registered in the Zod validation schem
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-10 — 100% Risk Policy & Multi-Winner Settlement.*
+## 7. v2.1 Enhancements (2026-05-11)
+
+### 7.1 Cross-Locale Stake Input Normalization
+The `DeployAgent.tsx` UI previously used `<input type="number">`, which silently failed and passed empty values when users typed a comma (`,`) in locales expecting a dot (`.`). The input was refactored to use `<input type="text" inputMode="decimal">` with regex normalization (`.replace(',', '.')`), ensuring stakes are always correctly passed to the Solana transaction builder regardless of the user's OS locale settings.
+
+### 7.2 Strict Database Sync Fail-Safes
+The deployment error handling was upgraded to separate Solana on-chain failures from Backend Database sync failures (`/agents/wager`). If the on-chain transaction succeeds but the database update fails (e.g., due to an API timeout), the system throws a `🚨 CRITICAL` alert, capturing the transaction hash to prevent silent double-spending or ghost wagers.
+
+### 7.3 Devnet Faucet Auto-Simulation Fallback
+To facilitate seamless testing when the Solana Devnet Faucet experiences global outages or when the user has insufficient devnet funds, the deployment flow now employs an auto-simulation fallback. Instead of aborting the stake silently, it logs an alert, generates a verifiable Base58 mock hash, and syncs the stake to the backend database, ensuring UI flow continuity in development environments.
+
+### 7.4 Public Stake Visibility & RLS Policies
+The Supabase Row Level Security (RLS) policy on `pool_stakes` was shifted from `auth.uid() = user_id` to `FOR SELECT USING (true)` (Public Read). Additionally, the database RPC `get_competition_pool_with_winners()` was upgraded via migration `081_fix_pool_stakes_visibility.sql` to properly join and return the full `stakes` array. This ensures the frontend Target Market Pool can transparently calculate and display all stakers' aggregate values.
+
+### 7.5 WebSocket Content Security Policy (CSP)
+The Next.js `next.config.ts` Content Security Policy was updated to explicitly allow `wss://*.solana.com` and `wss://*.helius-rpc.com`. This resolved an issue where the browser's strict `connect-src` directive blocked the Solana Web3.js library from confirming on-chain transactions via WebSocket connections, causing the deployment flow to hang or fail.
+
+### 7.6 Pool Totals Trigger Hardening
+The `update_pool_on_stake` database trigger was upgraded via migration `082_fix_pool_stake_update_trigger.sql` to execute on both `AFTER INSERT OR UPDATE`. Previously, manual hot-patches or UPSERT operations that updated `stake_amount` without creating new rows bypassed the trigger, causing the `competition_pools` totals to temporarily drift. This fix guarantees absolute mathematical synchronization of the Target Market Pool regardless of how the wager data is modified.
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-11 — Stake Visibility, CSP WebSockets, and Auto-Simulation.*

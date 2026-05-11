@@ -37,22 +37,42 @@ export class PoolService {
             return { pool: {}, winners: [], stakes: [] };
         }
 
-        if (data && data.winners && data.winners.length > 0) {
-            // The RPC doesn't currently return the 'id' field for winners, so we fetch it here
+        const result = data || { pool: {}, winners: [], stakes: [] };
+
+        // Ensure winners have their 'id' field for claim functionality
+        if (result.winners && result.winners.length > 0) {
             const { data: winnerIds } = await supabase
                 .from('pool_winners')
                 .select('id, agent_id')
                 .eq('competition_id', competitionId);
             
             if (winnerIds) {
-                data.winners = data.winners.map((w: any) => {
+                result.winners = result.winners.map((w: any) => {
                     const match = winnerIds.find(wid => wid.agent_id === w.agent_id);
                     return { ...w, id: match?.id };
                 });
             }
         }
 
-        return data || { pool: {}, winners: [], stakes: [] };
+        // Fallback: if RPC didn't return stakes (pre-migration), fetch them directly
+        // This ensures stakes are ALWAYS returned regardless of DB function version
+        if (!result.stakes || result.stakes.length === 0) {
+            const { data: stakeRows, error: stakeErr } = await supabase
+                .from('pool_stakes')
+                .select('user_id, agent_id, stake_amount, onchain_tx, verified_onchain, staked_at, status')
+                .eq('competition_id', competitionId)
+                .eq('status', 'active')
+                .order('staked_at', { ascending: false });
+
+            if (!stakeErr && stakeRows && stakeRows.length > 0) {
+                result.stakes = stakeRows;
+                this.logger.debug(`Fetched ${stakeRows.length} stakes via fallback query for competition ${competitionId}`);
+            } else {
+                result.stakes = [];
+            }
+        }
+
+        return result;
     }
 
     /**

@@ -187,7 +187,8 @@ export function useCompetitionPool(competitionId: string | null | undefined): Po
             const res = await apiFetch<{ pool: PoolData; winners: PoolWinner[]; stakes?: PoolStake[] }>(`/pool/competition?competition_id=${competitionId}`);
             if (res?.pool) setPool(res.pool);
             if (res?.winners) setWinners(res.winners);
-            if (res?.stakes) setStakes(res.stakes);
+            // Always update stakes — use empty array as fallback to clear stale state
+            setStakes(Array.isArray(res?.stakes) ? res.stakes : []);
             setError(null);
         } catch (err: any) {
             console.error('Failed to fetch competition pool:', err);
