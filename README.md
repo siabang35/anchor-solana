@@ -334,7 +334,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | 2026-05-09 | `4a5gM86T...8b2Vo` | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA invoke_signed) |
 | 2026-05-11 | N/A | **v2.1 Fixes**: Cross-locale stake input (`,` to `.`), Devnet Auto-Simulation fallback, CSP WebSocket whitelist (`wss://*.solana.com`), and Public Read RLS for `pool_stakes`. |
 | 2026-05-11 | N/A | **v2.2 Enhancements**: Sports discipline auto-tagging (`mapSportToSubCategory` + keyword scanning), dual-layer frontend subcategory filtering, `metadataBase` SEO fix, `AgentLog` type safety, pool trigger hardening (`082`). |
-| 2026-05-12 | N/A | **v2.3 Enhancements**: Native Mobile Deep Linking for Solana Wallets via explicit adapter initialization (Phantom, Solflare), bypassing in-app dapp browser requirements for mobile Chrome users. |
+| 2026-05-12 | N/A | **v2.3 Enhancements**: Native Mobile Deep Linking via Mobile Wallet Adapter (MWA) `@solana-mobile/wallet-adapter-mobile` for proper Sign/Accept triggers on Android, plus Phantom/Solflare adapter fallbacks. |
 
 ---
 

@@ -96,13 +96,15 @@ To ensure a seamless experience on mobile browsers (like Chrome or Safari) witho
   - Users can connect and sign seamlessly via extension popups.
 
 #### **Mobile Integration**
-- **Architecture**: **Mobile-First Native Deep Linking**.
+- **Architecture**: **Mobile Wallet Adapter (MWA) Protocol & Deep Linking**.
 - **Implementation**: 
-  - By explicitly passing `PhantomWalletAdapter` and `SolflareWalletAdapter` (from `@solana/wallet-adapter-wallets`) to the `WalletProvider`'s `wallets` array, we bypass the limitation where standard wallet detection fails on standard mobile browsers.
-  - **Deep Links**: When a user selects Phantom or Solflare on mobile Chrome, the adapters automatically construct Universal Links (e.g., `https://phantom.app/ul/v1/connect` or `phantom://`).
-  - **UX Flow**: The user is seamlessly redirected to their native wallet app to "Sign and Accept", and then automatically redirected back to the Chrome session, maintaining a unified browser experience without needing the wallet's internal dapp browser.
+  - We strictly adhere to Solana's best practices by implementing `SolanaMobileWalletAdapter` from `@solana-mobile/wallet-adapter-mobile`.
+  - **MWA Protocol**: This ensures native OS-level intents (e.g., Android's bottom sheet) are correctly triggered, passing complete application identity payloads (`appIdentity`) so the wallet immediately prompts the user with "Sign and Accept" rather than just opening blindly.
+  - **Universal Fallbacks**: For iOS or scenarios where MWA is unavailable, explicit `PhantomWalletAdapter` and `SolflareWalletAdapter` instances ensure traditional Universal Links (`phantom://` or `solflare://`) function correctly, completely bypassing the need for in-app dapp browsers.
+  - **UX Flow**: The user selects a wallet, is natively redirected to their wallet app where the connection prompt is already waiting, signs the request, and is cleanly redirected back to the active Chrome/Safari session.
 
 #### **Configuration**
+- **MWA Setup**: Uses `createDefaultAddressSelector` and `createDefaultAuthorizationResultCache` to maintain session persistence.
 - **Provider**: `@solana/wallet-adapter-react-ui` `WalletModalProvider` combined with `SolanaWalletProvider`.
 - **Chains**: Bound to Solana Devnet via `clusterApiUrl('devnet')`.
 
