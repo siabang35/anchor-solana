@@ -536,17 +536,22 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
 
         return (
             <section className="sector-feed">
+                <style>{`
+                    .circular-spinner {
+                        width: 40px; height: 40px;
+                        border: 3px solid rgba(99,102,241,0.15);
+                        border-top-color: var(--accent-indigo);
+                        border-radius: 50%;
+                        animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                    }
+                    @keyframes spin { 100% { transform: rotate(360deg); } }
+                `}</style>
                 <SectionHeader sector={sector} liveCount={filteredSignals.length} connected={signalsConnected} />
 
                 {signalsLoading && filteredSignals.length === 0 && (
-                    <div className="sector-feed__skeleton">
-                        {[1, 2, 3].map((i) => (
-                            <div key={i} className="feed-card feed-card--skeleton">
-                                <div className="skeleton-line skeleton-line--title" />
-                                <div className="skeleton-line skeleton-line--desc" />
-                                <div className="skeleton-line skeleton-line--short" />
-                            </div>
-                        ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0', animation: 'dbFadeIn 0.3s ease' }}>
+                        <div className="circular-spinner" />
+                        <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500, letterSpacing: '0.05em' }}>Loading signals...</div>
                     </div>
                 )}
 
@@ -569,6 +574,16 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
     // ── Default: Competition cards (top, foryou, latest) ────────
     return (
         <section className="sector-feed">
+            <style>{`
+                .circular-spinner {
+                    width: 40px; height: 40px;
+                    border: 3px solid rgba(99,102,241,0.15);
+                    border-top-color: var(--accent-indigo);
+                    border-radius: 50%;
+                    animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                }
+                @keyframes spin { 100% { transform: rotate(360deg); } }
+            `}</style>
             {TAB_META[sector] && (
                 <SectionHeader sector={sector} liveCount={liveCount} connected={connected} />
             )}
@@ -592,14 +607,9 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
             </div>
 
             {loading && competitions.length === 0 && (
-                <div className="sector-feed__skeleton">
-                    {[1, 2, 3].map((i) => (
-                        <div key={i} className="feed-card feed-card--skeleton">
-                            <div className="skeleton-line skeleton-line--title" />
-                            <div className="skeleton-line skeleton-line--desc" />
-                            <div className="skeleton-line skeleton-line--short" />
-                        </div>
-                    ))}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0', animation: 'dbFadeIn 0.3s ease' }}>
+                    <div className="circular-spinner" />
+                    <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500, letterSpacing: '0.05em' }}>Loading markets...</div>
                 </div>
             )}
 
