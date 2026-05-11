@@ -1087,5 +1087,42 @@ curl http://localhost:3001/api/v1/sports/categories
 
 ---
 
-*Last Updated: January 15, 2026*
-*Version: 2.0 - Multi-Source ETL Pipeline*
+## 12. v2.2 — Sports Discipline Auto-Tagging & Filtering (2026-05-11)
+
+### 12.1 Problem Statement
+When a user selected a specific sport discipline (e.g., "Football / Soccer") in the Deploy Agent UI, the Target Market dropdown showed zero competitions — even though relevant competitions existed in the database. This was because the frontend filters competitions using the `tags` array, but competitions generated from non-`sports_events` ETL sources (market signals, trending topics, synthetic fallback) were missing this field.
+
+### 12.2 Backend: Auto-Tag Pass
+A new **Auto-Tag Pass** was added at the end of `collectCategoryETL()` in `realtime-competition-seeder.service.ts`. For any sports ETL candidate that lacks tags, the system infers the discipline:
+
+1. **Title Prefix Parsing**: Extracts the sport from `"Football: Player Transfer..."` → `"football"` → `mapSportToSubCategory("football")` → `tags: ["football"]`.
+2. **Keyword Scanning**: If no colon-prefix is found, scans the full title for known keywords (e.g., `"NBA"` → `basketball`, `"UFC"` → `mma`).
+
+### 12.3 Frontend: Dual-Layer Filtering
+The `availableMarkets` filter in `DeployAgent.tsx` was upgraded to use two matching layers when a subcategory is selected:
+
+| Layer | Mechanism | Example |
+|:------|:----------|:--------|
+| **1 — Tag Match** | `c.tags.includes(subCategoryId)` | `tags: ["football"]` matches `subCategoryId: "football"` |
+| **2 — Title Heuristic** | Splits subcategory name (e.g., `"Football / Soccer"` → `["football", "soccer"]`) and scans `c.title.toLowerCase()` for matches. Also checks an extended keyword map with league names. | Title `"Premier League: Arsenal vs..."` matches keyword `"premier league"` under `football` |
+
+### 12.4 `mapSportToSubCategory()` Reference
+
+| Raw API Sport Label | Frontend SubCategory ID |
+|:--------------------|:------------------------|
+| soccer, football, futbol | `football` |
+| basketball, nba | `basketball` |
+| american football, cfl, nfl, rugby, hockey, ice hockey, baseball, motorsport | `cfl` |
+| cricket, ipl | `cricket` |
+| tennis | `tennis` |
+| mma, boxing, ufc, fighting | `mma` |
+| esports, gaming, lol, dota, csgo, valorant | `esports` |
+
+### 12.5 Data Patch
+Existing active competitions with empty `tags: []` were manually patched via Supabase REST API to ensure immediate correctness without requiring a server restart or competition rotation cycle.
+
+---
+
+*Last Updated: 2026-05-11*
+*Version: 2.2 — Sports Discipline Auto-Tagging, Dual-Layer Filtering, Multi-Source ETL Pipeline*
+

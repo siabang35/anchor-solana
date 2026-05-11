@@ -50,7 +50,7 @@ interface DeployedAgentResponse {
 
 interface AgentLog {
     timestamp: number;
-    type: 'info' | 'analysis' | 'trade' | 'signal';
+    type: 'info' | 'analysis' | 'trade' | 'signal' | 'error';
     message: string;
 }
 
@@ -111,17 +111,59 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const availableMarkets = useMemo(() => {
         let filtered = competitions.filter(c => c.sector === categoryId);
         
-        // If a specific discipline (sub-category) is selected, filter by it using tags
-        if (subCategoryId) {
-            filtered = filtered.filter(c => c.tags && c.tags.includes(subCategoryId));
+        // If a specific discipline (sub-category) is selected, filter by it using tags + title heuristic
+        if (subCategoryId && selectedCategory?.subCategories) {
+            const subCat = selectedCategory.subCategories.find(s => s.id === subCategoryId);
+            filtered = filtered.filter(c => {
+                // Layer 1: Exact tag match
+                if (c.tags && c.tags.includes(subCategoryId)) return true;
+
+                // Layer 2: Title-based heuristic — match sport name prefix like "Football:", "Tennis:", "NHL:", etc.
+                if (subCat && c.title) {
+                    const titleLower = c.title.toLowerCase();
+                    const nameParts = subCat.name.toLowerCase().split(/[\/\s]+/); // e.g. "Football / Soccer" → ["football", "soccer"]
+                    for (const part of nameParts) {
+                        if (part.length >= 3 && titleLower.includes(part)) return true;
+                    }
+                    // Additional keyword mapping for common API labels
+                    const extraKeywords: Record<string, string[]> = {
+                        'football': ['soccer', 'premier league', 'la liga', 'serie a', 'bundesliga', 'ligue 1', 'champions league'],
+                        'basketball': ['nba', 'basketball', 'euroleague'],
+                        'cfl': ['nfl', 'cfl', 'american football', 'nhl', 'hockey', 'ice hockey', 'baseball', 'rugby', 'motorsport'],
+                        'cricket': ['ipl', 'cricket', 'test match', 't20'],
+                        'tennis': ['atp', 'wta', 'wimbledon', 'us open', 'roland garros', 'grand slam'],
+                        'mma': ['ufc', 'mma', 'boxing', 'fighting', 'bellator'],
+                        'esports': ['esports', 'lol', 'dota', 'csgo', 'valorant', 'overwatch', 'league of legends'],
+                    };
+                    const keywords = extraKeywords[subCategoryId] || [];
+                    for (const kw of keywords) {
+                        if (titleLower.includes(kw)) return true;
+                    }
+                }
+                return false;
+            });
         }
 
         return filtered.map(c => {
-            // Find the sub-category ID from tags to highlight the correct discipline pill
+            // Find the sub-category ID from tags OR title to highlight the correct discipline pill
             let mappedSubCategory: string | undefined = undefined;
-            if (c.tags && selectedCategory?.subCategories) {
-                const matchedCat = selectedCategory.subCategories.find(sub => c.tags?.includes(sub.id));
-                if (matchedCat) mappedSubCategory = matchedCat.id;
+            if (selectedCategory?.subCategories) {
+                // First try tags
+                if (c.tags) {
+                    const matchedCat = selectedCategory.subCategories.find(sub => c.tags?.includes(sub.id));
+                    if (matchedCat) mappedSubCategory = matchedCat.id;
+                }
+                // Fallback: match by title
+                if (!mappedSubCategory && c.title) {
+                    const titleLower = c.title.toLowerCase();
+                    for (const sub of selectedCategory.subCategories) {
+                        const nameParts = sub.name.toLowerCase().split(/[\/\s]+/);
+                        if (nameParts.some(p => p.length >= 3 && titleLower.includes(p))) {
+                            mappedSubCategory = sub.id;
+                            break;
+                        }
+                    }
+                }
             }
 
             return {

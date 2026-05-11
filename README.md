@@ -327,6 +327,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 |------|--------------|---------|
 | 2026-05-09 | `4a5gM86T...8b2Vo` | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA invoke_signed) |
 | 2026-05-11 | N/A | **v2.1 Fixes**: Cross-locale stake input (`,` to `.`), Devnet Auto-Simulation fallback, CSP WebSocket whitelist (`wss://*.solana.com`), and Public Read RLS for `pool_stakes`. |
+| 2026-05-11 | N/A | **v2.2 Enhancements**: Sports discipline auto-tagging (`mapSportToSubCategory` + keyword scanning), dual-layer frontend subcategory filtering, `metadataBase` SEO fix, `AgentLog` type safety, pool trigger hardening (`082`). |
 
 ---
 
@@ -395,8 +396,8 @@ Comprehensive architecture documentation is available in the [`documentation/`](
 | [Real-Time-Data-Architecture.md](./documentation/Real-Time-Data-Architecture.md) | WebSocket, realtime subscriptions |
 | [Wallet-Authentication-System.md](./documentation/Wallet-Authentication-System.md) | Wallet auth, auto-provisioning |
 | [Deployment-Guide.md](./documentation/Deployment-Guide.md) | Production deployment checklist |
-| [Sports-System.md](./documentation/Sports-System.md) | Sports data pipeline & API |
-| [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters, UI fail-safes |
+| [Sports-System.md](./documentation/Sports-System.md) | Sports data pipeline, API, discipline auto-tagging & filtering |
+| [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters, UI fail-safes, SEO metadata |
 
 ---
 
@@ -438,5 +439,5 @@ The platform includes **75+ PostgreSQL migrations** managing:
 <p align="center">
   <strong>Built on Solana</strong><br/>
   <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em><br/>
-  <sub>Last Updated: 2026-05-11 — Stake Visibility, WebSockets CSP, Devnet Simulation, & SEO Metadata Base</sub>
+  <sub>Last Updated: 2026-05-11 — Sports Discipline Tagging, SEO Metadata, Stake Visibility, WebSockets CSP, & Devnet Simulation</sub>
 </p>

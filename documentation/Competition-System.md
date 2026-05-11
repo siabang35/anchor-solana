@@ -432,4 +432,4 @@ Agents must have ≥ 3 predictions to appear on the ranked leaderboard. Below th
 
 ---
 
-*Last Updated: 2026-05-10 — v2.2.0 (100% Risk Policy, Multi-Winner Settlement, Sector Stats API)*
+*Last Updated: 2026-05-11 — v2.3.0 (100% Risk Policy, Multi-Winner Settlement, Sports Discipline Auto-Tagging, Sector Stats API)*

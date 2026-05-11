@@ -178,6 +178,41 @@ The Next.js `next.config.ts` Content Security Policy was updated to explicitly a
 ### 7.6 Pool Totals Trigger Hardening
 The `update_pool_on_stake` database trigger was upgraded via migration `082_fix_pool_stake_update_trigger.sql` to execute on both `AFTER INSERT OR UPDATE`. Previously, manual hot-patches or UPSERT operations that updated `stake_amount` without creating new rows bypassed the trigger, causing the `competition_pools` totals to temporarily drift. This fix guarantees absolute mathematical synchronization of the Target Market Pool regardless of how the wager data is modified.
 
+### 7.7 SEO Metadata Base Resolution
+Added `metadataBase` to the root layout `app/src/app/layout.tsx` using `new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")`. This eliminates the Next.js 16 warning `⚠ metadataBase property in metadata export is not set for resolving social open graph or twitter images`. Open Graph and Twitter Card images now resolve correctly in both development and production environments, ensuring proper social sharing previews.
+
+### 7.8 Sports Discipline Auto-Tagging & Filtering
+The Sports subcategory filtering system was comprehensively hardened to resolve a bug where selecting a specific discipline (Football, Basketball, Tennis, etc.) in the Deploy Agent UI showed zero Target Markets despite competitions existing in the database.
+
+**Root Cause**: Competitions generated from non-`sports_events` ETL sources (market_signals, market_data_items, trending_topics, and synthetic fallback) were missing the `tags` array needed for subcategory filtering.
+
+**Backend Fix** (`realtime-competition-seeder.service.ts`):
+- Added an **Auto-Tag Pass** at the end of `collectCategoryETL()` for sports category candidates.
+- The pass uses a **dual-layer inference engine**:
+  - **Layer 1 — Title Prefix Parsing**: Extracts sport type from titles like `"Football: ..."`, `"Tennis: ..."` via `mapSportToSubCategory()`.
+  - **Layer 2 — Keyword Scanning**: Falls back to scanning the full title for known sport keywords (e.g., `"NBA"` → `basketball`, `"UFC"` → `mma`, `"IPL"` → `cricket`).
+
+**Frontend Fix** (`DeployAgent.tsx`):
+- The `availableMarkets` filter was upgraded to use **dual-layer matching** when a subcategory is selected:
+  - **Layer 1 — Tag Match**: `c.tags.includes(subCategoryId)` — for properly tagged competitions.
+  - **Layer 2 — Title Heuristic**: Matches sport name parts from the subcategory label (e.g., `"Football / Soccer"` splits into `["football", "soccer"]`), plus an extended keyword map covering league names (NBA, NHL, IPL, Premier League, etc.).
+- The `mappedSubCategory` assignment (for discipline pill highlighting) also uses the same dual-layer fallback.
+
+**Keyword Coverage Table**:
+
+| Frontend SubCategory ID | Matched Keywords |
+|:------------------------|:-----------------|
+| `football` | soccer, football, premier league, la liga, serie a, bundesliga, champions league |
+| `basketball` | nba, basketball, euroleague |
+| `cfl` | nfl, cfl, american football, nhl, hockey, ice hockey, baseball, rugby, motorsport |
+| `cricket` | ipl, cricket, test match, t20 |
+| `tennis` | atp, wta, wimbledon, us open, roland garros, grand slam |
+| `mma` | ufc, mma, boxing, fighting, bellator |
+| `esports` | esports, lol, dota, csgo, valorant, overwatch, league of legends |
+
+### 7.9 AgentLog Type Safety
+The `AgentLog` TypeScript interface was missing the `'error'` variant in its `type` union, causing a build-time type error (`Type '"error"' is not assignable to type '"info" | "analysis" | "trade" | "signal"'`). The union was expanded to `'info' | 'analysis' | 'trade' | 'signal' | 'error'`, resolving the production build failure.
+
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-11 — Stake Visibility, CSP WebSockets, and Auto-Simulation.*
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-11 — Sports Discipline Tagging, SEO Metadata, Stake Visibility, & CSP WebSockets.*

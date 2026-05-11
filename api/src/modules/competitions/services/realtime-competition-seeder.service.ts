@@ -965,6 +965,42 @@ export class RealtimeCompetitionSeederService {
                 this.logger.log(`[${category}] Historical fallback yielded ${fallbackPushed} valid candidates`);
             }
         }
+
+        // 6. AUTO-TAG PASS: For sports category, ensure ALL candidates have sub-category tags.
+        //    Candidates from market_signals, market_data_items, and trending_topics often
+        //    lack tags. We infer the sport discipline from the title (e.g., "Football: ..." → 'football').
+        if (category === 'sports') {
+            for (const candidate of allCandidates) {
+                if (candidate.tags && candidate.tags.length > 0) continue; // Already tagged
+                const title = candidate.title || candidate.cleanTitle || '';
+                const colonIdx = title.indexOf(':');
+                if (colonIdx > 0 && colonIdx < 30) {
+                    const sportPrefix = title.substring(0, colonIdx).trim().toLowerCase();
+                    const subCat = this.mapSportToSubCategory(sportPrefix);
+                    if (subCat) {
+                        candidate.tags = [subCat, sportPrefix];
+                        continue;
+                    }
+                }
+                // Fallback: scan title for known sport keywords
+                const titleLower = title.toLowerCase();
+                const sportKeywordMap: [string[], string][] = [
+                    [['soccer', 'football', 'premier league', 'la liga', 'bundesliga', 'champions league', 'serie a'], 'football'],
+                    [['basketball', 'nba', 'euroleague'], 'basketball'],
+                    [['nfl', 'cfl', 'american football', 'nhl', 'hockey', 'ice hockey', 'baseball', 'rugby', 'motorsport'], 'cfl'],
+                    [['cricket', 'ipl', 't20', 'test match'], 'cricket'],
+                    [['tennis', 'atp', 'wta', 'wimbledon', 'grand slam'], 'tennis'],
+                    [['mma', 'ufc', 'boxing', 'fighting', 'bellator'], 'mma'],
+                    [['esports', 'gaming', 'lol', 'dota', 'csgo', 'valorant', 'league of legends'], 'esports'],
+                ];
+                for (const [keywords, subCat] of sportKeywordMap) {
+                    if (keywords.some(kw => titleLower.includes(kw))) {
+                        candidate.tags = [subCat];
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private clusterCandidates(candidates: ETLCandidate[], targetCount: number): ClusteredCompetition[] {
