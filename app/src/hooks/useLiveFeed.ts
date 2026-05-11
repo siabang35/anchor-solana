@@ -67,6 +67,26 @@ function sentimentToScore(sentiment: string, sentimentScore?: number): number {
  * Maps a Supabase market_data_items row to LiveFeedItem
  */
 function mapToFeedItem(item: any): LiveFeedItem {
+    let cleanTags = item.tags || [];
+    if (Array.isArray(cleanTags)) {
+        cleanTags = cleanTags
+            .map((t: any) => {
+                if (typeof t === 'string' && t.trim().startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(t);
+                        return parsed._ || parsed.name || '';
+                    } catch {
+                        return '';
+                    }
+                }
+                if (typeof t === 'object' && t !== null) {
+                    return t._ || t.name || t.domain || '';
+                }
+                return String(t);
+            })
+            .filter((t: string) => t && t.trim().length > 0 && !t.includes('{'));
+    }
+
     return {
         id: item.id || `feed-${Date.now()}-${Math.random()}`,
         source: (item.source_name || item.source || 'Unknown').toUpperCase(),
@@ -77,7 +97,7 @@ function mapToFeedItem(item: any): LiveFeedItem {
         sentiment: sentimentToScore(item.sentiment, item.sentiment_score ?? item.sentimentScore),
         entity: item.category || 'General',
         category: item.category,
-        tags: item.tags || [],
+        tags: cleanTags,
         url: item.url || item.link || '',
         image_url: item.image_url || item.urlToImage || item.imageUrl || '',
     };

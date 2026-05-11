@@ -184,7 +184,28 @@ export class RSSClient {
             sourceName: source, // e.g., 'BBC News'
             author: item.creator || item.author,
             publishedAt: item.isoDate ? new Date(item.isoDate) : new Date(),
-            tags: item.categories || [],
+            tags: (item.categories || [])
+                .map((c: any) => {
+                    if (typeof c === 'string') {
+                        // Check if it's a stringified JSON
+                        if (c.trim().startsWith('{')) {
+                            try {
+                                const parsed = JSON.parse(c);
+                                return parsed._ || parsed.name || '';
+                            } catch (e) {
+                                // If not parsable but looks like JSON, skip it
+                                return '';
+                            }
+                        }
+                        return c;
+                    }
+                    if (typeof c === 'object' && c !== null) {
+                        return c._ || c.name || c.domain || '';
+                    }
+                    return String(c);
+                })
+                .map((c: string) => c.trim())
+                .filter((c: string) => c.length > 0 && !c.includes('{') && !c.includes('}')),
             metadata: {
                 originalGuid: item.guid
             }
