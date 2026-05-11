@@ -1,0 +1,18 @@
+# Colosseum
+
+## Docs
+
+- [API Reference](https://docs.colosseum.com/copilot/api-reference.md): Complete endpoint documentation, auth, rate limits, and curl examples for the Copilot API
+- [Archive Corpus](https://docs.colosseum.com/copilot/archive-corpus.md): All 65+ curated sources in the Copilot archive: cypherpunk heritage, Solana docs, investor research, and more
+- [Authentication](https://docs.colosseum.com/copilot/authentication.md): How to authenticate with the Copilot API using Personal Access Tokens
+- [Capabilities](https://docs.colosseum.com/copilot/capabilities.md): What you can do with Colosseum Copilot: use cases, modes of operation, and quality guarantees
+- [Examples](https://docs.colosseum.com/copilot/examples.md): Real prompt/response pairs from Copilot evaluation runs across 12 scoring dimensions
+- [AI Agent Payments](https://docs.colosseum.com/copilot/examples/ai-agent-payments.md): Example: Exploring AI agent payment infrastructure on Solana
+- [B2B Stablecoin Payments](https://docs.colosseum.com/copilot/examples/b2b-stablecoin-payments.md): Example: Validating a B2B cross-border stablecoin payments startup idea on Solana
+- [Gaming Track: Radar vs. Renaissance](https://docs.colosseum.com/copilot/examples/compare-gaming-tracks.md): Example: Comparing gaming track submissions, prize winners, and thematic shifts between two Colosseum hackathons
+- [Consumer Apps for Mobile Developers](https://docs.colosseum.com/copilot/examples/consumer-apps.md): Example: A mobile developer with no crypto experience explores consumer app opportunities on Solana
+- [MEV Batch Auctions](https://docs.colosseum.com/copilot/examples/mev-batch-auctions.md): Example: Evaluating batch auction execution infrastructure to eliminate MEV on Solana
+- [Privacy-Preserving Stablecoin](https://docs.colosseum.com/copilot/examples/privacy-stablecoin.md): Example: Researching privacy-preserving stablecoins with ZK proofs on Solana
+- [FAQ](https://docs.colosseum.com/copilot/faq.md): Frequently asked questions about Colosseum Copilot
+- [Getting Started](https://docs.colosseum.com/copilot/getting-started.md): Get from zero to your first Copilot query in under 5 minutes
+- [Colosseum Copilot](https://docs.colosseum.com/copilot/introduction.md): A research skill that turns your AI coding assistant into a Solana startup analyst

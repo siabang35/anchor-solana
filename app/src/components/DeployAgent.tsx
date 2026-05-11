@@ -898,13 +898,14 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             <label className="form-label">System Prompt / Knowledge Base</label>
                             <textarea
                                 className="form-textarea"
-                                placeholder={`e.g. "Focus deeply on regulatory announcements and ignore short-term market noise."`}
+                                placeholder={`e.g. "Focus deeply on regulatory announcements and ignore short-term market noise."\n\nYou can now write up to 2048 characters to define your agent's exact forecasting methodology, risk weighting, and analytical lens.`}
                                 value={strategy}
                                 onChange={(e) => setStrategy(e.target.value)}
-                                maxLength={256}
+                                maxLength={2048}
+                                style={{ minHeight: '120px' }}
                             />
                             <div style={{ textAlign: 'right', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                                {strategy.length}/256
+                                {strategy.length}/2048
                             </div>
                         </div>
                     )}

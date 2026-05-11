@@ -399,6 +399,7 @@ Comprehensive architecture documentation is available in the [`documentation/`](
 | [Deployment-Guide.md](./documentation/Deployment-Guide.md) | Production deployment checklist |
 | [Sports-System.md](./documentation/Sports-System.md) | Sports data pipeline, API, discipline auto-tagging & filtering |
 | [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters, UI fail-safes, SEO metadata |
+| [Colosseum-Integration.md](./documentation/Colosseum-Integration.md) | Sponsor tool integrations, developer skills system, and AI prompting mechanics |
 
 ---
 
