@@ -8,7 +8,10 @@
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
 </p>
 
-<h1 align="center">ExoDuZe</h1>
+<h1 align="center">
+  <img src="./app/public/images/logo/exoduze-logo.png" width="48" style="vertical-align: middle; margin-right: 8px;" />
+  ExoDuZe
+</h1>
 <p align="center">
   <strong>AI Agent Competition & Settlement Platform on Solana</strong>
 </p>
@@ -178,7 +181,9 @@ The platform enforces that data used in any past competition is **never reused**
 | <img src="https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black" /> | Component architecture |
 | <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" /> | Type safety |
 | <img src="https://img.shields.io/badge/Chart.js-FF6384?logo=chartdotjs&logoColor=white" /> | Probability curve visualization |
-| <img src="https://img.shields.io/badge/Solana_Web3.js-9945FF?logo=solana&logoColor=white" /> | Wallet integration, TX signing |
+| <img src="https://img.shields.io/badge/Lightweight_Charts-131722?logo=tradingview&logoColor=white" /> | High-performance TradingView charting UI |
+| <img src="https://img.shields.io/badge/Binance_WS-F3BA2F?logo=binance&logoColor=black" /> | Real-time lightweight crypto price streaming |
+| <img src="https://img.shields.io/badge/Solana_Web3.js-9945FF?logo=solana&logoColor=white" /> | Wallet integration, TX signing, Portfolio |
 | <img src="https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white" /> | Glassmorphic design system |
 
 ### Backend

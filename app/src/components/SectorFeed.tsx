@@ -7,6 +7,9 @@ interface Props {
     sector: string;
     selectedCompId?: string;
     onSelectCompetition?: (id: string) => void;
+    searchQuery?: string;
+    activeCategory?: string;
+    activeFilter?: string;
 }
 
 // ── Tab metadata ────────────────────────────────────────────────
@@ -292,21 +295,19 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
 
     const cardContent = (
         <div className="feed-item animate-in" style={{
-            display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-            padding: '0.75rem', borderRadius: 'var(--radius-xs)',
-            background: 'var(--gradient-card)',
-            border: `1px solid var(--border-card)`,
-            borderLeft: `3px solid ${sentimentColor}`,
-            transition: 'all 0.3s ease',
+            display: 'flex', flexDirection: 'column', gap: '0.75rem',
+            padding: '1rem', borderRadius: '16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid var(--border-glass)',
+            transition: 'all 0.2s ease',
             cursor: hasUrl ? 'pointer' : 'default',
         }}>
             {/* Thumbnail or Icon */}
             {hasImage ? (
                 <div className="feed-item-image-wrapper" style={{
-                    width: '80px', height: '80px', borderRadius: '10px',
+                    width: '64px', height: '64px', borderRadius: '8px',
                     overflow: 'hidden', flexShrink: 0,
                     background: 'var(--bg-input)',
-                    border: '1px solid var(--border-glass)',
                 }}>
                     <img
                         src={item.image_url}
@@ -320,78 +321,56 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                         onError={(e) => {
                             const el = e.target as HTMLImageElement;
                             el.style.display = 'none';
-                            if (el.parentElement) {
-                                el.parentElement.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem">${item.icon}</div>`;
-                            }
                         }}
                     />
                 </div>
-            ) : (
-                <div style={{
-                    width: '36px', height: '36px', borderRadius: '10px',
-                    background: 'var(--bg-input)', border: '1px solid var(--border-glass)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.1rem', flexShrink: 0,
-                }}>
-                    {item.icon}
-                </div>
-            )}
+            ) : null}
+            
             {/* Content */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span style={{
-                        fontSize: '0.6rem', fontWeight: 800, color: 'var(--accent-indigo)',
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                    }}>
+                        {(item.category || item.entity || 'General')}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>•</span>
+                    <span style={{
+                        fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
                     }}>
                         {item.source}
                     </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.55rem' }}>·</span>
-                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>🕐 {timeStr}</span>
+                    {hasUrl && (
+                        <span style={{ opacity: 0.5, fontSize: '0.65rem' }}>↗</span>
+                    )}
                 </div>
-                <div style={{
-                    fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)',
-                    lineHeight: 1.5, wordBreak: 'break-word',
+                
+                <h3 style={{
+                    fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)',
+                    lineHeight: 1.4, margin: 0, wordBreak: 'break-word',
                     display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
                 }}>
                     {item.text}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
-                    <span style={{
-                        fontSize: '0.5rem', fontWeight: 800, padding: '2px 6px',
-                        borderRadius: 'var(--radius-round)',
-                        background: item.sentiment > 0.1 ? 'rgba(16,185,129,0.12)' : item.sentiment < -0.1 ? 'rgba(239,68,68,0.12)' : 'var(--bg-input)',
-                        color: sentimentColor,
-                    }}>
-                        {sentimentLabel}
-                    </span>
-                    <span style={{
-                        fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px',
-                        borderRadius: 'var(--radius-round)',
-                        background: item.impact === 'high' ? 'rgba(239,68,68,0.12)' : item.impact === 'medium' ? 'rgba(245,158,11,0.12)' : 'rgba(34,211,238,0.12)',
-                        color: item.impact === 'high' ? 'var(--accent-red)' : item.impact === 'medium' ? 'var(--accent-amber)' : 'var(--accent-cyan)',
-                    }}>
-                        {item.impact.toUpperCase()}
-                    </span>
-                    {item.category && (
+                </h3>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                    {item.tags && item.tags.length > 0 && (
                         <span style={{
-                            fontSize: '0.5rem', fontWeight: 600, padding: '2px 6px',
-                            borderRadius: 'var(--radius-round)',
-                            background: 'var(--bg-input)', color: 'var(--text-muted)',
+                            fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)',
+                            display: 'flex', alignItems: 'center', gap: '0.3rem'
                         }}>
-                            {item.category}
+                            <span style={{ opacity: 0.6 }}>💬</span> {item.tags.slice(0,2).join(', ')}
                         </span>
                     )}
-                    {hasUrl && (
-                        <span style={{
-                            fontSize: '0.5rem', fontWeight: 700, padding: '2px 6px',
-                            borderRadius: 'var(--radius-round)',
-                            background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)',
-                            marginLeft: 'auto',
-                        }}>
-                            🔗 Source
-                        </span>
-                    )}
+                    <span style={{
+                        fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)',
+                        display: 'flex', alignItems: 'center', gap: '0.3rem'
+                    }}>
+                        <span style={{ opacity: 0.6 }}>⏱</span> {timeStr}
+                    </span>
                 </div>
             </div>
         </div>
@@ -415,20 +394,14 @@ function SectionHeader({ sector, liveCount, connected }: { sector: string; liveC
     return (
         <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            marginBottom: '0.75rem', padding: '0.75rem 0',
-            borderBottom: '1px solid var(--border-card)',
+            marginBottom: '0.75rem', padding: '0.5rem 0',
         }}>
-            <div>
-                <h3 style={{
-                    fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-primary)',
-                    display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
-                }}>
-                    <span>{meta.icon}</span> {meta.title}
-                </h3>
-                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.15rem', margin: 0 }}>
-                    {meta.description}
-                </p>
-            </div>
+            <h3 style={{
+                fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)',
+                display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
+            }}>
+                <span>{meta.icon}</span> {meta.title}
+            </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 {liveCount > 0 && (
                     <span style={{
@@ -448,9 +421,12 @@ function SectionHeader({ sector, liveCount, connected }: { sector: string; liveC
 }
 
 // ── Main SectorFeed Component ──────────────────────────────────
-export default function SectorFeed({ sector, selectedCompId, onSelectCompetition }: Props) {
+export default function SectorFeed({ sector, selectedCompId, onSelectCompetition, searchQuery, activeCategory, activeFilter }: Props) {
     const { competitions, loading, connected } = useCompetitions(sector);
-    const { feeds: signalFeeds, loading: signalsLoading, connected: signalsConnected } = useLiveFeed(30);
+    
+    // Pass activeCategory to useLiveFeed so it fetches the correct sector data from backend
+    const feedCategory = sector === 'signals' && activeCategory !== 'all' ? activeCategory : undefined;
+    const { feeds: signalFeeds, loading: signalsLoading, connected: signalsConnected } = useLiveFeed(30, feedCategory);
 
     // ── Sorting logic per tab ──────────────────────────────────
     let sorted = [...competitions];
@@ -473,10 +449,8 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
                 if (getCompetitionStatus(comp) === 'upcoming') s += 500;
                 s += (comp.prize_pool || 0) * 10;
                 s += (comp.entry_count || 0) * 5;
-                // Capacity factor: prefer competitions that aren't full yet
                 const capacityPct = comp.max_entries > 0 ? (comp.entry_count / comp.max_entries) : 0;
-                if (capacityPct > 0.3 && capacityPct < 0.85) s += 300; // sweet spot
-                // Deterministic pseudo-random factor per competition for variety
+                if (capacityPct > 0.3 && capacityPct < 0.85) s += 300;
                 const hash = comp.id.charCodeAt(0) + comp.id.charCodeAt(comp.id.length - 1);
                 if (hash % 3 === 0) s += 200;
                 return s;
@@ -493,7 +467,38 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
     }
-    // signals tab doesn't use competitions
+
+    // Apply activeCategory filter for competitions
+    if (activeCategory && activeCategory !== 'all') {
+        sorted = sorted.filter(c => {
+            const catStr = (c.sector || '').toLowerCase();
+            return catStr.includes(activeCategory.toLowerCase());
+        });
+    }
+
+    // Apply searchQuery filter for competitions
+    if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        sorted = sorted.filter(c => 
+            (c.title || '').toLowerCase().includes(query) || 
+            (c.description || '').toLowerCase().includes(query) ||
+            (c.sector || '').toLowerCase().includes(query)
+        );
+    }
+
+    // Apply activeFilter (New, Trending, Ending Soon)
+    if (activeFilter) {
+        if (activeFilter === 'new') {
+            sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        } else if (activeFilter === 'trending') {
+            // Sort by entry count / prize pool
+            sorted.sort((a, b) => ((b.entry_count || 0) * (b.prize_pool || 1)) - ((a.entry_count || 0) * (a.prize_pool || 1)));
+        } else if (activeFilter === 'ending') {
+            // Ending soon: sort by competition_end closest to now, must be 'live'
+            sorted = sorted.filter(c => getCompetitionStatus(c) === 'live');
+            sorted.sort((a, b) => new Date(a.competition_end).getTime() - new Date(b.competition_end).getTime());
+        }
+    }
 
     // FILTER OUT ended competitions — they should NEVER appear in the feed
     sorted = sorted.filter(c => getCompetitionStatus(c) !== 'ended');
@@ -502,11 +507,38 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
 
     // ── Signals Tab: render live feed items ─────────────────────
     if (sector === 'signals') {
+        let filteredSignals = [...signalFeeds];
+
+        if (activeCategory && activeCategory !== 'all') {
+            filteredSignals = filteredSignals.filter(item => {
+                const catStr = (item.category || item.entity || '').toLowerCase();
+                return catStr.includes(activeCategory.toLowerCase());
+            });
+        }
+
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            filteredSignals = filteredSignals.filter(item => 
+                item.text.toLowerCase().includes(query) || 
+                item.source.toLowerCase().includes(query) ||
+                (item.category && item.category.toLowerCase().includes(query))
+            );
+        }
+
+        if (activeFilter) {
+             if (activeFilter === 'new') {
+                 filteredSignals.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+             } else if (activeFilter === 'trending') {
+                 // Sort by high impact first
+                 filteredSignals.sort((a, b) => (b.impact === 'high' ? 1 : 0) - (a.impact === 'high' ? 1 : 0));
+             }
+        }
+
         return (
             <section className="sector-feed">
-                <SectionHeader sector={sector} liveCount={signalFeeds.length} connected={signalsConnected} />
+                <SectionHeader sector={sector} liveCount={filteredSignals.length} connected={signalsConnected} />
 
-                {signalsLoading && signalFeeds.length === 0 && (
+                {signalsLoading && filteredSignals.length === 0 && (
                     <div className="sector-feed__skeleton">
                         {[1, 2, 3].map((i) => (
                             <div key={i} className="feed-card feed-card--skeleton">
@@ -518,15 +550,15 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
                     </div>
                 )}
 
-                {!signalsLoading && signalFeeds.length === 0 && (
+                {!signalsLoading && filteredSignals.length === 0 && (
                     <div className="sector-feed__empty">
-                        <p>No signals available yet.</p>
+                        <p>No signals available yet for these filters.</p>
                         <p className="sector-feed__empty-sub">Market intelligence will appear as events are detected from live data feeds.</p>
                     </div>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {signalFeeds.map((item) => (
+                <div className="sector-feed__grid">
+                    {filteredSignals.map((item) => (
                         <SignalCard key={item.id} item={item} />
                     ))}
                 </div>

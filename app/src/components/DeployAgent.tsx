@@ -110,7 +110,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const selectedCategory = useMemo(() => CATEGORIES.find(c => c.id === categoryId), [categoryId]);
     const availableMarkets = useMemo(() => {
         let filtered = competitions.filter(c => c.sector === categoryId);
-        
+
         // If a specific discipline (sub-category) is selected, filter by it using tags + title heuristic
         if (subCategoryId && selectedCategory?.subCategories) {
             const subCat = selectedCategory.subCategories.find(s => s.id === subCategoryId);
@@ -300,10 +300,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             timestamp: Date.now(), type: 'info',
                             message: `⚠️ Insufficient Devnet SOL (${balanceSOL.toFixed(4)}). Auto-simulating transaction for testing...`
                         }]);
-                        
+
                         // Generate a realistic fake Solana base58 hash
                         const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                        const fakeSig = Array.from({length: 88}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                        const fakeSig = Array.from({ length: 88 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 
                         setLogs(prev => [...prev, {
                             timestamp: Date.now(), type: 'signal',
@@ -1075,14 +1075,12 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             fontSize: '0.6rem',
                             color: 'var(--text-muted)',
                         }}>
-                            <div style={{ fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 2 }}>
-                                📌 Agent Scope
-                            </div>
+
                             {selectedCategory?.icon} {selectedCategory?.name}
                             {selectedCategory?.subCategories && subCategoryId && ` → ${selectedCategory.subCategories.find(s => s.id === subCategoryId)?.name}`}
                             {` → ${marketIds.length} Market${marketIds.length > 1 ? 's' : ''} Selected`}
                             <br />
-                            🔗 Deploys via NestJS API → Supabase (realtime) + Solana devnet (on-chain)
+
                         </div>
                     )}
                 </div>
@@ -1251,35 +1249,42 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
     return (
         <>
+            {/* Backdrop overlay when drawer is open (mobile) */}
+            <div
+                className={`deploy-agent-backdrop ${isMobileDrawerOpen ? 'visible' : ''}`}
+                onClick={() => setIsMobileDrawerOpen(false)}
+            />
+
             {/* Mobile Toggle Button */}
             <button
                 className="btn-primary mobile-deploy-toggle"
                 onClick={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
+                aria-label={isMobileDrawerOpen ? 'Close deploy panel' : 'Open deploy panel'}
                 style={{
                     position: 'fixed',
-                    right: isMobileDrawerOpen ? '10px' : '-4px', // Slight inset when closed
+                    right: 0,
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    zIndex: 999,
+                    zIndex: 95,
                     width: 'auto',
-                    padding: '0.8rem 0.5rem 0.8rem 0.8rem',
+                    padding: '0.6rem 0.4rem 0.6rem 0.65rem',
                     borderRadius: '12px 0 0 12px',
                     boxShadow: 'var(--shadow-glow)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.4rem',
+                    gap: '0.35rem',
                     transition: 'all 0.3s ease',
-                    writingMode: 'vertical-rl',
-                    textOrientation: 'mixed',
+                    writingMode: 'vertical-rl' as const,
+                    textOrientation: 'mixed' as const,
                 }}
             >
-                <div style={{ transform: isMobileDrawerOpen ? 'rotate(180deg) translateY(-2px)' : 'rotate(0deg)' }}>◀</div>
+                <div style={{ transform: isMobileDrawerOpen ? 'rotate(180deg) translateY(-2px)' : 'rotate(0deg)', transition: 'transform 0.3s' }}>◀</div>
                 {!isMobileDrawerOpen && (
-                    <span style={{ fontSize: '0.8rem', letterSpacing: '1px' }}>DEPLOY AI</span>
+                    <span style={{ fontSize: '0.75rem', letterSpacing: '1px', fontWeight: 700 }}>DEPLOY AI</span>
                 )}
             </button>
 
-            {/* Main Wrapper */}
+            {/* Drawer Wrapper */}
             <div className={`deploy-agent-wrapper ${isMobileDrawerOpen ? 'mobile-open' : ''}`}>
                 {renderContent()}
             </div>

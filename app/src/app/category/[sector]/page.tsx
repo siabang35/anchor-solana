@@ -15,6 +15,7 @@ import CompetitionPoolWinners from '@/components/CompetitionPoolWinners';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
+const SectorNav = dynamic(() => import('@/components/SectorNav'), { ssr: false });
 const ProbabilityCurve = dynamic(() => import('@/components/ProbabilityCurve'), { ssr: false });
 const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), { ssr: false });
 const CompetitionLeaderboard = dynamic(() => import('@/components/CompetitionLeaderboard'), { ssr: false });
@@ -216,79 +217,38 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                 activeSector={sector}
             />
             <main className="main-container">
-                {/* Category Hero Header */}
-                <div className="glass-card card-body animate-in" style={{
-                    borderLeft: `4px solid ${meta.color}`,
-                    marginBottom: '0.5rem',
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                                <button
-                                    onClick={() => router.push('/')}
-                                    style={{
-                                        background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
-                                        borderRadius: 'var(--radius-round)', padding: '0.2rem 0.5rem',
-                                        color: 'var(--accent-indigo)', fontSize: '0.65rem', cursor: 'pointer', fontWeight: 600,
-                                    }}
-                                >
-                                    ← Dashboard
-                                </button>
-                                <span style={{ fontSize: '1.5rem' }}>{meta.icon}</span>
-                                <h1 style={{ fontSize: '1.3rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-                                    {meta.label}
-                                </h1>
-                            </div>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, maxWidth: '500px' }}>
-                                {meta.description}
-                            </p>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                            {liveCount > 0 && (
-                                <span style={{
-                                    fontSize: '0.6rem', fontWeight: 700, padding: '3px 10px',
-                                    borderRadius: 'var(--radius-round)',
-                                    background: 'rgba(16,185,129,0.15)', color: '#10b981',
-                                    animation: 'pulse 2s infinite',
-                                }}>
-                                    {liveCount} LIVE
-                                </span>
-                            )}
-                            <span style={{
-                                fontSize: '0.55rem', fontWeight: 600, padding: '3px 8px',
-                                borderRadius: 'var(--radius-round)',
-                                background: connected ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
-                                color: connected ? '#10b981' : '#f59e0b',
-                            }}>
-                                {connected ? '● Connected' : '○ Connecting...'}
-                            </span>
-                        </div>
-                    </div>
+                {/* SectorNav — Polymarket-style pill navigation for category switching */}
+                <SectorNav activeSector={sector} onSectorChange={() => {}} />
 
-                    {/* Category Navigation */}
-                    <div className="category-nav-desktop" style={{ display: 'flex', gap: '0.3rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-                        {Object.entries(SECTOR_META).map(([id, m]) => (
-                            <button
-                                key={id}
-                                onClick={() => router.push(`/category/${id}`)}
-                                style={{
-                                    padding: '0.3rem 0.6rem', borderRadius: 'var(--radius-round)',
-                                    border: id === sector ? `2px solid ${m.color}` : '1px solid var(--border-card)',
-                                    background: id === sector ? `${m.color}15` : 'transparent',
-                                    color: id === sector ? m.color : 'var(--text-muted)',
-                                    fontSize: '0.6rem', fontWeight: 700, cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                {m.icon} {m.label}
-                            </button>
-                        ))}
+                {/* Sector Title — compact */}
+                <div className="glass-card" style={{
+                    padding: '0.75rem 1.25rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    flexWrap: 'wrap', gap: '0.4rem',
+                }}>
+                    <h1 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>{meta.icon}</span> {meta.label}
+                    </h1>
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        {liveCount > 0 && (
+                            <span style={{
+                                fontSize: '0.6rem', fontWeight: 600, padding: '3px 10px',
+                                borderRadius: 'var(--radius-round)',
+                                background: 'rgba(16,185,129,0.15)', color: '#10b981',
+                                animation: 'pulse 2s infinite',
+                            }}>
+                                {liveCount} LIVE
+                            </span>
+                        )}
+                        <span style={{
+                            fontSize: '0.55rem', fontWeight: 500, padding: '3px 8px',
+                            borderRadius: 'var(--radius-round)',
+                            background: connected ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                            color: connected ? '#10b981' : '#f59e0b',
+                        }}>
+                            {connected ? '● Connected' : '○ Connecting...'}
+                        </span>
                     </div>
-                    <style>{`
-                        @media (max-width: 768px) {
-                            .category-nav-desktop { display: none !important; }
-                        }
-                    `}</style>
                 </div>
 
                 {/* Probability Curve for Selected Competition */}
@@ -707,8 +667,8 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                         )}
                     </div>
 
-                    {/* RIGHT COLUMN */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {/* RIGHT COLUMN — desktop only inline deploy panel */}
+                    <div className="deploy-desktop-column">
                         <DeployAgent initialCategory={sector} />
                     </div>
                 </div>
@@ -718,6 +678,12 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     <ValueCreationPool sector={sector} />
                 </div>
             </main>
+
+            {/* DeployAgent mobile toggle/drawer — rendered at root level so
+                position:fixed works even when deploy-desktop-column is hidden */}
+            <div className="deploy-mobile-root">
+                <DeployAgent initialCategory={sector} />
+            </div>
         </>
     );
 }

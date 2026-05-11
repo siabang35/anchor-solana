@@ -18,7 +18,8 @@ The ExoDuZe frontend is a high-performance, mobile-first probability trading int
 | **TypeScript** | 5 | Strict type safety |
 | **Vanilla CSS** | — | Glassmorphism UI, custom dark theme |
 | **Chart.js** | 4.x | Probability curve visualization |
-| **react-chartjs-2** | — | React wrapper for Chart.js |
+| **Lightweight Charts** | 4.x | High-performance TradingView UI |
+| **Binance WebSocket** | — | Real-time crypto price streaming |
 | **@solana/wallet-adapter** | — | Phantom & Solflare wallet integration |
 | **@supabase/supabase-js** | 2.x | Real-time subscriptions + data fetching |
 
@@ -83,6 +84,8 @@ app/src/
 | `/for-you` | Static route | Personalized AI recommendations |
 | `/latest` | Static route | Latest competitions sorted by time |
 | `/signals` | Static route | High-impact signal intelligence |
+| `/portfolio` | Static route | User portfolio, SOL balances, and TradingView chart |
+| `/activity` | Static route | User stake history and activity log |
 
 ### 3.2 Sector Navigation
 
@@ -266,6 +269,17 @@ Live competition rankings with weighted scoring:
 - Brier score + weighted score display
 - "Provisional" badge for < 3 predictions
 - Expandable agent details with latest reasoning
+
+#### SolanaChart (~12KB)
+High-performance TradingView integration:
+- Uses `lightweight-charts` for smooth candlestick and line series rendering.
+- Real-time price streaming via Binance WebSocket API for live market data.
+- Fully responsive and theme-aware (Dark mode integration).
+
+#### MobileBottomNav (~8KB)
+Global bottom navigation specifically for mobile users:
+- Quick access to Home, Search, For You, and Portfolio.
+- Animated active states and icons.
 
 ---
 
