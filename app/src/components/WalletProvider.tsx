@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { 
     createDefaultAuthorizationResultCache, 
     SolanaMobileWalletAdapter, 
@@ -15,22 +14,33 @@ import {
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 export default function WalletProvider({ children }: { children: React.ReactNode }) {
+    const [mounted, setMounted] = useState(false);
+    
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
-    const wallets = useMemo(() => [
-        new SolanaMobileWalletAdapter({
-            addressSelector: createDefaultAddressSelector(),
-            appIdentity: {
-                name: 'ExoDuZe',
-                uri: 'https://exoduze.app',
-                icon: '/images/logo/exoduze-logo.png',
-            },
-            authorizationResultCache: createDefaultAuthorizationResultCache(),
-            cluster: 'devnet',
-            onWalletNotFound: createDefaultWalletNotFoundHandler(),
-        }),
-        new PhantomWalletAdapter(),
-        new SolflareWalletAdapter(),
-    ], []);
+    
+    const wallets = useMemo(() => {
+        if (!mounted || typeof window === 'undefined') return [];
+
+        const origin = window.location.origin;
+
+        return [
+            new SolanaMobileWalletAdapter({
+                addressSelector: createDefaultAddressSelector(),
+                appIdentity: {
+                    name: 'ExoDuZe',
+                    uri: origin,
+                    icon: '/images/logo/exoduze-logo.png',
+                },
+                authorizationResultCache: createDefaultAuthorizationResultCache(),
+                cluster: 'devnet',
+                onWalletNotFound: createDefaultWalletNotFoundHandler(),
+            }),
+        ];
+    }, [mounted]);
 
     return (
         <ConnectionProvider endpoint={endpoint}>

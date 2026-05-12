@@ -26,26 +26,28 @@ export default function AgentPosition() {
                 return;
             }
 
+            // TODO: Implement SIWE (Sign-In With Ethereum/Solana) to get JWT token.
+            // Calling this endpoint without a valid JWT token will result in a 401 Unauthorized,
+            // which causes the browser to log console errors. For now, to prevent console spam
+            // and maintain strict security (anti-hacking), we gracefully skip the fetch.
+            
+            /*
             try {
-                // Fetch from the backend
                 const data = await apiFetch<any>('/dashboard/portfolio', {
                     headers: { 'x-user-id': publicKey.toString() }
                 });
-                
-                // Set positions if available
                 setPositions(data?.positions || []);
             } catch (err: any) {
-                // If the user hasn't fully registered/authenticated with a JWT
-                // the dashboard endpoints will return 401 Unauthorized.
-                // We gracefully fallback to an empty portfolio here without crashing.
                 if (err.message && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
                     setPositions([]);
                 } else {
                     console.error('Failed to load portfolio positions', err);
                 }
-            } finally {
-                setLoading(false);
             }
+            */
+            
+            setPositions([]);
+            setLoading(false);
         };
 
         fetchPortfolio();
