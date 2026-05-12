@@ -588,14 +588,14 @@ export class AuthController {
     /**
      * Set refresh token in HTTP-only cookie
      */
-    private setTokenCookies(res: Response, refreshToken: string) {
+    private setTokenCookies(res: any, refreshToken: string) {
         const isProduction = this.configService.get('NODE_ENV') === 'production';
         // Enforce secure cookies in production, or if explicitly enabled
         const secure = this.configService.get('COOKIE_SECURE') === 'true' || isProduction;
         const sameSite = (this.configService.get('COOKIE_SAME_SITE') as 'strict' | 'lax' | 'none') || 'strict';
         const domain = this.configService.get('COOKIE_DOMAIN');
 
-        res.cookie('refresh_token', refreshToken, {
+        res.setCookie('refresh_token', refreshToken, {
             httpOnly: true, // Prevent XSS access
             secure,         // Send only over HTTPS
             sameSite,       // Prevent CSRF
@@ -608,7 +608,7 @@ export class AuthController {
     /**
      * Clear token cookies
      */
-    private clearTokenCookies(res: Response) {
+    private clearTokenCookies(res: any) {
         res.clearCookie('refresh_token', {
             httpOnly: true,
             path: '/',

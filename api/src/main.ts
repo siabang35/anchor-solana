@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyCompress from '@fastify/compress';
 import fastifyRateLimit from '@fastify/rate-limit';
+import fastifyCookie from '@fastify/cookie';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/index.js';
 import { AuditLogInterceptor } from './common/interceptors/index.js';
@@ -44,6 +45,11 @@ async function bootstrap() {
     const isProduction = nodeEnv === 'production';
     const isRender = process.env.RENDER === 'true';
     const isDev = nodeEnv === 'development' && !isRender;
+
+    // Register cookie plugin
+    await app.register(fastifyCookie, {
+        secret: configService.get<string>('COOKIE_SECRET', 'my-super-secret-exoduze-cookie-key'),
+    });
 
     // ===================
     // Security: Helmet (Fastify Plugin)

@@ -77,9 +77,12 @@ export default function SolanaChart({ symbol = 'SOLUSDT', interval = '1m', onPri
             try {
                 // Get last 100 candles for 1m interval
                 const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=100`);
-                const data = await res.json();
                 
-                const historicalData = data.map((d: (number | string)[]) => ({
+                // Binance REST K-line array format
+                type BinanceKlineData = (number | string)[];
+                const data: BinanceKlineData[] = await res.json();
+                
+                const historicalData = data.map((d) => ({
                     time: (Number(d[0]) / 1000) as Time,
                     value: parseFloat(String(d[4])), // Close price
                 }));
@@ -103,8 +106,15 @@ export default function SolanaChart({ symbol = 'SOLUSDT', interval = '1m', onPri
         // Connect Binance WebSocket
         const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}@kline_${interval}`);
 
+        interface BinanceWsMessage {
+            k?: {
+                t: number; // Kline start time
+                c: string; // Close price
+            };
+        }
+
         ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
+            const message = JSON.parse(event.data) as BinanceWsMessage;
             const kline = message.k;
             if (kline) {
                 const closePrice = parseFloat(kline.c);

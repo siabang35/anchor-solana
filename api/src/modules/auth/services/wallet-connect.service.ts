@@ -77,8 +77,8 @@ export class WalletConnectService {
         const nonce = this.generateCryptoNonce();
         const issuedAt = new Date();
         const expiresAt = new Date(issuedAt.getTime() + 5 * 60 * 1000); // 5 minutes
-        const domain = 'exoduze.app';
-        const uri = 'https://exoduze.app';
+        const domain = 'exoduze.com';
+        const uri = 'https://exoduze.com';
 
         // Generate SIWE-compatible message
         const message = this.generateSIWEMessage(address, chain, nonce, issuedAt, expiresAt, domain, uri);

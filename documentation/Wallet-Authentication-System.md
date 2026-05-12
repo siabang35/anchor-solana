@@ -95,13 +95,14 @@ To ensure a seamless experience on mobile browsers (like Chrome or Safari) witho
   - Automatically detects browser extensions.
   - Users can connect and sign seamlessly via extension popups.
 
-#### **Mobile Integration**
+#### **Mobile Integration & EVM-Style SIWE Auto-Trigger**
 - **Architecture**: **Mobile Wallet Adapter (MWA) Protocol & Deep Linking**.
 - **Implementation**: 
   - We strictly adhere to Solana's best practices by implementing `SolanaMobileWalletAdapter` from `@solana-mobile/wallet-adapter-mobile`.
   - **MWA Protocol**: This ensures native OS-level intents (e.g., Android's bottom sheet) are correctly triggered, passing complete application identity payloads (`appIdentity`) so the wallet immediately prompts the user with "Sign and Accept" rather than just opening blindly.
-  - **Universal Fallbacks**: For iOS or scenarios where MWA is unavailable, explicit `PhantomWalletAdapter` and `SolflareWalletAdapter` instances ensure traditional Universal Links (`phantom://` or `solflare://`) function correctly, completely bypassing the need for in-app dapp browsers.
-  - **UX Flow**: The user selects a wallet, is natively redirected to their wallet app where the connection prompt is already waiting, signs the request, and is cleanly redirected back to the active Chrome/Safari session.
+  - **Universal Fallbacks**: For iOS or scenarios where MWA is unavailable, explicit `PhantomWalletAdapter` and `SolflareWalletAdapter` instances ensure traditional Universal Links (`phantom://` or `solflare://`) function correctly.
+  - **EVM-Style Auto-Trigger (`WalletAuthHandler`)**: A dedicated React component wrapper explicitly listens to the `useWallet()` connection state. The millisecond a mobile wallet connects, it fetches a challenge and triggers `signMessage()`. This perfectly mimics EVM WalletConnect behavior, ensuring the user immediately signs the SIWE message inside the wallet app before returning to Chrome.
+  - **Auto-Disconnect**: If the user declines the signature, the wallet is aggressively disconnected to maintain strict security boundaries.
 
 #### **Configuration**
 - **MWA Setup**: Uses `createDefaultAddressSelector` and `createDefaultAuthorizationResultCache` to maintain session persistence.
@@ -119,16 +120,19 @@ The backend generates a cryptographically random, single-use nonce via the datab
 **Security Features**:
 - **Nonce Entropy**: 32 bytes random hex (pgcrypto).
 - **Expiration**: Nonces expire after 5 minutes.
-- **Domain Binding**: Message binds to `exoduze.app` to prevent phishing.
+- **Domain Binding**: Message strictly binds to `exoduze.com` to prevent phishing and spoofing.
 - **Format**: 
   - EVM: EIP-4361 (SIWE) standard.
   - SUI/Solana: Custom readable message formats.
 
-### 4.2 Signature Verification
+### 4.2 Signature Verification & Fastify Secure Sessions
 Verification is handled by specific services tailored to the chain's cryptography:
 1. **EVM**: `ethers.verifyMessage` (Recovers address from ECDSA signature).
 2. **Solana**: `nacl.sign.detached.verify` (Ed25519 signature verification).
 3. **Sui**: `@mysten/sui.js/verify` (Handles Intent-based signatures).
+
+**Session Persistence (`@fastify/cookie`)**: 
+Upon successful verification, the backend issues JWT tokens. Since the backend utilizes the high-performance **FastifyAdapter**, session persistence is strictly enforced via the `@fastify/cookie` plugin. This ensures `refresh_token` cookies are set securely with `httpOnly`, `secure`, and `sameSite` flags, avoiding Express-specific `res.cookie` internal errors while maintaining high-throughput security.
 
 ---
 

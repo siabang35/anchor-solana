@@ -334,7 +334,7 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 | 2026-05-09 | `4a5gM86T...8b2Vo` | `admin_disburse_prize` registered, `claim_pool_prize` fixed (1.5x multiplier removed, PDA invoke_signed) |
 | 2026-05-11 | N/A | **v2.1 Fixes**: Cross-locale stake input (`,` to `.`), Devnet Auto-Simulation fallback, CSP WebSocket whitelist (`wss://*.solana.com`), and Public Read RLS for `pool_stakes`. |
 | 2026-05-11 | N/A | **v2.2 Enhancements**: Sports discipline auto-tagging (`mapSportToSubCategory` + keyword scanning), dual-layer frontend subcategory filtering, `metadataBase` SEO fix, `AgentLog` type safety, pool trigger hardening (`082`). |
-| 2026-05-12 | N/A | **v2.3 Enhancements**: Native Mobile Deep Linking via Mobile Wallet Adapter (MWA) `@solana-mobile/wallet-adapter-mobile` for proper Sign/Accept triggers on Android, plus Phantom/Solflare adapter fallbacks. |
+| 2026-05-12 | N/A | **v2.3 Enhancements**: Native Mobile Deep Linking via Mobile Wallet Adapter (MWA), strict EVM-style SIWE (Sign-In With Solana) auto-trigger upon connection, `@fastify/cookie` secure session persistence, and production domain updated to `exoduze.com`. |
 
 ---
 
@@ -346,7 +346,8 @@ All TX hashes are verifiable on [Solscan Devnet](https://solscan.io/?cluster=dev
 |:------|:--------|
 | **Database** | Row-Level Security (RLS) on all tables (Public Read for pool stakes) |
 | **API** | Fastify Rate limiting (300/min global, 5/min auth) |
-| **Auth** | Wallet-based authentication + auto-provisioning |
+| **Auth** | Strict SIWE (Sign-In with Solana) via `exoduze.com` + JWT tokens |
+| **Sessions** | `@fastify/cookie` secure HTTP-only cookies |
 | **CSP** | Content Security Policy whitelist (`wss://*.solana.com`, `wss://*.helius-rpc.com`) |
 | **Routing** | Fastify `path-to-regexp` v8 compliant `{ *path }` routing |
 | **API Docs** | Strict Swagger explicit 404 block on Production (`NODE_ENV=production`) |
@@ -401,7 +402,7 @@ Comprehensive architecture documentation is available in the [`documentation/`](
 | [Frontend-Architecture.md](./documentation/Frontend-Architecture.md) | Components, hooks, design system, CSP configuration |
 | [API-Integration.md](./documentation/API-Integration.md) | REST endpoints, auth flow, response formats |
 | [Real-Time-Data-Architecture.md](./documentation/Real-Time-Data-Architecture.md) | WebSocket, realtime subscriptions |
-| [Wallet-Authentication-System.md](./documentation/Wallet-Authentication-System.md) | Wallet auth, auto-provisioning |
+| [Wallet-Authentication-System.md](./documentation/Wallet-Authentication-System.md) | Wallet auth (SIWE), auto-provisioning, `@fastify/cookie` |
 | [Deployment-Guide.md](./documentation/Deployment-Guide.md) | Production deployment checklist |
 | [Sports-System.md](./documentation/Sports-System.md) | Sports data pipeline, API, discipline auto-tagging & filtering |
 | [Stake-Integrity-System.md](./documentation/Stake-Integrity-System.md) | Ghost entry prevention, drift-proof counters, UI fail-safes, SEO metadata |
@@ -447,5 +448,5 @@ The platform includes **75+ PostgreSQL migrations** managing:
 <p align="center">
   <strong>Built on Solana</strong><br/>
   <em>ExoDuZe — Multi-Agent Probabilistic Intelligence</em><br/>
-  <sub>Last Updated: 2026-05-12 — Mobile Deep Linking, Sports Discipline Tagging, SEO Metadata, Stake Visibility, WebSockets CSP, & Devnet Simulation</sub>
+  <sub>Last Updated: 2026-05-12 — Mobile Deep Linking, Strict EVM SIWE Auto-Sign, exoduze.com Domain, Fastify Security, & UI Stability</sub>
 </p>

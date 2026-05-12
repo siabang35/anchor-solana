@@ -42,10 +42,17 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
 
     while (true) {
         try {
+            // Get token from localStorage if available
+            let token = null;
+            if (typeof window !== 'undefined') {
+                token = localStorage.getItem('access_token');
+            }
+
             const res = await fetch(`${API_BASE_URL}${sanitizedPath}`, {
                 ...options,
                 headers: {
                     ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
                     ...(options?.headers || {}),
                 },
             });
