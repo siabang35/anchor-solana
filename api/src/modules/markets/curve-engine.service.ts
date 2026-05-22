@@ -267,6 +267,13 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     // Active streaming intervals
     private streamIntervals: Map<string, NodeJS.Timeout> = new Map();
 
+    // Write-throttle config: horizon → store_every_n_ticks
+    // Reduces DB writes by 75%+ while keeping full WebSocket UX
+    private writeThrottleConfig: Map<string, number> = new Map();
+
+    // Per-competition tick counter for write throttling
+    private tickCounters: Map<string, number> = new Map();
+
     constructor(
         private readonly configService: ConfigService,
         private readonly supabaseService: SupabaseService,
@@ -281,8 +288,37 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('🎲 CurveEngine initialized — Anti-prediction algorithms active [Algorithmic Gen-Only]');
         this.logger.log(`   Categories: ${Object.keys(CATEGORY_PROFILES).join(', ')}`);
 
+        // Load write-throttle config from DB
+        await this.loadWriteThrottleConfig();
+
         // Auto-start curves for active competitions
         await this.autoStartActiveCompetitions();
+    }
+
+    /**
+     * Load write-throttle config from curve_write_config table.
+     * Determines how often the CurveEngine stores to DB vs just broadcasting.
+     * Falls back to sensible defaults if table doesn't exist yet.
+     */
+    private async loadWriteThrottleConfig(): Promise<void> {
+        try {
+            const supabase = this.supabaseService.getAdminClient();
+            const { data, error } = await supabase
+                .from('curve_write_config')
+                .select('horizon, store_every_n_ticks');
+
+            if (!error && data) {
+                for (const row of data) {
+                    this.writeThrottleConfig.set(row.horizon, row.store_every_n_ticks);
+                }
+                this.logger.log(`📊 Write-throttle config loaded: ${data.map(r => `${r.horizon}=${r.store_every_n_ticks}`).join(', ')}`);
+            } else {
+                this.logger.debug('Write-throttle config not found, using defaults (store every tick)');
+            }
+        } catch {
+            // Table may not exist yet — use defaults (store every tick)
+            this.logger.debug('curve_write_config table not available — storing every tick');
+        }
     }
 
     onModuleDestroy() {
@@ -484,6 +520,14 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
         // Seed entropy from real data
         await this.refreshEntropy(competitionId, category);
 
+        // Get write-throttle config for this horizon
+        const storeEveryN = this.writeThrottleConfig.get(horizon) || 1;
+        this.tickCounters.set(competitionId, 0);
+
+        if (storeEveryN > 1) {
+            this.logger.log(`   📊 Write-throttle: storing every ${storeEveryN}th tick (${horizon} horizon)`);
+        }
+
         // Start the stream
         const interval = setInterval(async () => {
             try {
@@ -496,13 +540,22 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
                 // Generate curve point algorithmically
                 const snapshot = this.generateCurvePoint(category, competitionId);
 
-                // Store in Supabase
-                await this.storeSnapshot(competitionId, category, snapshot);
+                // Increment tick counter for write throttling
+                const currentTick = (this.tickCounters.get(competitionId) || 0) + 1;
+                this.tickCounters.set(competitionId, currentTick);
 
-                // Broadcast via WebSocket gateway
+                // WRITE-THROTTLE: Only store to DB every Nth tick
+                // This reduces DB writes by 75%+ while keeping identical UX
+                const shouldStore = storeEveryN <= 1 || (currentTick % storeEveryN === 0);
+
+                if (shouldStore) {
+                    await this.storeSnapshot(competitionId, category, snapshot);
+                }
+
+                // ALWAYS broadcast via WebSocket (every tick — full real-time UX)
                 this.marketDataGateway.broadcastCurveUpdate(competitionId, snapshot);
 
-                // Also broadcast via Supabase Realtime channel
+                // ALWAYS broadcast via Supabase Realtime channel
                 const supabase = this.supabaseService.getAdminClient();
                 const channel = supabase.channel(`competition-market-${competitionId}`);
                 await (channel as any).httpSend('probability_update', { marketId: competitionId, snapshot });

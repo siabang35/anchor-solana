@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS archive_batches (
 CREATE INDEX IF NOT EXISTS idx_archive_batches_table ON archive_batches(table_name, date_range_start);
 
 ALTER TABLE archive_batches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service role manages archives" ON archive_batches;
 CREATE POLICY "Service role manages archives" ON archive_batches
     FOR ALL USING (auth.role() = 'service_role');
 
@@ -143,58 +144,15 @@ COMMENT ON FUNCTION archive_old_probability_history(INTEGER, INTEGER) IS
 
 CREATE OR REPLACE FUNCTION cleanup_old_probability_history(
     p_keep_days INTEGER DEFAULT 7,
-    p_keep_per_competition INTEGER DEFAULT 120, -- Keep last N points per competition regardless
+    p_keep_per_competition INTEGER DEFAULT 120,
     p_batch_size INTEGER DEFAULT 10000
 )
 RETURNS TABLE(rows_deleted BIGINT, space_estimate_mb NUMERIC) AS $$
-DECLARE
-    v_cutoff TIMESTAMPTZ;
-    v_total_deleted BIGINT := 0;
-    v_batch_deleted BIGINT;
 BEGIN
-    v_cutoff := NOW() - (p_keep_days || ' days')::INTERVAL;
-
-    -- Delete old rows EXCEPT keep the last N points per competition for historical display
-    LOOP
-        DELETE FROM probability_history
-        WHERE id IN (
-            SELECT ph.id
-            FROM probability_history ph
-            WHERE ph.created_at < v_cutoff
-            -- Don't delete if this is one of the last N points for its competition
-            AND ph.id NOT IN (
-                SELECT sub.id
-                FROM (
-                    SELECT id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY competition_id
-                               ORDER BY created_at DESC
-                           ) as rn
-                    FROM probability_history
-                    WHERE competition_id = ph.competition_id
-                ) sub
-                WHERE sub.rn <= p_keep_per_competition
-            )
-            -- Only delete for SETTLED competitions (active ones need all data)
-            AND EXISTS (
-                SELECT 1 FROM competitions c
-                WHERE c.id = ph.competition_id
-                AND c.status IN ('settled', 'resolving')
-            )
-            LIMIT p_batch_size
-        );
-
-        GET DIAGNOSTICS v_batch_deleted = ROW_COUNT;
-        v_total_deleted := v_total_deleted + v_batch_deleted;
-
-        EXIT WHEN v_batch_deleted = 0;
-        PERFORM pg_sleep(0.2);
-    END LOOP;
-
-    rows_deleted := v_total_deleted;
-    -- Each full row averages ~700 bytes including TOAST
-    space_estimate_mb := ROUND((v_total_deleted * 700.0) / (1024 * 1024), 2);
-
+    -- No deletion of historical records to preserve dataset value.
+    -- Data is stripped of metadata and downsampled instead.
+    rows_deleted := 0;
+    space_estimate_mb := 0.00;
     RETURN NEXT;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
@@ -243,7 +201,7 @@ BEGIN
             AND EXISTS (
                 SELECT 1 FROM competitions c
                 WHERE c.id = ap.competition_id
-                AND c.status IN ('settled', 'resolving')
+                AND c.status IN ('settled', 'cancelled')
             )
             LIMIT p_batch_size
         );
@@ -275,19 +233,14 @@ COMMENT ON FUNCTION cleanup_old_agent_predictions(INTEGER, INTEGER) IS
 -- that is RARELY queried. Drop it and replace with a partial index.
 DROP INDEX IF EXISTS idx_prob_history_nonce;
 
--- Only index nonces from the last 48 hours (for real-time integrity verification)
-CREATE INDEX IF NOT EXISTS idx_prob_history_nonce_recent
+-- Only index rows that still have a nonce (after cleanup, old rows have NULL nonce)
+-- This naturally shrinks as the cleanup job NULLs out old security_nonce values
+CREATE INDEX IF NOT EXISTS idx_prob_history_nonce_partial
     ON probability_history(security_nonce)
-    WHERE security_nonce IS NOT NULL
-    AND created_at > (NOW() - INTERVAL '48 hours');
+    WHERE security_nonce IS NOT NULL;
 
 -- The fingerprint index is also rarely used for lookups
 DROP INDEX IF EXISTS idx_prob_history_fingerprint;
-
--- The main composite index is fine but we can add a partial version for active competitions
-CREATE INDEX IF NOT EXISTS idx_prob_history_active_comp
-    ON probability_history(competition_id, created_at DESC)
-    WHERE created_at > (NOW() - INTERVAL '48 hours');
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- PHASE 7: Cleanup old curve_audit_log and curve_rate_limits
@@ -302,6 +255,7 @@ RETURNS TABLE(audit_deleted BIGINT, rate_limit_deleted BIGINT) AS $$
 DECLARE
     v_audit BIGINT;
     v_rate BIGINT;
+    v_temp BIGINT;
 BEGIN
     -- Cleanup old audit logs (keep security_alert type for 30 days)
     DELETE FROM curve_audit_log
@@ -313,7 +267,8 @@ BEGIN
     DELETE FROM curve_audit_log
     WHERE created_at < NOW() - INTERVAL '30 days'
     AND event_type = 'security_alert';
-    v_audit := v_audit + ROW_COUNT;
+    GET DIAGNOSTICS v_temp = ROW_COUNT;
+    v_audit := v_audit + v_temp;
 
     -- Cleanup old rate limits
     DELETE FROM curve_rate_limits
@@ -410,12 +365,12 @@ COMMENT ON FUNCTION run_storage_optimization(INTEGER, INTEGER, INTEGER, INTEGER,
 CREATE OR REPLACE VIEW storage_health_dashboard AS
 WITH table_stats AS (
     SELECT
-        relname AS table_name,
+        c.relname AS table_name,
         pg_total_relation_size(c.oid) AS total_bytes,
         pg_table_size(c.oid) AS data_bytes,
         pg_indexes_size(c.oid) AS index_bytes,
-        n_live_tup AS live_rows,
-        n_dead_tup AS dead_rows
+        s.n_live_tup AS live_rows,
+        s.n_dead_tup AS dead_rows
     FROM pg_class c
     JOIN pg_stat_user_tables s ON c.relname = s.relname
     WHERE c.relkind = 'r'
@@ -509,6 +464,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS for data-archives bucket: service role only
+DROP POLICY IF EXISTS "Service role manages data archives" ON storage.objects;
 CREATE POLICY "Service role manages data archives"
     ON storage.objects FOR ALL
     USING (bucket_id = 'data-archives' AND auth.role() = 'service_role')

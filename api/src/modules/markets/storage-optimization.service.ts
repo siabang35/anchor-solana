@@ -30,15 +30,14 @@ interface StorageHealthRow {
 }
 
 interface OptimizationResult {
+    summaries_created: number;
     prob_rows_stripped: number;
-    prob_strip_savings_mb: number;
     prob_rows_deleted: number;
-    prob_delete_savings_mb: number;
     pred_rows_cleaned: number;
-    pred_savings_mb: number;
-    audit_rows_deleted: number;
-    rate_limit_rows_deleted: number;
-    total_estimated_savings_mb: number;
+    nonces_cleaned: number;
+    penalties_cleaned: number;
+    security_events_cleaned: number;
+    total_operations: number;
 }
 
 @Injectable()
@@ -77,11 +76,12 @@ export class StorageOptimizationService implements OnModuleInit {
 
             if (result) {
                 this.logger.log(
-                    `✅ Storage optimization complete: ` +
-                    `prob_stripped=${result.prob_rows_stripped} (~${result.prob_strip_savings_mb}MB), ` +
-                    `prob_deleted=${result.prob_rows_deleted} (~${result.prob_delete_savings_mb}MB), ` +
-                    `preds_cleaned=${result.pred_rows_cleaned} (~${result.pred_savings_mb}MB), ` +
-                    `total_savings=~${result.total_estimated_savings_mb}MB`
+                    `✅ Storage optimization V2 complete: ` +
+                    `summaries=${result.summaries_created}, ` +
+                    `stripped=${result.prob_rows_stripped}, ` +
+                    `deleted=${result.prob_rows_deleted}, ` +
+                    `preds_cleaned=${result.pred_rows_cleaned}, ` +
+                    `total_ops=${result.total_operations}`
                 );
             }
         } catch (err: any) {
@@ -265,27 +265,50 @@ export class StorageOptimizationService implements OnModuleInit {
     // ════════════════════════════════════════════
 
     /**
-     * Calls the master run_storage_optimization() PostgreSQL function
-     * which handles all cleanup in a single DB round-trip.
+     * Calls the master run_storage_optimization_v2() PostgreSQL function
+     * which handles: downsample → archive → strip → delete → cleanup
+     * in a single DB round-trip. Falls back to V1 if V2 is not available.
      */
     async runDatabaseCleanup(): Promise<OptimizationResult | null> {
         const supabase = this.supabaseService.getAdminClient();
 
         try {
-            const { data, error } = await supabase.rpc('run_storage_optimization', {
-                p_prob_strip_hours: this.PROB_HISTORY_STRIP_HOURS,
-                p_prob_delete_days: this.PROB_HISTORY_DELETE_DAYS,
-                p_pred_cleanup_days: this.PRED_CLEANUP_DAYS,
+            // Try V2 first (with downsampling)
+            const { data, error } = await supabase.rpc('run_storage_optimization_v2', {
+                p_hot_retention_hours: this.PROB_HISTORY_STRIP_HOURS,
+                p_warm_retention_days: this.PROB_HISTORY_DELETE_DAYS,
                 p_keep_per_competition: this.KEEP_PER_COMPETITION,
-                p_run_vacuum: false,
             });
 
             if (error) {
-                this.logger.error(`Database cleanup RPC failed: ${error.message}`);
-                return null;
+                // Fall back to V1 if V2 not available
+                this.logger.warn(`V2 optimization RPC failed, trying V1: ${error.message}`);
+                const { data: v1Data, error: v1Error } = await supabase.rpc('run_storage_optimization', {
+                    p_prob_strip_hours: this.PROB_HISTORY_STRIP_HOURS,
+                    p_prob_delete_days: this.PROB_HISTORY_DELETE_DAYS,
+                    p_pred_cleanup_days: this.PRED_CLEANUP_DAYS,
+                    p_keep_per_competition: this.KEEP_PER_COMPETITION,
+                    p_run_vacuum: false,
+                });
+
+                if (v1Error) {
+                    this.logger.error(`V1 fallback also failed: ${v1Error.message}`);
+                    return null;
+                }
+
+                const v1Result = Array.isArray(v1Data) ? v1Data[0] : v1Data;
+                return {
+                    summaries_created: 0,
+                    prob_rows_stripped: v1Result?.prob_rows_stripped || 0,
+                    prob_rows_deleted: v1Result?.prob_rows_deleted || 0,
+                    pred_rows_cleaned: v1Result?.pred_rows_cleaned || 0,
+                    nonces_cleaned: 0,
+                    penalties_cleaned: 0,
+                    security_events_cleaned: 0,
+                    total_operations: v1Result?.total_estimated_savings_mb || 0,
+                };
             }
 
-            // RPC returns array of single row
             const result = Array.isArray(data) ? data[0] : data;
             return result as OptimizationResult;
         } catch (err: any) {

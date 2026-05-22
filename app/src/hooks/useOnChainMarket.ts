@@ -85,7 +85,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
 
             // Fetch historical snapshots to populate curve
             const { data: snapshots } = await supabase
-                .from('probability_history')
+                .from('probability_history_lean')
                 .select('home, draw, away, created_at, narrative')
                 .eq('competition_id', competitionId)
                 .order('created_at', { ascending: true })
