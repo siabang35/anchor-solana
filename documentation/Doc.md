@@ -501,8 +501,11 @@ colors: {
 | 034 | **Fallback OTP** | fallback_otp_codes | Backup codes | 4KB |
 | 036 | **Email Verified** | profiles.email_verified | Column add | 1KB |
 | 047 | **OAuth Hardening** | oauth_state_tokens, oauth_jti_registry, oauth_rate_limits | 5 funcs + policies | 18KB |
+| 092 | **Storage Optimization** | archive_batches, storage_health_dashboard | 4 funcs + policies | 24KB |
+| 093 | **Advanced Storage & Anti-Abuse** | probability_history_summary, security_events, anti_chunk_penalties, curve_write_config, used_nonces | 4 funcs + policies | 22KB |
+| 094 | **Lean Hybrid View** | probability_history_lean | 1 view | 2KB |
 
-**Total: ~220KB of SQL, 40+ tables, 60+ functions**
+**Total: ~268KB of SQL, 45+ tables, 75+ functions**
 
 ### 7.2 Core Tables
 
@@ -615,6 +618,17 @@ CREATE POLICY "admin_read" ON public.profiles
         EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid() AND is_active)
     );
 ```
+
+### 7.5 Database & Platform Optimization
+
+To support high-scale operations (100,000+ MAU) without database throttling or excessive costs, a hybrid storage architecture has been implemented.
+
+* **Decoupled Write-Throttling**: The Curve Engine broadcasts 100% of ticks via WebSockets for real-time responsiveness, but only persists every Nth tick (configurable per-horizon in `curve_write_config`) to the database, saving up to 75% of write operations.
+* **Metadata Stripping & Archiving**: Ticks older than 48 hours are compiled into JSON format, compressed, and archived to cheap Supabase Storage (`data-archives`). The heavy coordinate columns (`entropy_seed`, `chaos_state`) are then nullified in the database, reducing row size by **~97%** to preserve historical values forever.
+* **Downsampling & Lean View**: Minute-average summaries are compiled into `probability_history_summary`. Query consumers utilize `probability_history_lean`, which unions active high-res records and historical summaries seamlessly.
+* **Security & Progressive Cooldowns**: Incorporates anti-replay nonce validation (`used_nonces`) and a progressive anti-chunking cooldown trigger (`anti_chunk_guard_v2`) that penalizes abusive prediction scripts by doubling wait times up to 1 hour.
+
+> **Detailed Guide:** [Database-Optimization-Architecture.md](./Database-Optimization-Architecture.md)
 
 ---
 
@@ -757,6 +771,7 @@ anchor deploy --provider.cluster devnet
 | **AI Agent System** | [AI-Agent-System.md](./AI-Agent-System.md) | Agent deployment, forecasting, AgentRunner, wagering, leaderboard |
 | **Frontend** | [Frontend-Architecture.md](./Frontend-Architecture.md) | Next.js 16 App Router, hooks, components, design system |
 | **Security** | [Security-Architecture.md](./Security-Architecture.md) | Defense-in-depth, JWT fingerprinting, RLS, anti-throttling |
+| **Database Optimization** | [Database-Optimization-Architecture.md](./Database-Optimization-Architecture.md) | Write-throttling, metadata stripping, downsampling, anti-chunking |
 | **Real-Time Data** | [Real-Time-Data-Architecture.md](./Real-Time-Data-Architecture.md) | ETL pipelines, RabbitMQ, WebSocket gateways |
 | **Deployment** | [Deployment-Guide.md](./Deployment-Guide.md) | Vercel, Render, Solana Devnet deployment |
 
