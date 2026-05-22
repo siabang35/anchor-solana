@@ -26,9 +26,28 @@ export default function AgentPosition() {
                 return;
             }
 
-            // Check if user is fully authenticated (has JWT) before fetching
+            // Check if user is fully authenticated (has valid JWT) before fetching
             const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
             if (!token) {
+                setPositions([]);
+                setLoading(false);
+                return;
+            }
+
+            // Validate JWT is not expired before making the request
+            // This prevents the browser from logging 401 network errors
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                if (payload.exp && payload.exp * 1000 < Date.now()) {
+                    // Token expired — remove it and skip the request
+                    localStorage.removeItem('access_token');
+                    setPositions([]);
+                    setLoading(false);
+                    return;
+                }
+            } catch {
+                // Malformed token — remove it and skip
+                localStorage.removeItem('access_token');
                 setPositions([]);
                 setLoading(false);
                 return;
@@ -47,6 +66,8 @@ export default function AgentPosition() {
                 // the dashboard endpoints will return 401 Unauthorized.
                 // We gracefully fallback to an empty portfolio here without crashing.
                 if (err.message && (err.message.includes('401') || err.message.includes('Unauthorized'))) {
+                    // Token may have been invalidated server-side — clean up
+                    localStorage.removeItem('access_token');
                     setPositions([]);
                 } else {
                     console.error('Failed to load portfolio positions', err);

@@ -50,6 +50,7 @@ export interface WeightedLeaderboardEntry {
     rank_trend: number;
     deployed_at: string;
     has_min_predictions: boolean;
+    accuracy_pct: number | null;
     competition_id: string;
 }
 
@@ -259,6 +260,7 @@ export class LeaderboardScoringService {
         const snapshotHash = this.generateHmacHash(prevHash, snapshotData, serverNonce);
 
         // 7. Insert leaderboard snapshot (append-only)
+        let snapshotInserted = true;
         const { error: snapError } = await supabase
             .from('leaderboard_snapshots')
             .insert({
@@ -279,23 +281,35 @@ export class LeaderboardScoringService {
             });
 
         if (snapError) {
-            this.logger.error(`Failed to insert leaderboard snapshot: ${snapError.message}`);
-            return null;
+            // CRITICAL FIX: Do NOT return null here — continue to update prediction_count.
+            // The snapshot failure must NOT prevent prediction_count from being incremented,
+            // otherwise agent_competition_entries.prediction_count drifts from actual
+            // agent_predictions rows → "preds stack" production bug.
+            this.logger.error(`Failed to insert leaderboard snapshot (non-blocking): ${snapError.message}`);
+            snapshotInserted = false;
         }
 
         // 8. Calculate rank trend (save old ranks, compare after update)
         const oldRanks = await this.getRankMap(competitionId);
 
         // 9. Update agent_competition_entries with new weighted score
+        // Even if snapshot failed, we MUST update prediction_count to stay in sync.
+        // The DB trigger (sync_prediction_count_on_insert) provides additional defense.
+        const updatePayload: any = {
+            prediction_count: newCount,
+            last_scored_at: new Date().toISOString(),
+        };
+
+        // Only update score fields if snapshot was successfully recorded
+        if (snapshotInserted) {
+            updatePayload.weighted_score = newCumulativeScore;
+            updatePayload.brier_score = newCumulativeBrier;
+            updatePayload.score_hash = snapshotHash;
+        }
+
         const { error: updateError } = await supabase
             .from('agent_competition_entries')
-            .update({
-                weighted_score: newCumulativeScore,
-                brier_score: newCumulativeBrier,
-                prediction_count: newCount,
-                last_scored_at: new Date().toISOString(),
-                score_hash: snapshotHash,
-            })
+            .update(updatePayload)
             .eq('agent_id', agentId)
             .eq('competition_id', competitionId);
 
@@ -314,7 +328,7 @@ export class LeaderboardScoringService {
             `Scored prediction for agent ${agentId} in competition ${competitionId}: ` +
             `raw=${rawBrier.toFixed(4)}, weight=${difficultyCtx.weight}, ` +
             `weighted=${weightedBrier.toFixed(4)}, cumulative=${newCumulativeScore.toFixed(4)} ` +
-            `(prediction #${newCount})`
+            `(prediction #${newCount})${snapshotInserted ? '' : ' [SNAPSHOT FAILED]'}`
         );
 
         return {
@@ -376,6 +390,7 @@ export class LeaderboardScoringService {
             rank_trend: row.rank_trend || 0,
             deployed_at: row.deployed_at,
             has_min_predictions: row.has_min_predictions,
+            accuracy_pct: row.accuracy_pct != null ? Number(row.accuracy_pct) : null,
             competition_id: competitionId,
         }));
 

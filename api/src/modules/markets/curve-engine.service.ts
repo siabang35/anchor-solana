@@ -511,11 +511,17 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
             }
         }, updateIntervalMs); 
 
-        // Generate the 0-tick first snapshot instantly
-        setTimeout(() => {
+        // Generate the 0-tick first snapshot instantly and STORE it
+        setTimeout(async () => {
             const state = this.curveStates.get(competitionId);
             if (state && state.tick === 0) {
-                 this.generateCurvePoint(category, competitionId);
+                try {
+                    const snapshot = this.generateCurvePoint(category, competitionId);
+                    await this.storeSnapshot(competitionId, category, snapshot);
+                    this.marketDataGateway.broadcastCurveUpdate(competitionId, snapshot);
+                } catch (err: any) {
+                    this.logger.warn(`Failed to store tick-0 snapshot for ${competitionId}: ${err.message}`);
+                }
             }
         }, 1000);
 
@@ -943,11 +949,12 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     private async autoStartActiveCompetitions(): Promise<void> {
         try {
             const supabase = this.supabaseService.getAdminClient();
+            // Must cover ALL active competitions (7 sectors × 4 = 28+)
             const { data } = await supabase
                 .from('competitions')
                 .select('id, sector')
                 .eq('status', 'active')
-                .limit(20);
+                .limit(50);
 
             if (data && data.length > 0) {
                 this.logger.log(`Auto-starting curve streams for ${data.length} active competitions`);
@@ -969,11 +976,12 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
     async healthCheck(): Promise<void> {
         try {
             const supabase = this.supabaseService.getAdminClient();
+            // Must cover ALL active competitions (7 sectors × 4 = 28+)
             const { data } = await supabase
                 .from('competitions')
                 .select('id, sector')
                 .eq('status', 'active')
-                .limit(20);
+                .limit(50);
 
             if (data) {
                 for (const comp of data) {

@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* https://*.solana.com wss://*.solana.com https://*.helius-rpc.com wss://*.helius-rpc.com https://api.exoduze.com https://www.exoduze.com wss://api.exoduze.com https://api.binance.com wss://stream.binance.com:9443",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* http://127.0.0.1:* https://*.solana.com wss://*.solana.com https://*.helius-rpc.com wss://*.helius-rpc.com https://api.exoduze.com https://www.exoduze.com wss://api.exoduze.com https://api.binance.com wss://stream.binance.com:9443",
               "frame-ancestors 'none'",
             ].join("; "),
           },

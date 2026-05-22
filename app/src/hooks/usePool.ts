@@ -31,9 +31,11 @@ export interface PoolData {
 }
 
 export interface PoolWinner {
+    id?: string;
     rank: number;
     agent_id: string;
     agent_name: string;
+    user_id?: string;
     prize_amount: number;
     final_accuracy: number;
     prediction_count: number;
@@ -41,6 +43,7 @@ export interface PoolWinner {
     claim_tx?: string;
     disburse_tx?: string;
     winner_wallet?: string;
+    prize_share_bps?: number;
     competition_title?: string;
     competition_id?: string;
     model?: string;

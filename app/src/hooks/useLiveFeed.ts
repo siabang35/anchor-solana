@@ -153,7 +153,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 .select('id, title, description, source_name, source, url, published_at, impact, sentiment, sentiment_score, category, tags, image_url');
 
             if (isCategoryValid) {
-                query = query.ilike('category', `%${category}%`);
+                query = query.eq('category', category);
             }
 
             const { data, error: sbError } = await query
@@ -178,7 +178,7 @@ export function useLiveFeed(limit: number = 20, category?: string): UseLiveFeedR
                 .select('id, title, description, sector, status, created_at, image_url');
 
             if (isCategoryValid) {
-                query = query.ilike('sector', `%${category}%`);
+                query = query.eq('sector', category);
             }
 
             const { data: comps } = await query

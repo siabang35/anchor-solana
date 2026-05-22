@@ -819,6 +819,7 @@ export class AgentsService {
                     last_scored_at: row.last_scored_at,
                     rank_trend: row.rank_trend || 0,
                     has_min_predictions: row.has_min_predictions,
+                    accuracy_pct: row.accuracy_pct != null ? Number(row.accuracy_pct) : null,
                     competition_id: competitionId,
                     status: row.agent_status,
                 }));
@@ -974,6 +975,7 @@ export class AgentsService {
             rank_trend: row.rank_trend || 0,
             deployed_at: row.deployed_at,
             has_min_predictions: row.has_min_predictions,
+            accuracy_pct: row.accuracy_pct != null ? Number(row.accuracy_pct) : null,
             competition_id: competitionId,
         }));
 

@@ -16,6 +16,7 @@ import { ProbabilityEngineService } from './probability-engine.service.js';
 import { CurveEngineService } from './curve-engine.service.js';
 import { MultiSourceFusionService } from './multi-source-fusion.service.js';
 import { CompetitionClusteringService } from './competition-clustering.service.js';
+import { StorageOptimizationService } from './storage-optimization.service.js';
 import { LiveFeedController } from './live-feed.controller.js';
 
 // API Clients
@@ -66,6 +67,7 @@ import {
         CurveEngineService,
         MultiSourceFusionService,
         CompetitionClusteringService,
+        StorageOptimizationService,
 
         // Gateway
         MarketDataGateway,
@@ -108,6 +110,7 @@ import {
         CurveEngineService,
         MultiSourceFusionService,
         CompetitionClusteringService,
+        StorageOptimizationService,
         CryptoClient,
     ],
 })

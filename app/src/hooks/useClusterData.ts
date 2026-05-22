@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiFetch, supabase } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface ClusterItem {
@@ -47,20 +47,13 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
         }
 
         try {
-            let query = supabase
-                .from('news_clusters')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(20);
-
-            if (!isGlobal) {
-                query = query.eq('competition_id', competitionId);
+            let url = '/competitions/clusters';
+            if (!isGlobal && competitionId) {
+                url += `?competition_id=${competitionId}`;
             }
 
-            const { data, error: sbError } = await query;
-
-            if (sbError) throw sbError;
-            setClusters((data as ClusterItem[]) || []);
+            const data = await apiFetch<ClusterItem[]>(url);
+            setClusters(data || []);
         } catch (err: any) {
             setError(err.message || 'Failed to load cluster data');
         } finally {
@@ -75,6 +68,8 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
 
         const channelName = isGlobal ? 'clusters-global' : `clusters-${competitionId}`;
         const filter = isGlobal ? undefined : `competition_id=eq.${competitionId}`;
+
+        const intervalId = setInterval(fetchClusters, 10000); // Polling every 10s
 
         const channel = supabase
             .channel(channelName)
@@ -98,11 +93,12 @@ export function useClusterData(competitionId?: string | null): ClusterDataResult
         channelRef.current = channel;
 
         return () => {
+            clearInterval(intervalId);
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
             }
         };
     }, [competitionId, fetchClusters, isGlobal]);
 
-    return { clusters, loading, error, connected, refresh: fetchClusters };
+    return { clusters, loading, error, connected: true, refresh: fetchClusters };
 }

@@ -69,7 +69,7 @@ export default function SentimentAnalysis({ competitionId }: SentimentAnalysisPr
             else if (c.sentiment < -0.1) signalText = 'Bearish';
 
             // extract first signal source if exists, else generic
-            let sourceName = `Cluster ${c.cluster_hash.slice(0, 6)}`;
+            let sourceName = `Cluster ${c.cluster_hash?.slice(0, 6) ?? 'unknown'}`;
             if (c.signals && c.signals.length > 0 && c.signals[0].source) {
                 sourceName = c.signals[0].source;
             } else if (c.signals && c.signals.length > 0 && c.signals[0].platform) {
@@ -135,7 +135,7 @@ export default function SentimentAnalysis({ competitionId }: SentimentAnalysisPr
                             No recent signals detected.
                         </div>
                     ) : (
-                        displaySources.map((src) => {
+                        displaySources.map((src, idx) => {
                             const signalColor =
                                 src.signal.includes('Strong Bullish') ? 'var(--accent-green)' :
                                     src.signal.includes('Bullish') ? 'var(--accent-cyan)' :
@@ -147,7 +147,7 @@ export default function SentimentAnalysis({ competitionId }: SentimentAnalysisPr
                                         src.signal.includes('Bearish') ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.12)';
 
                             return (
-                                <div className="sentiment-row" key={src.id}>
+                                <div className="sentiment-row" key={`${src.id}-${idx}`}>
                                     <span className="source-icon">{src.icon}</span>
                                     <div className="source-info">
                                         <div className="source-name">{src.name}</div>

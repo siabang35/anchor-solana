@@ -340,19 +340,24 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                                     TX: {shortTx(winner.disburse_tx)} ↗
                                                                 </button>
                                                             </>
-                                                        ) : publicKey && ((winner as any).user_id === publicKey.toString() || winner.winner_wallet === publicKey.toString()) && !winner.claimed ? (
+                                                        ) : publicKey && (
+                                                            winner.user_id === publicKey.toString() ||
+                                                            winner.winner_wallet === publicKey.toString() ||
+                                                            // Also check if user_id is the wallet address (ExoDuZe wallet-auth pattern)
+                                                            (winner.user_id && winner.user_id.length >= 32 && winner.user_id.length <= 44 && !winner.user_id.includes('-'))
+                                                        ) && !winner.claimed && winner.id ? (
                                                             <>
                                                                 <span>·</span>
                                                                 <button
-                                                                    onClick={() => handleClaim((winner as any).id)}
-                                                                    disabled={claimingId === (winner as any).id}
+                                                                    onClick={() => handleClaim(winner.id!)}
+                                                                    disabled={claimingId === winner.id}
                                                                     style={{
                                                                         background: 'var(--accent-green)', border: 'none', cursor: 'pointer',
                                                                         color: '#fff', fontSize: '0.5rem', fontFamily: 'var(--font-mono)',
                                                                         padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold'
                                                                     }}
                                                                 >
-                                                                    {claimingId === (winner as any).id ? 'Claiming...' : 'Claim Prize'}
+                                                                    {claimingId === winner.id ? 'Claiming...' : 'Claim Prize'}
                                                                 </button>
                                                             </>
                                                         ) : null}

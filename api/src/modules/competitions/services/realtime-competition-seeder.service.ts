@@ -1387,6 +1387,33 @@ export class RealtimeCompetitionSeederService {
                     }
                 } catch (e: any) {
                     this.logger.error(`Pool settlement exception for ${comp.id}: ${e.message}`);
+                    // RETRY: Direct RPC fallback if poolService.settlePool failed
+                    try {
+                        const { error: retryErr } = await supabase.rpc('settle_competition_pool', {
+                            p_competition_id: comp.id,
+                            p_settled_by: 'system_cron_retry',
+                        });
+                        if (retryErr) {
+                            this.logger.error(`Pool settle retry also failed: ${retryErr.message}`);
+                            // Last resort: if pool has no stakes, just mark it as settled
+                            const { data: poolCheck } = await supabase
+                                .from('competition_pools')
+                                .select('id, total_staked, settlement_status')
+                                .eq('competition_id', comp.id)
+                                .single();
+                            if (poolCheck && poolCheck.settlement_status === 'pending' && Number(poolCheck.total_staked) === 0) {
+                                await supabase
+                                    .from('competition_pools')
+                                    .update({ settlement_status: 'settled', settled_at: new Date().toISOString(), settled_by: 'system_no_stakes' })
+                                    .eq('id', poolCheck.id);
+                                this.logger.log(`📭 Empty pool force-settled for ${comp.id} (0 stakes)`);
+                            }
+                        } else {
+                            this.logger.log(`🏆 Pool settled via RPC retry for ${comp.id}`);
+                        }
+                    } catch (retryEx: any) {
+                        this.logger.error(`Pool settlement retry exception for ${comp.id}: ${retryEx.message}`);
+                    }
                 }
 
                 // Record freed slot for immediate replenishment
@@ -1669,7 +1696,7 @@ export class RealtimeCompetitionSeederService {
 
                 const { data: latestItemsRaw } = await supabase
                     .from('market_data_items')
-                    .select('title, description, url, sentiment_score, impact')
+                    .select('title, description, url, sentiment_score, sentiment, impact')
                     .eq('category', category)
                     .eq('is_active', true)
                     .order('published_at', { ascending: false })
@@ -1708,17 +1735,22 @@ export class RealtimeCompetitionSeederService {
                     })),
                     ...(latestItems || []).map(i => {
                         let itemSentiment: number;
-                        if (typeof i.sentiment_score === 'number' && i.sentiment_score !== 0) {
-                            // Use actual numeric score if present and non-zero
+                        if (typeof i.sentiment_score === 'number' && Math.abs(i.sentiment_score) > 0.05) {
+                            // Use actual numeric score if it's significantly different from zero
                             itemSentiment = i.sentiment_score;
-                        } else if (i.sentiment_score === null || i.sentiment_score === undefined) {
-                            // No score at all — use impact-based heuristic with random variation
-                            if (i.impact === 'high' || i.impact === 'critical') itemSentiment = 0.4 + (Math.random() * 0.35);
-                            else if (i.impact === 'low') itemSentiment = -(0.2 + (Math.random() * 0.3));
-                            else itemSentiment = (Math.random() * 0.4) - 0.2; // medium/unknown: wider range
+                        } else if (i.sentiment) {
+                            // FIX: Use text label ('bullish'/'bearish') for proper mapping
+                            // Previously the code fell through to impact-based fallback which
+                            // was ALWAYS positive for high-impact items, causing permanent
+                            // bullish bias even when market was actually bearish.
+                            itemSentiment = sentimentLabelToScore(i.sentiment);
+                        } else if (i.impact === 'high' || i.impact === 'critical') {
+                            // No sentiment data at all — use neutral range, NOT always positive
+                            itemSentiment = (Math.random() * 0.6) - 0.3; // -0.3 to 0.3
+                        } else if (i.impact === 'low') {
+                            itemSentiment = -(0.1 + (Math.random() * 0.2));
                         } else {
-                            // sentiment_score is explicitly 0 — use text label if available
-                            itemSentiment = (Math.random() * 0.3) - 0.15;
+                            itemSentiment = (Math.random() * 0.3) - 0.15; // medium/unknown
                         }
                         return { 
                             title: i.title, 

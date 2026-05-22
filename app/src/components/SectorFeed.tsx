@@ -247,8 +247,8 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                 {comp.tags && comp.tags.length > 0 && (
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '0.8rem', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>SOURCES:</span>
-                        {comp.tags.slice(0, 3).map(tag => (
-                            <span key={tag} style={{ 
+                        {comp.tags.slice(0, 3).map((tag, idx) => (
+                            <span key={`${tag}-${idx}`} style={{ 
                                 fontSize: '0.55rem', 
                                 color: 'var(--text-primary)', 
                                 background: 'var(--bg-input)', 

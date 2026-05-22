@@ -50,7 +50,7 @@ export class CompetitionsService {
      * Find active competitions, optionally filtered by sector
      */
     async findActive(sector?: string, limit: number = 20): Promise<CompetitionResponseDto[]> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
         const now = new Date().toISOString();
 
         let query = supabase
@@ -58,6 +58,7 @@ export class CompetitionsService {
             .select('*')
             .in('status', ['active', 'upcoming'])
             .gt('competition_end', now) // Exclude time-expired competitions
+            .order('entry_count', { ascending: false }) // Prioritize comps with agents
             .order('competition_start', { ascending: true })
             .limit(limit);
 
@@ -79,7 +80,7 @@ export class CompetitionsService {
      * Find competitions by sector
      */
     async findBySector(sector: string, limit: number = 20): Promise<CompetitionResponseDto[]> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
         const now = new Date().toISOString();
 
         const { data, error } = await supabase
@@ -88,6 +89,7 @@ export class CompetitionsService {
             .eq('sector', sector)
             .in('status', ['active', 'upcoming'])
             .gt('competition_end', now) // Exclude time-expired competitions
+            .order('entry_count', { ascending: false }) // Prioritize comps with agents
             .order('competition_start', { ascending: false })
             .limit(limit);
 
@@ -103,7 +105,7 @@ export class CompetitionsService {
      * Get competition by ID
      */
     async findById(id: string): Promise<CompetitionResponseDto> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
         const { data, error } = await supabase
             .from('competitions')
@@ -122,7 +124,7 @@ export class CompetitionsService {
      * Get count of active/upcoming competitions per sector
      */
     async getSectorSummary(): Promise<SectorSummaryDto[]> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
         const now = new Date().toISOString();
 
         const { data, error } = await supabase
@@ -156,45 +158,27 @@ export class CompetitionsService {
      * Get historical aggregated stats for a sector (Volume, Distributed, Contributors)
      */
     async getSectorStats(sector: string): Promise<any> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
-        let query = supabase
-            .from('competition_pools')
-            .select('total_staked, distributable_pool, stake_count, competitions!inner(sector, status)');
+        // Use the newly upgraded RPC that reads from pool_stakes (on-chain source of truth)
+        const targetSector = sector && !['all', 'top', 'foryou', 'latest', 'signals'].includes(sector) ? sector : 'all';
+        const { data, error } = await supabase.rpc('get_sector_pool_summary', { p_sector: targetSector });
 
-        if (sector && sector !== 'all' && sector !== 'top' && sector !== 'foryou' && sector !== 'latest' && sector !== 'signals') {
-            query = query.eq('competitions.sector', sector);
-        }
-
-        const { data, error } = await query;
-        
-        if (error) {
-            this.logger.error(`Failed to fetch sector stats: ${error.message}`);
-            return { total_volume: 0, total_distributed: 0, contributors: 0 };
-        }
-
-        let total_volume = 0;
-        let total_distributed = 0;
-        let contributors = 0;
-
-        for (const row of data || []) {
-            const pool = parseFloat(row.distributable_pool) || 0;
-            const entries = parseInt(row.stake_count) || 0;
-            
-            total_volume += pool;
-            contributors += entries;
-            
-            const comp = Array.isArray(row.competitions) ? row.competitions[0] : row.competitions;
-            if (comp?.status === 'settled') {
-                total_distributed += pool;
-            }
+        if (error || !data) {
+            this.logger.error(`Failed to fetch sector stats via RPC: ${error?.message || 'No data'}`);
+            return {
+                sector,
+                total_volume: 0,
+                total_distributed: 0,
+                contributors: 0
+            };
         }
 
         return {
-            sector,
-            total_volume,
-            total_distributed,
-            contributors
+            sector: targetSector,
+            total_volume: data.total_pool || 0,
+            total_distributed: data.total_distributed || 0,
+            contributors: data.total_participants || 0
         };
     }
 
@@ -202,7 +186,7 @@ export class CompetitionsService {
      * Find active competitions for a specific sector + horizon
      */
     async findActiveByHorizon(sector: string, timeHorizon: string): Promise<CompetitionResponseDto[]> {
-        const supabase = this.supabaseService.getClient();
+        const supabase = this.supabaseService.getAdminClient();
 
         const { data, error } = await supabase
             .from('competitions')
@@ -247,6 +231,30 @@ export class CompetitionsService {
             .eq('id', id);
 
         this.logger.log(`Competition ${id} linked to on-chain: ${pubkey}`);
+    }
+
+    /**
+     * Get news clusters for a competition (bypasses RLS)
+     */
+    async getClusters(competitionId?: string): Promise<any[]> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        let query = supabase
+            .from('news_clusters')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (competitionId && competitionId !== 'all') {
+            query = query.eq('competition_id', competitionId);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+            this.logger.error(`Failed to fetch clusters: ${error.message}`);
+            return [];
+        }
+        return data || [];
     }
 
     // ========================

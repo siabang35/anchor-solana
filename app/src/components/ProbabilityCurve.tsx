@@ -291,8 +291,10 @@ export default function ProbabilityCurve({
 
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
 
-    // ── Apply Exponential Moving Average (EMA) for Smoothing ─────
-    const EMA_ALPHA = 0.12; // Adjusted for better responsiveness
+    // ── Light smoothing — preserve real up/down movements ─────────
+    // High alpha = closer to raw data. We use 0.55 so the curve faithfully
+    // follows probability_history while eliminating micro-jitter.
+    const EMA_ALPHA = 0.55;
     const smoothedHomeData: number[] = [];
     const smoothedDrawData: number[] = [];
     const smoothedAwayData: number[] = [];
@@ -302,14 +304,13 @@ export default function ProbabilityCurve({
         let currDraw = data[0].draw;
         let currAway = data[0].away;
         for (let i = 0; i < data.length; i++) {
-            // Dynamic alpha: progressively trust the real data more towards the end
-            // This prevents the smoothed curve from visibly lagging behind the live probability badge
-            const progress = data.length > 5 ? i / (data.length - 1) : 1;
-            const dynamicAlpha = progress > 0.85 ? EMA_ALPHA + ((progress - 0.85) * (1 / 0.15)) * (1 - EMA_ALPHA) : EMA_ALPHA;
+            // For the last 3 points, use raw data so the live badge always matches the curve tip
+            const isRecent = i >= data.length - 3;
+            const alpha = isRecent ? 1.0 : EMA_ALPHA;
 
-            currHome = currHome + dynamicAlpha * (data[i].home - currHome);
-            currDraw = currDraw + dynamicAlpha * (data[i].draw - currDraw);
-            currAway = currAway + dynamicAlpha * (data[i].away - currAway);
+            currHome = currHome + alpha * (data[i].home - currHome);
+            currDraw = currDraw + alpha * (data[i].draw - currDraw);
+            currAway = currAway + alpha * (data[i].away - currAway);
 
             smoothedHomeData.push(currHome);
             smoothedDrawData.push(currDraw);
@@ -519,6 +520,11 @@ export default function ProbabilityCurve({
         });
     }
 
+    // Determine overall trend direction for the gradient fill
+    const overallTrendUp = data.length >= 2
+        ? smoothedHomeData[smoothedHomeData.length - 1] >= smoothedHomeData[Math.max(0, smoothedHomeData.length - 4)]
+        : true;
+
     const chartData = {
         labels: chartLabels,
         datasets: [
@@ -527,28 +533,36 @@ export default function ProbabilityCurve({
                 data: chartLabels.map((_, i) => i < data.length ? smoothedHomeData[i] : null),
                 segment: {
                     borderColor: (ctx: any) => {
-                        if (!ctx.p0 || !ctx.p1) return '#8b5cf6'; // Default fallback
+                        if (!ctx.p0 || !ctx.p1) return overallTrendUp ? '#10b981' : '#ef4444';
                         const prev = ctx.p0.parsed.y;
                         const curr = ctx.p1.parsed.y;
-                        // Add a small threshold to avoid rapid flickering on flat trends
-                        if (Math.abs(curr - prev) < 0.1) return '#8b5cf6';
+                        // Very small threshold — only truly flat segments stay neutral
+                        if (Math.abs(curr - prev) < 0.02) {
+                            return overallTrendUp ? 'rgba(16,185,129,0.6)' : 'rgba(239,68,68,0.6)';
+                        }
                         return curr > prev ? '#10b981' : '#ef4444';
                     }
                 },
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
                     const gradient = ctx.createLinearGradient(0, 0, 0, 350);
-                    gradient.addColorStop(0, 'rgba(139, 92, 246, 0.25)'); // Primary brand color
-                    gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.05)');
-                    gradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
+                    if (overallTrendUp) {
+                        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.28)');
+                        gradient.addColorStop(0.4, 'rgba(16, 185, 129, 0.08)');
+                        gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+                    } else {
+                        gradient.addColorStop(0, 'rgba(239, 68, 68, 0.28)');
+                        gradient.addColorStop(0.4, 'rgba(239, 68, 68, 0.08)');
+                        gradient.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
+                    }
                     return gradient;
                 },
-                borderWidth: 3,
-                tension: 0.4,
+                borderWidth: 2.5,
+                tension: 0.35,
                 fill: true,
                 pointRadius: 0,
-                pointHoverRadius: 5,
-                pointHoverBackgroundColor: '#818cf8',
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: overallTrendUp ? '#10b981' : '#ef4444',
                 pointHoverBorderColor: '#fff',
                 pointHoverBorderWidth: 2,
                 order: 3,
@@ -557,7 +571,15 @@ export default function ProbabilityCurve({
             ...(outcomes.length > 2 ? [{
                 label: outcomes[1] || 'Draw',
                 data: chartLabels.map((_, i) => i < data.length ? smoothedDrawData[i] : null),
-                borderColor: '#f59e0b',
+                segment: {
+                    borderColor: (ctx: any) => {
+                        if (!ctx.p0 || !ctx.p1) return '#f59e0b';
+                        const prev = ctx.p0.parsed.y;
+                        const curr = ctx.p1.parsed.y;
+                        if (Math.abs(curr - prev) < 0.02) return 'rgba(245,158,11,0.6)';
+                        return curr > prev ? '#10b981' : '#ef4444';
+                    }
+                },
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
                     const gradient = ctx.createLinearGradient(0, 0, 0, 320);
@@ -566,8 +588,8 @@ export default function ProbabilityCurve({
                     gradient.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
                     return gradient;
                 },
-                borderWidth: 2,
-                tension: 0.45,
+                borderWidth: 1.8,
+                tension: 0.35,
                 fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 4,
@@ -578,7 +600,15 @@ export default function ProbabilityCurve({
             ...(outcomes.length > 2 ? [{
                 label: outcomes[2] || 'Away Win',
                 data: chartLabels.map((_, i) => i < data.length ? smoothedAwayData[i] : null),
-                borderColor: '#ef4444',
+                segment: {
+                    borderColor: (ctx: any) => {
+                        if (!ctx.p0 || !ctx.p1) return '#ef4444';
+                        const prev = ctx.p0.parsed.y;
+                        const curr = ctx.p1.parsed.y;
+                        if (Math.abs(curr - prev) < 0.02) return 'rgba(239,68,68,0.6)';
+                        return curr > prev ? '#10b981' : '#ef4444';
+                    }
+                },
                 backgroundColor: (context: ScriptableContext<'line'>) => {
                     const ctx = context.chart.ctx;
                     const gradient = ctx.createLinearGradient(0, 0, 0, 320);
@@ -587,8 +617,8 @@ export default function ProbabilityCurve({
                     gradient.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
                     return gradient;
                 },
-                borderWidth: 2,
-                tension: 0.45,
+                borderWidth: 1.8,
+                tension: 0.35,
                 fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 4,

@@ -336,7 +336,7 @@ export class CryptoETLOrchestrator extends BaseETLOrchestrator implements OnModu
                 publishedAt: timestamp,
                 imageUrl: coinImageUrl,
                 sentiment: sentiment as any,
-                sentimentScore: coin.priceChange24h / 100, // Normalized roughly
+                sentimentScore: Math.max(-1, Math.min(1, coin.priceChange24h / 10)), // ±5% change → ±0.5 sentiment
                 impact: Math.abs(coin.priceChange24h) > 5 ? 'high' : 'medium',
                 metadata: {
                     symbol: coin.symbol,

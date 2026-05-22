@@ -122,6 +122,15 @@ export class CompetitionsController {
     }
 
     /**
+     * Get clusters for a competition
+     */
+    @Get('clusters')
+    @ApiOperation({ summary: 'Get news clusters for a competition' })
+    async getClusters(@Query('competition_id') competitionId?: string) {
+        return this.competitionsService.getClusters(competitionId);
+    }
+
+    /**
      * Get competition by ID
      */
     @Get(':id')
