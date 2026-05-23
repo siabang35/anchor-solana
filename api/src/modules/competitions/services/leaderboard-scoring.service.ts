@@ -355,12 +355,19 @@ export class LeaderboardScoringService {
     ): Promise<{ entries: WeightedLeaderboardEntry[]; competition: any; timeRemaining: number }> {
         const supabase = this.supabaseService.getAdminClient();
 
-        // Get competition metadata
+        // Get competition metadata with config
         const { data: comp } = await supabase
             .from('competitions')
-            .select('id, title, sector, competition_start, competition_end, status, probabilities')
+            .select('id, title, sector, competition_start, competition_end, status, probabilities, leaderboard_score_config(min_predictions)')
             .eq('id', competitionId)
             .single();
+
+        let minPredictions = 3;
+        if (comp) {
+            const config = (comp as any).leaderboard_score_config;
+            minPredictions = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+            delete (comp as any).leaderboard_score_config;
+        }
 
         const timeRemaining = comp
             ? Math.max(0, new Date(comp.competition_end).getTime() - Date.now())
@@ -374,7 +381,7 @@ export class LeaderboardScoringService {
 
         if (error) {
             this.logger.error(`Failed to get weighted leaderboard: ${error.message}`);
-            return { entries: [], competition: comp, timeRemaining };
+            return { entries: [], competition: comp ? { ...comp, min_predictions: minPredictions } : null, timeRemaining };
         }
 
         const entries: WeightedLeaderboardEntry[] = (data || []).map((row: any) => ({
@@ -394,7 +401,7 @@ export class LeaderboardScoringService {
             competition_id: competitionId,
         }));
 
-        return { entries, competition: comp, timeRemaining };
+        return { entries, competition: comp ? { ...comp, min_predictions: minPredictions } : null, timeRemaining };
     }
 
     // ========================

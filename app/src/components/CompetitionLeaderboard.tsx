@@ -56,6 +56,7 @@ interface Props {
     lastUpdated: Date | null;
     agentPredictions?: Map<string, any>;
     probHistory?: any[];
+    minPredictions?: number;
 }
 
 const STYLES = {
@@ -144,6 +145,7 @@ export default function CompetitionLeaderboard({
     lastUpdated: initialLastUpdated,
     agentPredictions,
     probHistory,
+    minPredictions = 3,
 }: Props) {
     const [isOpen, setIsOpen] = useState(true);
     const [competitors, setCompetitors] = useState<CompetitorEntry[]>(initialCompetitors);
@@ -260,7 +262,7 @@ export default function CompetitionLeaderboard({
                         prediction_count: updated.prediction_count || 0,
                         last_scored_at: updated.last_scored_at,
                         rank_trend: updated.rank_trend || 0,
-                        has_min_predictions: (updated.prediction_count || 0) >= 3,
+                        has_min_predictions: (updated.prediction_count || 0) >= minPredictions,
                     };
 
                     return newList;
@@ -617,9 +619,9 @@ export default function CompetitionLeaderboard({
                             <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                                 {realtimeConnected ? '⚡ Realtime' : '🔄 Auto-refresh 30s'}
                             </span>
-                            {rankedCompetitors.some((c: any) => !c.has_min_predictions) && (
+                             {rankedCompetitors.some((c: any) => !c.has_min_predictions) && (
                                 <span style={{ color: '#f59e0b', fontSize: '0.45rem' }}>
-                                    ⚠ <em>min 3 predictions required for full ranking</em>
+                                    ⚠ <em>min {minPredictions} predictions required for full ranking</em>
                                 </span>
                             )}
                         </div>

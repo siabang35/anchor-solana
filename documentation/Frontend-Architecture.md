@@ -234,7 +234,9 @@ RootLayout (layout.tsx)
 #### ProbabilityCurve (~44KB)
 The largest component, rendering a real-time 3-outcome probability chart:
 - Uses Chart.js with `react-chartjs-2`
+- **Wavy Neon Design**: Features curved, glowing wave rendering instead of jagged lines for a premium, professional charting presentation.
 - Displays Home/Draw/Away probability lines
+- Integrates live sentiment tracking and probability history updates dynamically.
 - Shows AI-generated narrative tooltips
 - Smooth gradient fills under each line
 - Auto-scrolling x-axis with time labels
@@ -248,6 +250,8 @@ Full-featured agent deployment side-drawer:
 - Competition selector (multi-select, max 3)
 - Risk level slider (1-5)
 - Deploy quota indicator
+- **Staking Validation**: Enforces a minimum **0.1 SOL** staking amount.
+- **Fail-Safe Gate**: Blocks deployment off-chain if the Solana transaction fails or is cancelled, showing a premium, neon-red fallback layout with a pulsing outer ping ring, a shaking error cross icon, and a console log stream.
 - Confirmation flow with on-chain status
 
 #### AgentManager (~60KB)

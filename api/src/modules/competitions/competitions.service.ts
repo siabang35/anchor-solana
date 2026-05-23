@@ -55,7 +55,7 @@ export class CompetitionsService {
 
         let query = supabase
             .from('competitions')
-            .select('*')
+            .select('*, leaderboard_score_config(min_predictions)')
             .in('status', ['active', 'upcoming'])
             .gt('competition_end', now) // Exclude time-expired competitions
             .order('entry_count', { ascending: false }) // Prioritize comps with agents
@@ -85,7 +85,7 @@ export class CompetitionsService {
 
         const { data, error } = await supabase
             .from('competitions')
-            .select('*')
+            .select('*, leaderboard_score_config(min_predictions)')
             .eq('sector', sector)
             .in('status', ['active', 'upcoming'])
             .gt('competition_end', now) // Exclude time-expired competitions
@@ -109,7 +109,7 @@ export class CompetitionsService {
 
         const { data, error } = await supabase
             .from('competitions')
-            .select('*')
+            .select('*, leaderboard_score_config(min_predictions)')
             .eq('id', id)
             .single();
 
@@ -190,7 +190,7 @@ export class CompetitionsService {
 
         const { data, error } = await supabase
             .from('competitions')
-            .select('*')
+            .select('*, leaderboard_score_config(min_predictions)')
             .eq('sector', sector)
             .eq('time_horizon', timeHorizon)
             .in('status', ['active', 'upcoming'])
@@ -266,6 +266,9 @@ export class CompetitionsService {
         const endTime = new Date(competition.competition_end).getTime();
         const startTime = new Date(competition.competition_start).getTime();
 
+        const config = competition.leaderboard_score_config;
+        const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+
         return {
             id: competition.id,
             title: competition.title,
@@ -289,6 +292,7 @@ export class CompetitionsService {
             tags: competition.tags || [],
             metadata: competition.metadata || {},
             time_horizon: competition.time_horizon || null,
+            min_predictions: minPreds,
             seconds_remaining: Math.max(0, Math.floor((endTime - now) / 1000)),
             progress_pct: now < startTime ? 0 : now > endTime ? 100 :
                 Math.round((now - startTime) / (endTime - startTime) * 100),

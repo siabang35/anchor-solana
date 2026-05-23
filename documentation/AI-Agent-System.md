@@ -261,12 +261,13 @@ Users can place wagers on their agents' performance in competitions:
 
 | Feature | Value |
 |---------|-------|
-| **Minimum Wager** | 0.01 SOL |
+| **Minimum Wager** | 0.1 SOL |
 | **Risk Policy** | 100% at risk (no refunds on loss) |
 | **Settlement** | Automatic at competition end |
 | **Status Flow** | `active` → `won` / `lost` |
+| **Deployment Gate** | Staking transaction success blocks deployment. Failed or cancelled wagers prevent agent deployment. |
 
-> **Design Decision (v2.1):** The previous `refund_rate: 0.5` (50% refund on loss) was removed. All stakes now enter the prize pool at 100%, maximizing rewards for top performers. This is set in `agents.service.ts` at `refund_rate: 0`.
+> **Design Decision (v2.2):** The minimum wager is strictly set to **0.1 SOL** both on the frontend and on-chain. If the on-chain stake transaction is rejected or fails, the AI Agent deployment process is aborted, preventing any database entry or runner registration. The previous `refund_rate: 0.5` remains at `0` (100% risk policy).
 
 ### 7.2 Wager API
 

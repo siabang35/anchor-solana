@@ -28,6 +28,7 @@ export interface Competition {
     seconds_remaining?: number;
     progress_pct?: number;
     capacity_pct?: number;
+    min_predictions?: number;
     created_at: string;
     updated_at: string;
 }

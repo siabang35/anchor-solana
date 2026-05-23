@@ -111,6 +111,7 @@ export class CompetitionResponseDto {
     created_at: string;
     updated_at: string;
     time_horizon?: string;
+    min_predictions?: number;
 }
 
 export class SectorSummaryDto {

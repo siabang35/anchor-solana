@@ -17,10 +17,12 @@ ExoDuZe employs a modern tiered architecture emphasizing real-time data synchron
     *   **Sector Navigation & Meta-Tabs:** Advanced real-time views via mobile-first hamburger menus segmented into `Top Markets` (sorted by popularity/entry_count), `For You` (Custom Weighted Recommendation Algorithm), `Latest` (chronological sorting), and `Signals` (Pure Real-Time Data Stream feeds).
     *   **Dynamic Dashboard Visibility:** The interface contextually hides intense computational UI components (Probability Curves, AI Deployers, Leaderboards) when users focus on intelligence feeds (`For You`, `Latest`, and `Signals`), creating a clean, distraction-free environment.
     *   **Theme & Routing Persistence:** Leverages `localStorage` for robust session persistence, instantly maintaining global Dark/Light mode preferences and seamlessly executing cross-category smart redirects back to root Meta-Tabs.
-    *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component.
+    *   **DeployAgent UI:** An interactive drawer for AI configuration, system prompting, and integrating the native Solana **Competition Entry Stake** (Wager) component. Users must stake a **minimum of 0.1 SOL** to deploy. If the transaction fails, deployment blocks immediately and triggers a premium neon-red failure animation with a pulsing outer ping ring, a shaking cross icon, a console terminal log, and configuration-retry controls.
     *   **Live Data Feeds:** Optimized, real-time categorized sentiment streaming connected directly to database webhook inserts.
-    *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Seamlessly identifies live inference sources actively returning from the backend via badges (`🧠 HF (Qwen-2.5)`, `🌐 OPENROUTER (Llama-70B)`, `⚡ GROQ (Llama-3)`, `⚙ LOCAL-SIM`, or `🤖 AI` default). Badge detection parses the `[Qwen]`, `[OpenRouter/...]`, `[Groq]`/`[Groq-8B]`, and `[LOCAL-SIM]` reasoning prefixes from the latest agent prediction. Ranks update live via Supabase `postgres_changes`.
-    *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Displays explicit victory badges (`🥇 1st`, `🥈 2nd`, `🥉 3rd` Place Trophies) once an agent's competition finalizes and their final accuracy secures the Top-3 ranks.
+    *   **Competition Leaderboard:** Real-time, collapsible leaderboard dynamically ranking by **AI Accuracy %**. Badges detect live inference models. Displays a provisional status if the agent's prediction count is below the dynamic threshold (2h: 15, 7h: 10, 12h: 3, 24h: 2) corresponding to the competition horizon.
+    *   **Agent Management Manager:** Features dynamic agent interaction controls via mobile-friendly Kebab Menus (`⋮`). Displays victory trophies (`🥇 1st`, `🥈 2nd`, `🥉 3rd`) upon completion.
+    *   **Wavy Probability Curve**: Displays a professional, neon-glowing wavy curve instead of simple angular lines, providing a highly intuitive visual overlay of real-time probability history and sentiment trend vectors.
+    *   **User Portfolio & Performance**: Provides a comprehensive activity log tracking all deployments, stakes, and reward history. PnL performance tracks dynamically and is calculated as a real percentage of the user's total wallet portfolio.
 *   **State Management:** Real-time array unshifting via `@supabase/supabase-js` subscriptions, global caching via custom hooks, and decentralized wallet state via `@solana/wallet-adapter-react` (utilizing Wallet Standard auto-discovery).
 
 ### 2.2 Backend (NestJS + Supabase REST)
@@ -108,7 +110,7 @@ The competitive leaderboard uses a **dual-scoring** system:
     *   **PRED % (Probability)**: The AI's live "position" or "bet". What it thinks is the likelihood right now. This fluctuates continuously based on latest market signals.
     *   **ACC (Quality)**: The AI's historic "report card". Evaluates the correctness of their past positions against the live market curves. 
     *   **PREDS (Quantity)**: Indicates the total number of bets submitted. It tracks activity and participation level. 
-    *   An agent with 5,000 predictions (high PREDS) but 20% ACC will rank far lower than an agent with only 10 predictions but 80% ACC. Minimum prediction thresholds (e.g., min 3) prevent "one-hit wonder" agents from camping at the #1 spot.
+    *   An agent with 5,000 predictions (high PREDS) but 20% ACC will rank far lower than an agent with only 10 predictions but 80% ACC. Horizon-aware minimum prediction thresholds (2h: 15, 7h: 10, 12h: 3, 24h: 2) prevent "one-hit wonder" agents from camping at the #1 spot, calculated dynamically based on a realistic join time of 30 minutes before expiration.
 *   **Absolute Score Integrity**: Leaderboards are completely stripped of frontend simulators. Missing or unfulfilled scores (`null`) strictly map to `0.0%`.
 *   **Dynamic Ranking**: Leaderboard re-sorts in real-time when scores change natively from the backend scoring pipeline.
 
@@ -118,7 +120,7 @@ The database migration `063_weighted_live_scoring.sql` implements:
 *   **Score Velocity Enforcement**: Limits how fast an agent's score can change per interval, preventing chunking attacks where agents submit many predictions in rapid succession.
 *   **HMAC Integrity Chains**: Each scored prediction is linked cryptographically to the previous one using HMAC-SHA256. This creates an immutable audit trail that detects any retroactive score manipulation.
 *   **Leaderboard Snapshots**: Periodic snapshots of leaderboard state are stored in `leaderboard_snapshots` for forensic analysis and anti-exploitation auditing.
-*   **Minimum Prediction Threshold**: Agents require a minimum of 3 predictions for full ranking eligibility. Below this threshold, agents compete with estimated scores.
+*   **Minimum Prediction Threshold**: Agents require a dynamic minimum number of predictions matching the competition's time horizon (2h: 15, 7h: 10, 12h: 3, 24h: 2) for full ranking eligibility. Below this threshold, agents compete with estimated scores and are flagged as provisional.
 
 ### 6.3 Real-Time Data Flow Architecture
 

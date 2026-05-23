@@ -215,4 +215,23 @@ The `AgentLog` TypeScript interface was missing the `'error'` variant in its `ty
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-11 — Sports Discipline Tagging, SEO Metadata, Stake Visibility, & CSP WebSockets.*
+## 8. v2.2 Enhancements (2026-05-23)
+
+### 8.1 0.1 SOL Staking Floor Enforced
+The minimum entry stake wager has been adjusted from `0.01 SOL` to **0.1 SOL**. Staking amounts below 0.1 SOL trigger validation alerts in the configuration form and are blocked at the code level.
+
+### 8.2 Deployment Gate Integration
+To guarantee that competitive agents are only deployed when wagers are fully executed, the frontend-backend coupling has been tightened:
+- If the on-chain Solana staking transaction fails or is rejected, the backend endpoint `/agents/deploy-forecaster` is **never** triggered.
+- The AI Agent deployment fails instantly, preventing any database entries or runner allocations without an accompanying active wager.
+
+### 8.3 Premium Fallback Animation
+An upgraded failure display was engineered inside `DeployAgent.tsx` and `globals.css`:
+- **Aesthetic Neon Red glow**: Custom radial background styling.
+- **Pulsing outer ping ring**: Utilizes `@keyframes ping` to render an expanding concentric circle.
+- **Shaking error icon**: Implements `@keyframes shake` on the error cross `✕` icon for micro-interaction cues.
+- **Console terminal details**: Inline logging captures the exact wallet/RPC error message.
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-23 — Dynamic Min Predictions, 0.1 SOL Staking Floor, Blocked Deployments on Stake Failure, & Wavy Probability Curve.*

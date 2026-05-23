@@ -318,6 +318,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     lastUpdated={leaderboardLastUpdated}
                     agentPredictions={agentPredictionsMap}
                     probHistory={probHistory}
+                    minPredictions={activeComp?.min_predictions}
                 />
 
                 {/* Global Leaderboard (Desktop & Mobile) */}

@@ -827,9 +827,9 @@ export class AgentsService {
         }
 
         // Fallback: global leaderboard or no weighted scores yet
-        let selectStr = '*, agents(id, name, user_id, model)';
+        let selectStr = '*, agents(id, name, user_id, model), competitions(id, leaderboard_score_config(min_predictions))';
         if (sector && sector !== 'all' && sector !== 'top') {
-            selectStr += ', competitions!inner(sector)';
+            selectStr = '*, agents(id, name, user_id, model), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
         }
 
         let query = supabase
@@ -853,20 +853,24 @@ export class AgentsService {
             return [];
         }
 
-        return (data || []).map((entry: any, index: number) => ({
-            rank: index + 1,
-            agent_id: entry.agent_id,
-            agent_name: entry.agents?.name || 'Unknown',
-            user_id: null,
-            brier_score: entry.brier_score,
-            weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
-            prediction_count: entry.prediction_count || 0,
-            last_scored_at: entry.last_scored_at,
-            rank_trend: entry.rank_trend || 0,
-            has_min_predictions: (entry.prediction_count || 0) >= 3,
-            competition_id: entry.competition_id,
-            status: entry.status,
-        }));
+        return (data || []).map((entry: any, index: number) => {
+            const config = entry.competitions?.leaderboard_score_config;
+            const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+            return {
+                rank: index + 1,
+                agent_id: entry.agent_id,
+                agent_name: entry.agents?.name || 'Unknown',
+                user_id: null,
+                brier_score: entry.brier_score,
+                weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
+                prediction_count: entry.prediction_count || 0,
+                last_scored_at: entry.last_scored_at,
+                rank_trend: entry.rank_trend || 0,
+                has_min_predictions: (entry.prediction_count || 0) >= minPreds,
+                competition_id: entry.competition_id,
+                status: entry.status,
+            };
+        });
     }
 
     /**
@@ -894,7 +898,7 @@ export class AgentsService {
 
         const { data, error } = await supabase
             .from('agent_competition_entries')
-            .select('agent_id, brier_score, weighted_score, prediction_count, last_scored_at, rank_trend, status, agents(id, name, model, status, created_at)')
+            .select('agent_id, brier_score, weighted_score, prediction_count, last_scored_at, rank_trend, status, agents(id, name, model, status, created_at), competitions(id, leaderboard_score_config(min_predictions))')
             .eq('competition_id', competitionId)
             .in('status', ['active', 'paused'])
             .order('weighted_score', { ascending: true, nullsFirst: false })
@@ -906,21 +910,25 @@ export class AgentsService {
         }
 
         // Sanitize: only return public-safe fields, no system_prompt or user_id
-        return (data || []).map((entry: any, index: number) => ({
-            rank: index + 1,
-            agent_id: entry.agent_id,
-            agent_name: entry.agents?.name || 'Unknown Agent',
-            model: entry.agents?.model || 'Unknown',
-            agent_status: entry.agents?.status || entry.status,
-            brier_score: entry.brier_score,
-            weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
-            prediction_count: entry.prediction_count || 0,
-            last_scored_at: entry.last_scored_at,
-            rank_trend: entry.rank_trend || 0,
-            has_min_predictions: (entry.prediction_count || 0) >= 3,
-            competition_id: competitionId,
-            deployed_at: entry.agents?.created_at,
-        }));
+        return (data || []).map((entry: any, index: number) => {
+            const config = entry.competitions?.leaderboard_score_config;
+            const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+            return {
+                rank: index + 1,
+                agent_id: entry.agent_id,
+                agent_name: entry.agents?.name || 'Unknown Agent',
+                model: entry.agents?.model || 'Unknown',
+                agent_status: entry.agents?.status || entry.status,
+                brier_score: entry.brier_score,
+                weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
+                prediction_count: entry.prediction_count || 0,
+                last_scored_at: entry.last_scored_at,
+                rank_trend: entry.rank_trend || 0,
+                has_min_predictions: (entry.prediction_count || 0) >= minPreds,
+                competition_id: competitionId,
+                deployed_at: entry.agents?.created_at,
+            };
+        });
     }
 
     /**
@@ -939,12 +947,19 @@ export class AgentsService {
             return { entries: [], competition: null, time_remaining_ms: 0 };
         }
 
-        // Get competition metadata
+        // Get competition metadata with config
         const { data: comp } = await supabase
             .from('competitions')
-            .select('id, title, sector, competition_start, competition_end, status, probabilities, base_probability')
+            .select('id, title, sector, competition_start, competition_end, status, probabilities, base_probability, leaderboard_score_config(min_predictions)')
             .eq('id', competitionId)
             .single();
+
+        let minPredictions = 3;
+        if (comp) {
+            const config = (comp as any).leaderboard_score_config;
+            minPredictions = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+            delete (comp as any).leaderboard_score_config;
+        }
 
         const timeRemainingMs = comp
             ? Math.max(0, new Date(comp.competition_end).getTime() - Date.now())
@@ -959,7 +974,7 @@ export class AgentsService {
 
         if (error) {
             this.logger.error(`Failed to get weighted leaderboard live: ${error.message}`);
-            return { entries: [], competition: comp, time_remaining_ms: timeRemainingMs };
+            return { entries: [], competition: comp ? { ...comp, min_predictions: minPredictions } : null, time_remaining_ms: timeRemainingMs };
         }
 
         const entries = (data || []).map((row: any) => ({
@@ -979,7 +994,7 @@ export class AgentsService {
             competition_id: competitionId,
         }));
 
-        return { entries, competition: comp, time_remaining_ms: timeRemainingMs };
+        return { entries, competition: comp ? { ...comp, min_predictions: minPredictions } : null, time_remaining_ms: timeRemainingMs };
     }
 
     /**

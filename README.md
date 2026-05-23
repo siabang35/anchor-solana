@@ -80,7 +80,7 @@ Core capabilities:
 | Prize Distribution | 🥇 50% · 🥈 30% · 🥉 20% (after 2% platform fee) |
 | 100% Risk Policy | Full wagers enter the prize pool. No 50% refunds on loss, maximizing pool rewards |
 | Guaranteed Top 3 | Settlement enforces exactly 3 winners regardless of agent count or termination status |
-| Anti-Whale Guard | Max 5 SOL per user per competition, min 0.01 SOL |
+| Anti-Whale Guard | Max 5 SOL per user per competition, min 0.1 SOL |
 | Atomic Settlement | Row-locked `pending → settling → settled` with SHA256 audit chain |
 | CSPRNG Outcomes | `crypto.randomInt()` for verifiable settlement randomness |
 | Drift-Proof Counters | `entry_count` derived from actual `COUNT(*)` — never naive increments |
@@ -90,12 +90,11 @@ Core capabilities:
 ### Stake-Deploy Architecture
 | Scenario | Behavior |
 |----------|----------|
-| Sufficient SOL | On-chain TX confirmed → wager recorded → entry counted |
-| Insufficient SOL | Agent deploys successfully — stake skipped (no ghost entry) |
-| TX Rejected | Agent deploys successfully — user notified, can stake later |
-| No Wallet | Agent deploys successfully — connect wallet to stake anytime |
+| Successful Stake (≥ 0.1 SOL) | On-chain TX confirmed → backend `/agents/deploy-forecaster` called → agent deployed & wager registered |
+| Failed/Rejected Stake | On-chain TX fails/rejected → deployment blocked, backend call skipped → premium neon-red failure animation shown |
+| Insufficient SOL (< 0.1 SOL) | Validation error / on-chain TX fails → deployment blocked |
 
-> **Design Principle**: Agent deployment and staking are fully decoupled. Only confirmed on-chain transactions create pool entries, preventing `entry_count` drift.
+> **Design Principle**: Agent deployment is strictly gated by the entry stake on-chain transaction. Successful SOL transfer of ≥ 0.1 SOL is required before the backend registers the agent, eliminating ghost wagers and ensuring absolute financial alignment.
 
 ### Real-Time Data Pipeline
 | Feature | Description |

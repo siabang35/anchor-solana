@@ -1008,36 +1008,88 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
         if (step === 'failed') {
             return (
-                <div className="glass-card card-body animate-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '1.5rem', overflowY: 'auto' }}>
+                <div className="glass-card card-body animate-in" style={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    padding: '2rem 1.5rem',
+                    overflowY: 'auto',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    background: 'radial-gradient(circle at center, rgba(239, 68, 68, 0.05) 0%, rgba(11, 13, 24, 0.95) 100%)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(239, 68, 68, 0.05)'
+                }}>
                     <div style={{
-                        width: '72px',
-                        height: '72px',
-                        borderRadius: '50%',
-                        background: 'rgba(239, 68, 68, 0.08)',
-                        border: '2px dashed #ef4444',
+                        position: 'relative',
+                        width: '80px',
+                        height: '80px',
+                        marginBottom: '1.25rem',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: '1rem',
-                        animation: 'pulse 2s infinite',
-                        boxShadow: '0 0 20px rgba(239, 68, 68, 0.15)'
                     }}>
-                        <span style={{ fontSize: '2.5rem', color: '#ef4444', animation: 'shake 0.5s ease-in-out' }}>✕</span>
+                        {/* Outer pulsing ring */}
+                        <div style={{
+                            position: 'absolute',
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '50%',
+                            border: '2px solid rgba(239, 68, 68, 0.4)',
+                            animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+                        }} />
+                        {/* Inner glowing circle */}
+                        <div style={{
+                            width: '64px',
+                            height: '64px',
+                            borderRadius: '50%',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '2px solid #ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 0 15px rgba(239, 68, 68, 0.3)',
+                            animation: 'pulse 2s infinite',
+                        }}>
+                            <span style={{
+                                fontSize: '1.8rem',
+                                color: '#ef4444',
+                                fontWeight: 'bold',
+                                animation: 'shake 0.5s ease-in-out infinite',
+                            }}>✕</span>
+                        </div>
                     </div>
 
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                        Deployment Failed
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem', letterSpacing: '0.02em' }}>
+                        Deployment Blocked
                     </h3>
 
-                    <p style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: '280px', marginBottom: '1.25rem' }}>
-                        {error || 'The on-chain stake transaction failed or was cancelled. Your AI agent could not be deployed.'}
+                    <p style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: '280px', marginBottom: '1.5rem' }}>
+                        {error || 'The on-chain stake transaction failed. Your AI agent could not be registered on-chain.'}
                     </p>
 
                     {logs.length > 0 && (
-                        <div className="agent-console" style={{ width: '100%', height: '110px', marginBottom: '1.25rem', textAlign: 'left', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-card)' }}>
+                        <div className="agent-console" style={{
+                            width: '100%',
+                            height: '120px',
+                            marginBottom: '1.5rem',
+                            textAlign: 'left',
+                            background: 'rgba(7, 8, 15, 0.8)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            borderRadius: '8px',
+                            padding: '0.6rem',
+                            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.5)',
+                        }}>
                             {logs.map((log, i) => (
-                                <div key={i} className={`agent-log ${log.type}`}>
-                                    <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                <div key={i} className={`agent-log ${log.type}`} style={{
+                                    fontSize: '0.58rem',
+                                    lineHeight: 1.4,
+                                    color: log.type === 'error' ? '#fca5a5' : 'var(--text-muted)'
+                                }}>
+                                    <span className="log-time" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                        [{new Date(log.timestamp).toLocaleTimeString()}]
+                                    </span>{' '}
                                     {log.message}
                                 </div>
                             ))}
@@ -1052,12 +1104,19 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                             setLogs([]);
                         }}
                         style={{
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid var(--border-glass)',
-                            color: 'var(--text-primary)',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            color: '#f87171',
+                            padding: '0.6rem 1.5rem',
+                            borderRadius: 'var(--radius-round)',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)',
                         }}
                     >
-                        🔄 Try Again
+                        🔄 Return to Configuration
                     </button>
                 </div>
             );
