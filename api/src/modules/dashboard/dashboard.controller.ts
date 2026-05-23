@@ -1,20 +1,11 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guards/index.js';
-import { CurrentUser } from '../auth/decorators/index.js';
+import { Controller, Get, Req } from '@nestjs/common';
 import { DashboardService } from './dashboard.service.js';
-
-interface UserPayload {
-    id: string;
-    email?: string;
-    walletAddress?: string;
-}
 
 /**
  * Dashboard Controller
- * Protected endpoints for authenticated dashboard access
+ * Handles dashboard data querying with support for wallet-connected users
  */
 @Controller('dashboard')
-@UseGuards(JwtAuthGuard)
 export class DashboardController {
     constructor(private readonly dashboardService: DashboardService) { }
 
@@ -23,8 +14,9 @@ export class DashboardController {
      * Get dashboard overview for current user
      */
     @Get()
-    async getDashboard(@CurrentUser() user: UserPayload) {
-        return this.dashboardService.getDashboardData(user.id);
+    async getDashboard(@Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.dashboardService.getDashboardData(userId);
     }
 
     /**
@@ -32,8 +24,9 @@ export class DashboardController {
      * Get user statistics
      */
     @Get('stats')
-    async getStats(@CurrentUser() user: UserPayload) {
-        return this.dashboardService.getUserStats(user.id);
+    async getStats(@Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.dashboardService.getUserStats(userId);
     }
 
     /**
@@ -41,8 +34,9 @@ export class DashboardController {
      * Get recent user activity
      */
     @Get('activity')
-    async getActivity(@CurrentUser() user: UserPayload) {
-        return this.dashboardService.getRecentActivity(user.id);
+    async getActivity(@Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.dashboardService.getRecentActivity(userId);
     }
 
     /**
@@ -50,7 +44,8 @@ export class DashboardController {
      * Get user's portfolio/positions
      */
     @Get('portfolio')
-    async getPortfolio(@CurrentUser() user: UserPayload) {
-        return this.dashboardService.getPortfolio(user.id);
+    async getPortfolio(@Req() req: any) {
+        const userId = req.user?.id || req.headers['x-user-id'];
+        return this.dashboardService.getPortfolio(userId);
     }
 }

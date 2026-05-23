@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 
@@ -15,9 +16,9 @@ interface Props {
 // ── Tab metadata ────────────────────────────────────────────────
 const TAB_META: Record<string, { icon: string; title: string; description: string }> = {
     top: { icon: '🔥', title: 'Top Markets', description: 'Most popular competitions by participant count' },
-    foryou: { icon: '✨', title: 'Recommended For You', description: 'Curated picks based on activity and potential' },
-    signals: { icon: '📡', title: 'Market Signals', description: 'Latest intelligence from live data feeds' },
-    latest: { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created' },
+    foryou: { icon: '✨', title: 'Recommended For You', description: 'Curated competitions based on your activity, prize pools, and market potential.' },
+    signals: { icon: '📡', title: 'Market Signals', description: 'Latest intelligence and sentiment changes from live data feeds' },
+    latest: { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created — be the first to deploy your AI agent.' },
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ function getProgressPct(comp: Competition): number {
 
 // ── Competition Card (reused for top, foryou, latest) ────────────
 function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selected?: boolean, onClick?: () => void }) {
+    const router = useRouter();
     const probLabels = comp.outcomes || ['Home', 'Draw', 'Away'];
     const probs = comp.probabilities || [5000, 2500, 2500];
     const status = getCompetitionStatus(comp);
@@ -280,6 +282,18 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                         👥 {comp.entry_count}/{comp.max_entries} entries
                     </span>
                 </div>
+                {selected && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            localStorage.setItem('selected_competition_id', comp.id);
+                            router.push(`/${comp.sector.toLowerCase()}`);
+                        }}
+                        className="btn-compete-premium"
+                    >
+                        <span className="sword-icon">⚔️</span> Compete Now
+                    </button>
+                )}
             </div>
         </article>
     );
@@ -393,29 +407,43 @@ function SectionHeader({ sector, liveCount, connected }: { sector: string; liveC
 
     return (
         <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            marginBottom: '0.75rem', padding: '0.5rem 0',
+            display: 'flex', flexDirection: 'column', gap: '0.2rem',
+            marginBottom: '0.85rem', padding: '0.5rem 0',
         }}>
-            <h3 style={{
-                fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)',
-                display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
+            <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
-                <span>{meta.icon}</span> {meta.title}
-            </h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                {liveCount > 0 && (
-                    <span style={{
-                        fontSize: '0.55rem', fontWeight: 700, padding: '2px 8px',
-                        borderRadius: 'var(--radius-round)',
-                        background: 'rgba(16,185,129,0.15)', color: 'var(--accent-green)',
-                    }}>
-                        {liveCount} LIVE
-                    </span>
-                )}
-                <span className={`sector-feed__indicator ${connected ? 'sector-feed__indicator--live' : ''}`}
-                    style={{ width: '6px', height: '6px', borderRadius: '50%', background: connected ? 'var(--accent-green)' : 'var(--accent-amber)' }}
-                />
+                <h3 style={{
+                    fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)',
+                    display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
+                }}>
+                    <span>{meta.icon}</span> {meta.title}
+                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {liveCount > 0 && (
+                        <span style={{
+                            fontSize: '0.55rem', fontWeight: 700, padding: '2px 8px',
+                            borderRadius: 'var(--radius-round)',
+                            background: 'rgba(16,185,129,0.15)', color: 'var(--accent-green)',
+                        }}>
+                            {liveCount} LIVE
+                        </span>
+                    )}
+                    <span className={`sector-feed__indicator ${connected ? 'sector-feed__indicator--live' : ''}`}
+                        style={{ width: '6px', height: '6px', borderRadius: '50%', background: connected ? 'var(--accent-green)' : 'var(--accent-amber)' }}
+                    />
+                </div>
             </div>
+            {/* Small description explaining the current feed section */}
+            <p style={{
+                fontSize: '0.72rem',
+                color: 'var(--text-muted)',
+                margin: 0,
+                fontWeight: 500,
+                lineHeight: 1.45,
+            }}>
+                {meta.description}
+            </p>
         </div>
     );
 }

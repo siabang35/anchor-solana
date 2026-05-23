@@ -54,9 +54,9 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
     const scoreChannelRef = useRef<any>(null);
 
     // Fetch initial predictions
-    const fetchPredictions = useCallback(async () => {
+    const fetchPredictions = useCallback(async (isCancelled: () => boolean) => {
         if (!competitionId) {
-            setLoading(false);
+            if (!isCancelled()) setLoading(false);
             return;
         }
 
@@ -68,6 +68,8 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 .eq('competition_id', competitionId)
                 .order('timestamp', { ascending: true });
 
+            if (isCancelled()) return;
+
             if (!error && data) {
                 setAllPredictions(data as AgentPrediction[]);
                 if (data.length > 0) {
@@ -77,12 +79,12 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
         } catch (err) {
             console.error('Failed to fetch agent predictions:', err);
         } finally {
-            setLoading(false);
+            if (!isCancelled()) setLoading(false);
         }
     }, [competitionId]);
 
     // Fetch initial scoring state
-    const fetchScoring = useCallback(async () => {
+    const fetchScoring = useCallback(async (isCancelled: () => boolean) => {
         if (!competitionId) return;
 
         try {
@@ -91,6 +93,8 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 .select('agent_id, weighted_score, brier_score, prediction_count, rank_trend, last_scored_at')
                 .eq('competition_id', competitionId)
                 .in('status', ['active', 'paused']);
+
+            if (isCancelled()) return;
 
             if (!error && data) {
                 const map = new Map<string, ScoringUpdate>();
@@ -113,8 +117,11 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
     }, [competitionId]);
 
     useEffect(() => {
-        fetchPredictions();
-        fetchScoring();
+        let cancelled = false;
+        const checkCancelled = () => cancelled;
+
+        fetchPredictions(checkCancelled);
+        fetchScoring(checkCancelled);
 
         if (!competitionId) return;
 
@@ -127,6 +134,7 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 table: 'agent_predictions',
                 filter: `competition_id=eq.${competitionId}`,
             }, (payload: any) => {
+                if (cancelled) return;
                 const newPred = payload.new as AgentPrediction;
                 if (!newPred) return;
 
@@ -141,7 +149,9 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 setLatestPredictionAt(new Date(newPred.timestamp));
             })
             .subscribe((status: string) => {
-                setConnected(status === 'SUBSCRIBED');
+                if (!cancelled) {
+                    setConnected(status === 'SUBSCRIBED');
+                }
             });
 
         channelRef.current = predChannel;
@@ -155,6 +165,7 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
                 table: 'agent_competition_entries',
                 filter: `competition_id=eq.${competitionId}`,
             }, (payload: any) => {
+                if (cancelled) return;
                 const updated = payload.new;
                 if (!updated) return;
 
@@ -178,11 +189,12 @@ export function useAgentPredictions(competitionId: string | null | undefined): U
 
         // Poll fallback every 5 mins (300s) to protect Supabase limits
         const interval = setInterval(() => {
-            fetchPredictions();
-            fetchScoring();
+            fetchPredictions(checkCancelled);
+            fetchScoring(checkCancelled);
         }, 300_000);
 
         return () => {
+            cancelled = true;
             clearInterval(interval);
             if (channelRef.current) supabase.removeChannel(channelRef.current);
             if (scoreChannelRef.current) supabase.removeChannel(scoreChannelRef.current);

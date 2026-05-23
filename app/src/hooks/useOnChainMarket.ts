@@ -22,6 +22,7 @@ export interface OnChainMarket {
 
 export interface ProbabilitySnapshot {
     time: string;
+    timestamp: number;
     home: number;
     draw: number;
     away: number;
@@ -46,19 +47,21 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
     const [error, setError] = useState<string | null>(null);
     const channelRef = useRef<RealtimeChannel | null>(null);
 
-    const fetchMarketFromCompetition = useCallback(async () => {
+    const fetchMarketFromCompetition = useCallback(async (isCancelled: () => boolean) => {
         if (!competitionId) {
-            setLoading(false);
+            if (!isCancelled()) setLoading(false);
             return;
         }
 
-        setLoading(true);
+        if (!isCancelled()) setLoading(true);
         try {
             const { data, error: sbError } = await supabase
                 .from('competitions')
                 .select('*')
                 .eq('id', competitionId)
                 .single();
+
+            if (isCancelled()) return;
 
             if (sbError || !data) {
                 throw new Error(sbError?.message || 'Competition not found');
@@ -81,7 +84,9 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                 status: data.status === 'active' ? 'active' : data.status === 'settled' ? 'settled' : 'paused',
             };
 
-            setMarket(onChainMarket);
+            if (!isCancelled()) {
+                setMarket(onChainMarket);
+            }
 
             // Fetch historical snapshots to populate curve
             const { data: snapshots } = await supabase
@@ -89,13 +94,16 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                 .select('home, draw, away, created_at, narrative')
                 .eq('competition_id', competitionId)
                 .order('created_at', { ascending: true })
-                .limit(120);
+                .limit(1000);
+
+            if (isCancelled()) return;
 
             let history: ProbabilitySnapshot[] = [];
             
             if (snapshots && snapshots.length > 0) {
                 history = snapshots.map(snap => ({
                     time: new Date(snap.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    timestamp: Math.floor(new Date(snap.created_at).getTime() / 1000),
                     home: snap.home,
                     draw: snap.draw,
                     away: snap.away,
@@ -110,6 +118,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
             const currentAway = (probs[2] || 10000 - probs[0] - probs[1]) / 100;
             const currentPoint: ProbabilitySnapshot = {
                 time: nowTime,
+                timestamp: Math.floor(Date.now() / 1000),
                 home: currentHome,
                 draw: currentDraw,
                 away: currentAway,
@@ -159,6 +168,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
 
                     history.push({
                         time: timeStr,
+                        timestamp: Math.floor(pointTime.getTime() / 1000),
                         home: parseFloat(nh.toFixed(2)),
                         draw: parseFloat(nd.toFixed(2)),
                         away: parseFloat(na.toFixed(2)),
@@ -168,17 +178,26 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                 history.push(currentPoint);
             }
 
-            setProbHistory(history);
+            if (!isCancelled()) {
+                setProbHistory(history);
+            }
         } catch (err: any) {
-            setError(err.message);
+            if (!isCancelled()) {
+                setError(err.message);
+            }
         } finally {
-            setLoading(false);
+            if (!isCancelled()) {
+                setLoading(false);
+            }
         }
     }, [competitionId]);
 
     // Subscribe to competition updates for live probability changes
     useEffect(() => {
-        fetchMarketFromCompetition();
+        let cancelled = false;
+        const checkCancelled = () => cancelled;
+
+        fetchMarketFromCompetition(checkCancelled);
 
         if (!competitionId) return;
 
@@ -193,6 +212,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                     filter: `id=eq.${competitionId}`,
                 },
                 (payload) => {
+                    if (cancelled) return;
                     const updated = payload.new as any;
                     const probs = updated.probabilities || [5000, 2500, 2500];
 
@@ -210,14 +230,19 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                 'broadcast',
                 { event: 'probability_update' },
                 (payload) => {
+                    if (cancelled) return;
                     const data = payload.payload as { marketId: string; snapshot: ProbabilitySnapshot };
                     if (data.marketId === competitionId && data.snapshot) {
+                         const snap = {
+                             ...data.snapshot,
+                             timestamp: data.snapshot.timestamp || Math.floor(Date.now() / 1000)
+                         };
                          setProbHistory((prev) => {
                              // dedupe by time just in case
-                             if (prev.length > 0 && prev[prev.length - 1].time === data.snapshot.time) {
+                             if (prev.length > 0 && prev[prev.length - 1].time === snap.time) {
                                  return prev;
                              }
-                             return [...prev.slice(-120), data.snapshot];
+                             return [...prev.slice(-1000), snap];
                          });
                     }
                 }
@@ -237,11 +262,13 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                     filter: `competition_id=eq.${competitionId}`,
                 },
                 (payload) => {
+                    if (cancelled) return;
                     const row = payload.new as any;
                     if (!row) return;
 
                     const newPoint: ProbabilitySnapshot = {
                         time: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                        timestamp: Math.floor(new Date(row.created_at).getTime() / 1000),
                         home: row.home,
                         draw: row.draw,
                         away: row.away,
@@ -260,7 +287,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                             }
                             return prev;
                         }
-                        return [...prev.slice(-120), newPoint];
+                        return [...prev.slice(-1000), newPoint];
                     });
                 },
             )
@@ -269,6 +296,7 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
         channelRef.current = channel;
 
         return () => {
+            cancelled = true;
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
             }

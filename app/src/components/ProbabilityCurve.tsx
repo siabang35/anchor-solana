@@ -43,6 +43,17 @@ function hashString(str: string): number {
     return Math.abs(hash);
 }
 
+// Helper to get deterministic random noise in the range [-1, 1]
+function getDeterministicNoise(seed: string, index: number): number {
+    const str = `${seed}-${index}`;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return ((Math.abs(hash) % 2000) - 1000) / 1000;
+}
+
 // Helper to convert "09:14:31 PM" or ISO strings to total seconds in the current day
 function parseTimeToSeconds(timeStr: string | Date): number {
     if (timeStr instanceof Date) {
@@ -71,9 +82,9 @@ function parseTimeToSeconds(timeStr: string | Date): number {
 
 // ── Build real agent prediction curve or tracking line ──
 function buildRealAgentCurve(
-    chartLabels: string[],
+    chartTimeSecs: number[],
     predictions: AgentPrediction[],
-    baseData: number[],
+    baseData: (number | null)[],
     agentName: string,
     agentIndex: number,
 ): (number | null)[] {
@@ -91,16 +102,15 @@ function buildRealAgentCurve(
 
     // 1. If no predictions, fall back to tracking the main curve visually
     if (!predictions || predictions.length === 0) {
-        return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
+        return chartTimeSecs.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
     }
 
-    // 2. Map actual predictions + their projected curves by exact seconds
-    // We store { secondsOfDay -> probability }
+    // 2. Map actual predictions + their projected curves by exact seconds (absolute Unix timestamp)
     const predPoints: { sec: number; prob: number }[] = [];
 
     for (const pred of predictions) {
         const predTime = new Date(pred.timestamp);
-        const baseSec = parseTimeToSeconds(predTime);
+        const baseSec = Math.floor(predTime.getTime() / 1000);
         predPoints.push({ sec: baseSec, prob: pred.probability * 100 });
 
         if (pred.projected_curve && Array.isArray(pred.projected_curve)) {
@@ -115,11 +125,8 @@ function buildRealAgentCurve(
     // Sort points by time
     predPoints.sort((a, b) => a.sec - b.sec);
 
-    // 3. Build the chart array by matching chartLabel seconds to closest prediction seconds
-    const result: (number | null)[] = chartLabels.map(() => null);
-
-    // Map each chart column to its seconds value
-    const chartTimeMap = chartLabels.map(lbl => parseTimeToSeconds(lbl));
+    // 3. Build the chart array by matching chartTimeSecs to closest prediction seconds
+    const result: (number | null)[] = chartTimeSecs.map(() => null);
 
     let firstPredIdx = -1;
     let lastPredIdx = -1;
@@ -129,8 +136,8 @@ function buildRealAgentCurve(
         let bestIdx = -1;
         let minDiff = Infinity;
 
-        for (let i = 0; i < chartTimeMap.length; i++) {
-            const diff = Math.abs(chartTimeMap[i] - pt.sec);
+        for (let i = 0; i < chartTimeSecs.length; i++) {
+            const diff = Math.abs(chartTimeSecs[i] - pt.sec);
             if (diff < minDiff) {
                 minDiff = diff;
                 bestIdx = i;
@@ -172,12 +179,12 @@ function buildRealAgentCurve(
         }
 
         // Space AFTER the final projected point flatlines the real prediction, but keeps jittering
-        for (let i = lastPredIdx + 1; i < chartLabels.length; i++) {
+        for (let i = lastPredIdx + 1; i < chartTimeSecs.length; i++) {
             result[i] = getTrackingPoint(i, result[lastPredIdx]!);
         }
     } else {
         // Failsafe if absolutely no predictions matched
-        return chartLabels.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
+        return chartTimeSecs.map((_, i) => getTrackingPoint(i, baseData[i] || 50));
     }
 
     return result;
@@ -185,18 +192,18 @@ function buildRealAgentCurve(
 
 // ── Build absolute true data trajectory line (straight, no jitter) ──
 function buildTrueAgentCurve(
-    chartLabels: string[],
+    chartTimeSecs: number[],
     predictions: AgentPrediction[],
 ): (number | null)[] {
     if (!predictions || predictions.length === 0) {
-        return chartLabels.map(() => null);
+        return chartTimeSecs.map(() => null);
     }
 
     const predPoints: { sec: number; prob: number }[] = [];
 
     for (const pred of predictions) {
         const predTime = new Date(pred.timestamp);
-        const baseSec = parseTimeToSeconds(predTime);
+        const baseSec = Math.floor(predTime.getTime() / 1000);
         predPoints.push({ sec: baseSec, prob: pred.probability * 100 });
 
         if (pred.projected_curve && Array.isArray(pred.projected_curve)) {
@@ -210,15 +217,14 @@ function buildTrueAgentCurve(
 
     predPoints.sort((a, b) => a.sec - b.sec);
 
-    const result: (number | null)[] = chartLabels.map(() => null);
-    const chartTimeMap = chartLabels.map(lbl => parseTimeToSeconds(lbl));
+    const result: (number | null)[] = chartTimeSecs.map(() => null);
 
     for (const pt of predPoints) {
         let bestIdx = -1;
         let minDiff = Infinity;
 
-        for (let i = 0; i < chartTimeMap.length; i++) {
-            const diff = Math.abs(chartTimeMap[i] - pt.sec);
+        for (let i = 0; i < chartTimeSecs.length; i++) {
+            const diff = Math.abs(chartTimeSecs[i] - pt.sec);
             if (diff < minDiff) {
                 minDiff = diff;
                 bestIdx = i;
@@ -291,34 +297,234 @@ export default function ProbabilityCurve({
 
     const data = probHistory && probHistory.length > 0 ? probHistory : [];
 
-    // ── Light smoothing — preserve real up/down movements ─────────
-    // High alpha = closer to raw data. We use 0.55 so the curve faithfully
-    // follows probability_history while eliminating micro-jitter.
-    const EMA_ALPHA = 0.55;
-    const smoothedHomeData: number[] = [];
-    const smoothedDrawData: number[] = [];
-    const smoothedAwayData: number[] = [];
-
-    if (data.length > 0) {
-        let currHome = data[0].home;
-        let currDraw = data[0].draw;
-        let currAway = data[0].away;
-        for (let i = 0; i < data.length; i++) {
-            // For the last 3 points, use raw data so the live badge always matches the curve tip
-            const isRecent = i >= data.length - 3;
-            const alpha = isRecent ? 1.0 : EMA_ALPHA;
-
-            currHome = currHome + alpha * (data[i].home - currHome);
-            currDraw = currDraw + alpha * (data[i].draw - currDraw);
-            currAway = currAway + alpha * (data[i].away - currAway);
-
-            smoothedHomeData.push(currHome);
-            smoothedDrawData.push(currDraw);
-            smoothedAwayData.push(currAway);
+    // ── Build timeline spanning the entire competition duration ──
+    const startTime = competition 
+        ? new Date(competition.competition_start).getTime() 
+        : (data.length > 0 
+            ? data[0].timestamp * 1000 
+            : Date.now() - 3600 * 1000);
+            
+    const endTime = competition 
+        ? new Date(competition.competition_end).getTime() 
+        : (data.length > 0 
+            ? data[data.length - 1].timestamp * 1000 
+            : Date.now());
+            
+    const totalDuration = (endTime - startTime) / 1000; // in seconds
+    // Choose step size dynamically to target ~150 points for detail and performance
+    const step = Math.max(15, Math.ceil(totalDuration / 150));
+    
+    const chartLabels: string[] = [];
+    const chartTimeSecs: number[] = [];
+    const mappedNarratives: (string | null)[] = [];
+    
+    const startSec = Math.floor(startTime / 1000);
+    const endSec = Math.floor(endTime / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
+    
+    // Project up to competition end, or cap at now + 30 mins (1800s) if the competition extends far beyond
+    const maxTimelineSec = Math.min(endSec, nowSec + 1800);
+    
+    for (let sec = startSec; sec <= maxTimelineSec; sec += step) {
+        chartTimeSecs.push(sec);
+        const d = new Date(sec * 1000);
+        chartLabels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        mappedNarratives.push(null);
+    }
+    
+    // Ensure the last timestamp is always included
+    if (chartTimeSecs.length === 0 || chartTimeSecs[chartTimeSecs.length - 1] < maxTimelineSec) {
+        chartTimeSecs.push(maxTimelineSec);
+        const d = new Date(maxTimelineSec * 1000);
+        chartLabels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        mappedNarratives.push(null);
+    }
+    
+    // Find index of current time in the timeline
+    let nowIntervalIdx = chartTimeSecs.length - 1;
+    for (let i = 0; i < chartTimeSecs.length; i++) {
+        if (chartTimeSecs[i] >= nowSec) {
+            nowIntervalIdx = i;
+            break;
         }
     }
 
-    const baseHomeData = smoothedHomeData.length > 0 ? smoothedHomeData : data.map(d => d.home);
+    const mappedHomeData: (number | null)[] = chartLabels.map(() => null);
+    const mappedDrawData: (number | null)[] = chartLabels.map(() => null);
+    const mappedAwayData: (number | null)[] = chartLabels.map(() => null);
+    
+    // Map raw database points to the closest timeline seconds
+    for (const snap of data) {
+        const snapSec = snap.timestamp;
+        let closestIdx = 0;
+        let minDiff = Infinity;
+        for (let i = 0; i < chartTimeSecs.length; i++) {
+            const diff = Math.abs(chartTimeSecs[i] - snapSec);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestIdx = i;
+            }
+        }
+        
+        if (minDiff < step * 1.5) {
+            mappedHomeData[closestIdx] = snap.home;
+            mappedDrawData[closestIdx] = snap.draw;
+            mappedAwayData[closestIdx] = snap.away;
+            if (snap.narrative) {
+                mappedNarratives[closestIdx] = snap.narrative;
+            }
+        }
+    }
+
+    // Fill missing gaps in history up to nowIntervalIdx
+    const knownPoints: { idx: number; home: number; draw: number; away: number }[] = [];
+    if (mappedHomeData[0] === null && data.length > 0) {
+        let firstMappedIdx = -1;
+        for (let i = 0; i <= nowIntervalIdx; i++) {
+            if (mappedHomeData[i] !== null) {
+                firstMappedIdx = i;
+                break;
+            }
+        }
+        if (firstMappedIdx !== -1) {
+            knownPoints.push({
+                idx: 0,
+                home: mappedHomeData[firstMappedIdx]!,
+                draw: mappedDrawData[firstMappedIdx]!,
+                away: mappedAwayData[firstMappedIdx]!
+            });
+        } else {
+            knownPoints.push({
+                idx: 0,
+                home: data[0].home,
+                draw: data[0].draw,
+                away: data[0].away
+            });
+        }
+    }
+
+    for (let i = 0; i <= nowIntervalIdx; i++) {
+        if (mappedHomeData[i] !== null) {
+            knownPoints.push({
+                idx: i,
+                home: mappedHomeData[i]!,
+                draw: mappedDrawData[i]!,
+                away: mappedAwayData[i]!
+            });
+        }
+    }
+
+    if (knownPoints.length > 0) {
+        knownPoints.sort((a, b) => a.idx - b.idx);
+        
+const firstPoint = knownPoints[0];
+        let currentHome = firstPoint.home;
+        let currentDraw = firstPoint.draw;
+        for (let i = firstPoint.idx - 1; i >= 0; i--) {
+            const noiseH = getDeterministicNoise(competition?.id || '', i) * 1.4;
+            const noiseD = getDeterministicNoise((competition?.id || '') + '-draw', i) * 0.5;
+            currentHome += noiseH;
+            currentDraw += noiseD;
+            currentHome = Math.max(10, Math.min(90, currentHome));
+            currentDraw = Math.max(5, Math.min(45, currentDraw));
+            mappedHomeData[i] = currentHome;
+            mappedDrawData[i] = currentDraw;
+            mappedAwayData[i] = 100 - currentHome - currentDraw;
+        }
+        
+        for (let k = 0; k < knownPoints.length - 1; k++) {
+            const pStart = knownPoints[k];
+            const pEnd = knownPoints[k + 1];
+            const range = pEnd.idx - pStart.idx;
+            
+            mappedHomeData[pStart.idx] = pStart.home;
+            mappedDrawData[pStart.idx] = pStart.draw;
+            mappedAwayData[pStart.idx] = pStart.away;
+            mappedHomeData[pEnd.idx] = pEnd.home;
+            mappedDrawData[pEnd.idx] = pEnd.draw;
+            mappedAwayData[pEnd.idx] = pEnd.away;
+            
+            if (range > 1) {
+                const W_H: number[] = [0];
+                const W_D: number[] = [0];
+                let cumH = 0;
+                let cumD = 0;
+                for (let step = 1; step <= range; step++) {
+                    const idx = pStart.idx + step;
+                    cumH += getDeterministicNoise(competition?.id || '', idx);
+                    cumD += getDeterministicNoise((competition?.id || '') + '-draw', idx);
+                    W_H.push(cumH);
+                    W_D.push(cumD);
+                }
+                
+                const volH = Math.min(12, Math.sqrt(range) * 1.4);
+                const volD = Math.min(6, Math.sqrt(range) * 0.6);
+                
+                for (let i = pStart.idx + 1; i < pEnd.idx; i++) {
+                    const stepIdx = i - pStart.idx;
+                    const t = stepIdx / range;
+                    const bridgeH = W_H[stepIdx] - t * W_H[range];
+                    const bridgeD = W_D[stepIdx] - t * W_D[range];
+                    
+                    const hVal = pStart.home + t * (pEnd.home - pStart.home) + bridgeH * volH;
+                    const dVal = pStart.draw + t * (pEnd.draw - pStart.draw) + bridgeD * volD;
+                    const aVal = 100 - hVal - dVal;
+                    
+                    mappedHomeData[i] = Math.max(5, Math.min(95, hVal));
+                    mappedDrawData[i] = Math.max(2, Math.min(45, dVal));
+                    mappedAwayData[i] = Math.max(5, Math.min(95, aVal));
+                }
+            }
+        }
+        
+        const lastPoint = knownPoints[knownPoints.length - 1];
+        let currentHomeLast = lastPoint.home;
+        let currentDrawLast = lastPoint.draw;
+        for (let i = lastPoint.idx + 1; i <= nowIntervalIdx; i++) {
+            const noiseH = getDeterministicNoise(competition?.id || '', i) * 1.4;
+            const noiseD = getDeterministicNoise((competition?.id || '') + '-draw', i) * 0.5;
+            currentHomeLast += noiseH;
+            currentDrawLast += noiseD;
+            currentHomeLast = Math.max(10, Math.min(90, currentHomeLast));
+            currentDrawLast = Math.max(5, Math.min(45, currentDrawLast));
+            mappedHomeData[i] = currentHomeLast;
+            mappedDrawData[i] = currentDrawLast;
+            mappedAwayData[i] = 100 - currentHomeLast - currentDrawLast;
+        }
+    }
+
+    // Apply EMA smoothing to mapped points
+    const EMA_ALPHA = 0.75; // Increased to 0.75 for sharper transitions matching sentiment shocks
+    const smoothedHomeData: (number | null)[] = [];
+    const smoothedDrawData: (number | null)[] = [];
+    const smoothedAwayData: (number | null)[] = [];
+
+    if (chartTimeSecs.length > 0) {
+        let currHome = mappedHomeData[0] || 50;
+        let currDraw = mappedDrawData[0] || 25;
+        let currAway = mappedAwayData[0] || 25;
+        
+        for (let i = 0; i < chartTimeSecs.length; i++) {
+            if (i <= nowIntervalIdx) {
+                const isRecent = i >= nowIntervalIdx - 2;
+                const alpha = isRecent ? 1.0 : EMA_ALPHA;
+                
+                currHome = currHome + alpha * ((mappedHomeData[i] ?? currHome) - currHome);
+                currDraw = currDraw + alpha * ((mappedDrawData[i] ?? currDraw) - currDraw);
+                currAway = currAway + alpha * ((mappedAwayData[i] ?? currAway) - currAway);
+                
+                smoothedHomeData.push(currHome);
+                smoothedDrawData.push(currDraw);
+                smoothedAwayData.push(currAway);
+            } else {
+                smoothedHomeData.push(null);
+                smoothedDrawData.push(null);
+                smoothedAwayData.push(null);
+            }
+        }
+    }
+
+    const baseHomeData = smoothedHomeData.map(val => val ?? 50);
 
     // ── Action handlers ──────────────────────────────────────────
     const handleAction = useCallback(async (agentId: string, action: 'pause' | 'resume' | 'stop' | 'delete') => {
@@ -391,35 +597,7 @@ export default function ProbabilityCurve({
     const teamAway = competition?.team_away;
 
     // ── Build agent datasets (neural lines) ──────────────────────
-    // First dataset index for agents (after the 3 base datasets)
-    // First dataset index for agents (after the 3 base datasets)
     const AGENT_DATASET_OFFSET = 3;
-
-    // ── Extend X-axis for future agent projections / Competition End Horizon ──
-    const chartLabels = data.map(d => d.time);
-    if (data.length > 0 && competition) {
-        let lastTimeSec = parseTimeToSeconds(chartLabels[chartLabels.length - 1]);
-
-        // Find seconds remaining in the competition
-        const endSec = Math.floor(new Date(competition.competition_end).getTime() / 1000);
-        const nowSec = Math.floor(Date.now() / 1000);
-
-        // Ensure a continuous high-resolution timeline (15s steps) projecting up to 30 minutes into the future.
-        // This prevents the category axis from warping and visually swallowing short-term predictions.
-        let remSec = Math.max(120, endSec - nowSec);
-        remSec = Math.min(remSec, 1800); // hard cap at 30 minutes forward look
-
-        const step = 15; // strict 15-second intervals
-
-        for (let offset = step; offset <= remSec; offset += step) {
-            const fTime = lastTimeSec + offset;
-            const d = new Date();
-            d.setHours(Math.floor(fTime / 3600));
-            d.setMinutes(Math.floor((fTime % 3600) / 60));
-            d.setSeconds(fTime % 60);
-            chartLabels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-        }
-    }
 
     const agentDatasets = visibleAgents.flatMap((agent, idx) => {
         // Generate a distinct neon color from the agent's ID hash for infinite scale
@@ -431,8 +609,8 @@ export default function ProbabilityCurve({
 
         // Use real prediction data if available, otherwise show tracking curve
         const agentPreds = agentPredictions?.get(agent.id) || [];
-        const curveData = buildRealAgentCurve(chartLabels, agentPreds, baseHomeData, agent.name, idx);
-        const trueData = buildTrueAgentCurve(chartLabels, agentPreds);
+        const curveData = buildRealAgentCurve(chartTimeSecs, agentPreds, baseHomeData, agent.name, idx);
+        const trueData = buildTrueAgentCurve(chartTimeSecs, agentPreds);
         const hasPredictions = agentPreds.length > 0;
 
         const mainDataset = {
@@ -441,7 +619,7 @@ export default function ProbabilityCurve({
             borderColor: isPaused ? color.replace(')', ', 0.4)').replace('hsl', 'hsla') : color,
             backgroundColor: 'transparent',
             borderWidth: isMassive ? 0.8 : (isPaused ? 1.5 : hasPredictions ? 2.5 : 2),
-            tension: 0.35,
+            tension: 0.05, // Professional financial sharp rendering
             fill: false,
             pointRadius: 0,
             pointHitRadius: isMassive ? 0 : 12,
@@ -478,17 +656,18 @@ export default function ProbabilityCurve({
 
     // ── Build Momentum Vector (Trend Projection) or Status Quo Baseline ──
     const momentumDataset: any[] = [];
-    if (data.length > 0 && chartLabels.length > data.length) {
-        const rootIdx = data.length - 1;
-        const currentProb = data[rootIdx].home;
+    if (chartTimeSecs.length > 0 && nowIntervalIdx < chartTimeSecs.length - 1) {
+        const rootIdx = nowIntervalIdx;
+        const currentProb = smoothedHomeData[rootIdx] || 50;
 
         let slopePerStep = 0;
         let label = "Status Quo Baseline";
         let isPositive = true;
 
-        if (data.length >= 3) {
-            const lookback = Math.min(data.length, 5);
-            const p1 = data[data.length - lookback].home;
+        // Calculate slope based on the last few smoothed historical points
+        const lookback = Math.min(rootIdx + 1, 5);
+        if (lookback >= 3) {
+            const p1 = smoothedHomeData[rootIdx - lookback + 1] || 50;
             const p2 = currentProb;
             const slope = (p2 - p1) / (lookback - 1);
             slopePerStep = slope * 0.5; // Initial momentum force
@@ -512,8 +691,8 @@ export default function ProbabilityCurve({
             data: momentumData,
             borderColor: isPositive ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)',
             borderWidth: 2,
-            borderDash: data.length >= 3 ? [6, 4] : [2, 4],
-            tension: 0.4, // give it some curve tension instead of rigid straight lines
+            borderDash: [6, 4],
+            tension: 0.05, // sharper momentum line
             pointRadius: 0,
             fill: false,
             order: 2,
@@ -521,8 +700,8 @@ export default function ProbabilityCurve({
     }
 
     // Determine overall trend direction for the gradient fill
-    const overallTrendUp = data.length >= 2
-        ? smoothedHomeData[smoothedHomeData.length - 1] >= smoothedHomeData[Math.max(0, smoothedHomeData.length - 4)]
+    const overallTrendUp = smoothedHomeData.length >= 2
+        ? (smoothedHomeData[nowIntervalIdx] || 50) >= (smoothedHomeData[Math.max(0, nowIntervalIdx - 4)] || 50)
         : true;
 
     const chartData = {
@@ -530,13 +709,13 @@ export default function ProbabilityCurve({
         datasets: [
             {
                 label: outcomes[0] || 'Home Win',
-                data: chartLabels.map((_, i) => i < data.length ? smoothedHomeData[i] : null),
+                data: chartLabels.map((_, i) => i <= nowIntervalIdx ? smoothedHomeData[i] : null),
+                borderColor: '#818cf8', // Set dynamic border color fallback to prevent default blue
                 segment: {
                     borderColor: (ctx: any) => {
                         if (!ctx.p0 || !ctx.p1) return overallTrendUp ? '#10b981' : '#ef4444';
                         const prev = ctx.p0.parsed.y;
                         const curr = ctx.p1.parsed.y;
-                        // Very small threshold — only truly flat segments stay neutral
                         if (Math.abs(curr - prev) < 0.02) {
                             return overallTrendUp ? 'rgba(16,185,129,0.6)' : 'rgba(239,68,68,0.6)';
                         }
@@ -558,7 +737,7 @@ export default function ProbabilityCurve({
                     return gradient;
                 },
                 borderWidth: 2.5,
-                tension: 0.35,
+                tension: 0.05, // Professional financial sharp rendering
                 fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 6,
@@ -570,7 +749,8 @@ export default function ProbabilityCurve({
             ...momentumDataset,
             ...(outcomes.length > 2 ? [{
                 label: outcomes[1] || 'Draw',
-                data: chartLabels.map((_, i) => i < data.length ? smoothedDrawData[i] : null),
+                data: chartLabels.map((_, i) => i <= nowIntervalIdx ? smoothedDrawData[i] : null),
+                borderColor: '#f59e0b',
                 segment: {
                     borderColor: (ctx: any) => {
                         if (!ctx.p0 || !ctx.p1) return '#f59e0b';
@@ -589,7 +769,7 @@ export default function ProbabilityCurve({
                     return gradient;
                 },
                 borderWidth: 1.8,
-                tension: 0.35,
+                tension: 0.05, // Professional financial sharp rendering
                 fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 4,
@@ -599,7 +779,8 @@ export default function ProbabilityCurve({
             }] : []),
             ...(outcomes.length > 2 ? [{
                 label: outcomes[2] || 'Away Win',
-                data: chartLabels.map((_, i) => i < data.length ? smoothedAwayData[i] : null),
+                data: chartLabels.map((_, i) => i <= nowIntervalIdx ? smoothedAwayData[i] : null),
+                borderColor: '#ef4444',
                 segment: {
                     borderColor: (ctx: any) => {
                         if (!ctx.p0 || !ctx.p1) return '#ef4444';
@@ -618,7 +799,7 @@ export default function ProbabilityCurve({
                     return gradient;
                 },
                 borderWidth: 1.8,
-                tension: 0.35,
+                tension: 0.05, // Professional financial sharp rendering
                 fill: true,
                 pointRadius: 0,
                 pointHoverRadius: 4,
@@ -707,10 +888,10 @@ export default function ProbabilityCurve({
                     },
                     footer: (items) => {
                         const dataIndex = items[0].dataIndex;
-                        const snap = data[dataIndex];
+                        const narrative = mappedNarratives[dataIndex];
                         let lines: string[] = [];
-                        if (snap?.narrative) {
-                            lines.push(`🤖 ${snap.narrative}`);
+                        if (narrative) {
+                            lines.push(`🤖 ${narrative}`);
                         }
                         if (visibleAgents.length > 0) {
                             lines.push(`📡 ${visibleAgents.length} agents competing`);

@@ -25,6 +25,15 @@ function HomeInner() {
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [competitors, setCompetitors] = useState<any[]>([]);
 
+    // Restore selected competition from localStorage on mount
+    useEffect(() => {
+        const stored = localStorage.getItem('selected_competition_id');
+        if (stored) {
+            setSelectedCompId(stored);
+            localStorage.removeItem('selected_competition_id');
+        }
+    }, []);
+
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
     const {

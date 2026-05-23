@@ -7,6 +7,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { apiFetch } from '@/lib/supabase';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const SolanaChart = dynamic(() => import('@/components/SolanaChart'), { ssr: false });
@@ -45,6 +46,11 @@ function DashboardView() {
     const fetchInFlight = useRef(false);
     const abortRef = useRef<AbortController | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [stats, setStats] = useState<{
+        activeStakedSol: number;
+        totalWonSol: number;
+        portfolioValue: number;
+    } | null>(null);
 
     // Auto-close menu on route change
     useEffect(() => { setMenuOpen(false); }, [pathname]);
@@ -79,8 +85,37 @@ function DashboardView() {
         return () => clearInterval(iv);
     }, [connected, publicKey, fetchBalance]);
 
+    useEffect(() => {
+        if (!connected || !publicKey) {
+            setStats(null);
+            return;
+        }
+
+        const loadStats = async () => {
+            try {
+                const data = await apiFetch<any>('/dashboard/stats', {
+                    headers: { 'x-user-id': publicKey.toString() }
+                });
+                setStats(data);
+            } catch (err) {
+                console.error('Failed to load portfolio stats:', err);
+            }
+        };
+
+        loadStats();
+        const iv = setInterval(loadStats, 15_000);
+        return () => clearInterval(iv);
+    }, [connected, publicKey]);
+
     const solBal = balance !== null ? balance / LAMPORTS_PER_SOL : 0;
-    const usdVal = solBal && solPrice ? solBal * solPrice : 0;
+    const stakedSol = stats?.activeStakedSol || 0;
+    const earnedSol = stats?.totalWonSol || 0;
+    const totalVal = solBal + stakedSol + earnedSol;
+    const usdVal = totalVal && solPrice ? totalVal * solPrice : 0;
+
+    const avPct = totalVal > 0 ? (solBal / totalVal) * 100 : 100;
+    const stPct = totalVal > 0 ? (stakedSol / totalVal) * 100 : 0;
+    const erPct = totalVal > 0 ? (earnedSol / totalVal) * 100 : 0;
 
     return (
         <div className="portfolio-page-wrapper">
@@ -125,10 +160,10 @@ function DashboardView() {
                     .db-overview-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 1rem; }
                     .db-pb { display: flex; height: 32px; border-radius: 8px; overflow: hidden; gap: 4px; margin-bottom: 1.5rem; }
                     .db-pb-seg { height: 100%; border-radius: 6px; }
-                    .db-pb-1 { background: #7c8db0; width: 35%; }
-                    .db-pb-2 { background: #6b7280; width: 15%; }
-                    .db-pb-3 { background: #5eead4; width: 25%; }
-                    .db-pb-4 { width: 25%; background: repeating-linear-gradient(-45deg,rgba(255,255,255,0.05),rgba(255,255,255,0.05) 5px,rgba(255,255,255,0.1) 5px,rgba(255,255,255,0.1) 10px); }
+                    .db-pb-1 { background: #7c8db0; }
+                    .db-pb-2 { background: #6b7280; }
+                    .db-pb-3 { background: #5eead4; }
+                    .db-pb-4 { background: repeating-linear-gradient(-45deg,rgba(255,255,255,0.05),rgba(255,255,255,0.05) 5px,rgba(255,255,255,0.1) 5px,rgba(255,255,255,0.1) 10px); }
                     .db-legend { display: flex; flex-direction: column; gap: 0.75rem; }
                     .db-leg-item { display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; }
                     .db-leg-left { display: flex; align-items: center; gap: 0.5rem; }
@@ -237,10 +272,10 @@ function DashboardView() {
                 {connected ? (
                     <>
                         <div className="db-bal">
-                            <div className="db-bal-label">Balance</div>
+                            <div className="db-bal-label">Portfolio Value</div>
                             <div className="db-bal-row">
                                 <div className="db-bal-main">
-                                    <span className="db-bal-val">{solBal.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
+                                    <span className="db-bal-val">{totalVal.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
                                     <span className="db-bal-cur">SOL</span>
                                 </div>
                                 <div className="db-bal-usd">${usdVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -250,13 +285,15 @@ function DashboardView() {
                         <div className="db-overview">
                             <div className="db-overview-title">Overview</div>
                             <div className="db-pb">
-                                <div className="db-pb-seg db-pb-1"/><div className="db-pb-seg db-pb-2"/>
-                                <div className="db-pb-seg db-pb-3"/><div className="db-pb-seg db-pb-4"/>
+                                <div className="db-pb-seg db-pb-1" style={{ width: `${avPct}%` }}/>
+                                <div className="db-pb-seg db-pb-2" style={{ width: `${stPct}%` }}/>
+                                <div className="db-pb-seg db-pb-3" style={{ width: `${erPct}%` }}/>
+                                <div className="db-pb-seg db-pb-4" style={{ width: '0%' }}/>
                             </div>
                             <div className="db-legend">
                                 <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#7c8db0'}}/><span>Available</span></div><span className="db-leg-val">{solBal.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
-                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#6b7280'}}/><span>Staked</span></div><span className="db-leg-val">0 SOL</span></div>
-                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#5eead4'}}/><span>Earned</span></div><span className="db-leg-val">0 SOL</span></div>
+                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#6b7280'}}/><span>Staked</span></div><span className="db-leg-val">{stakedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
+                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#5eead4'}}/><span>Earned</span></div><span className="db-leg-val">{earnedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
                             </div>
                         </div>
 

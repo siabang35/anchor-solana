@@ -2892,3 +2892,90 @@ body {
 }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
+/* ===== PREMIUM COMPETE BUTTON STYLING ===== */
+.btn-compete-premium {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0.85rem;
+  width: 100%;
+  padding: 0.65rem 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #c084fc 100%);
+  background-size: 200% auto;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  font-family: var(--font-sans), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Shine Sweep Animation effect */
+.btn-compete-premium::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: skewX(-25deg);
+  pointer-events: none;
+}
+
+.btn-compete-premium:hover {
+  background-position: right center;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(124, 58, 237, 0.4), 0 0 12px rgba(99, 102, 241, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-compete-premium:hover::after {
+  animation: shineSweep 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.btn-compete-premium:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.2);
+  opacity: 0.95;
+}
+
+/* Micro-animation for sword icon */
+.btn-compete-premium span.sword-icon {
+  display: inline-block;
+}
+
+.btn-compete-premium:hover span.sword-icon {
+  animation: swordSwing 0.65s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+}
+
+@keyframes shineSweep {
+  0% { left: -150%; }
+  100% { left: 150%; }
+}
+
+@keyframes swordSwing {
+  0% { transform: rotate(0deg) scale(1); }
+  20% { transform: rotate(-18deg) scale(1.2); }
+  60% { transform: rotate(18deg) scale(1.2); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  50% { transform: translateX(6px); }
+  75% { transform: translateX(-6px); }
+}
+

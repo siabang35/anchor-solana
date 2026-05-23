@@ -88,8 +88,8 @@ export default function Performance() {
                 marginBottom: '1rem',
                 padding: '1rem',
                 borderRadius: 'var(--radius-xs)',
-                background: 'rgba(16, 185, 129, 0.08)',
-                border: '1px solid rgba(16, 185, 129, 0.15)',
+                background: perf.totalPnl >= 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                border: perf.totalPnl >= 0 ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(239, 68, 68, 0.15)',
             }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Total P&L

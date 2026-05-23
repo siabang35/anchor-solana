@@ -61,7 +61,7 @@ interface QuotaInfo {
     active_agents: number;
 }
 
-type BuilderStep = 'config' | 'deploying' | 'active';
+type BuilderStep = 'config' | 'deploying' | 'active' | 'failed';
 type ViewTab = 'build' | 'manage';
 
 export default function DeployAgent({ initialCategory }: { initialCategory?: string }) {
@@ -224,8 +224,17 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         );
     }, [selectedMarket, forecasters]);
 
+    const parsedStake = useMemo(() => {
+        const normalized = stakeAmount.replace(',', '.');
+        return parseFloat(normalized) || 0;
+    }, [stakeAmount]);
+
+    const isStakeValid = useMemo(() => {
+        return stakeAmount.trim() !== '' && parsedStake >= 0.1;
+    }, [stakeAmount, parsedStake]);
+
     const canDeploy = connected && agentName.trim() && categoryId && marketIds.length > 0 && strategy.trim()
-        && (!quota || quota.deploys_remaining > 0) && !agentAlreadyInMarket;
+        && (!quota || quota.deploys_remaining > 0) && !agentAlreadyInMarket && isStakeValid;
 
     // ========================
     // Deploy via Backend API
@@ -237,209 +246,130 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         setError(null);
         setLogs([]);
 
-        // Simulate deployment progress logs
-        const deployLogs: AgentLog[] = [
-            { timestamp: Date.now(), type: 'info', message: '🚀 Initializing AI Agent deployment...' },
-            { timestamp: Date.now() + 500, type: 'info', message: `📝 Strategy loaded: "${strategy.slice(0, 80)}${strategy.length > 80 ? '...' : ''}"` },
-            { timestamp: Date.now() + 1200, type: 'info', message: '🔗 Connecting to backend API...' },
-        ];
-
-        // Show initial logs
-        for (let i = 0; i < deployLogs.length; i++) {
-            await new Promise(r => setTimeout(r, 800));
-            setLogs(prev => [...prev, deployLogs[i]]);
-        }
+        // Show initial progress logs
+        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🚀 Initializing AI Agent deployment...' }]);
+        await new Promise(r => setTimeout(r, 600));
+        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📝 Strategy loaded: "${strategy.slice(0, 80)}${strategy.length > 80 ? '...' : ''}"` }]);
+        await new Promise(r => setTimeout(r, 600));
 
         try {
-            // Find matching agent type from backend
-            const matchingType = agentTypes.find(t => t.sector === categoryId) || agentTypes[0];
+            if (!publicKey || !sendTransaction) {
+                throw new Error('Wallet not connected or transaction helper not available.');
+            }
 
-            const isForecaster = true; // Always forecaster mode
             const normalizedStake = stakeAmount.toString().replace(',', '.');
-            const parsedStake = parseFloat(normalizedStake) || 0;
+            const stakeSOL = parseFloat(normalizedStake) || 0;
+            
+            if (stakeSOL < 0.1) {
+                throw new Error('Minimum stake amount is 0.1 SOL.');
+            }
+
+            const stakeLamports = Math.floor(stakeSOL * LAMPORTS_PER_SOL);
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Checking wallet balance for ${stakeSOL} SOL...` }]);
+
+            // Fetch actual on-chain balance
+            const balance = await DEVNET_CONNECTION.getBalance(publicKey);
+            const balanceSOL = balance / LAMPORTS_PER_SOL;
+
+            if (balance < stakeLamports + 5000) { // 5000 lamports for transaction fee
+                throw new Error(`Insufficient Devnet SOL. You have ${balanceSOL.toFixed(4)} SOL, but need at least ${stakeSOL} SOL + transaction fee.`);
+            }
+
+            // Derive pool vault PDA for the competition
+            const marketSeed = Buffer.from(marketIds[0].replace(/-/g, '').slice(0, 32), 'hex');
+            const [poolVaultPDA] = PublicKey.findProgramAddressSync(
+                [POOL_VAULT_SEED, marketSeed],
+                PROGRAM_ID,
+            );
+
+            setLogs(prev => [
+                ...prev, 
+                { timestamp: Date.now(), type: 'info', message: `🔑 Derived Pool Vault PDA: ${poolVaultPDA.toBase58().slice(0, 12)}...` },
+                { timestamp: Date.now(), type: 'info', message: `✍️ Please approve the transaction in your wallet...` }
+            ]);
+
+            // Construct transaction
+            const tx = new Transaction().add(
+                SystemProgram.transfer({
+                    fromPubkey: publicKey,
+                    toPubkey: poolVaultPDA,
+                    lamports: stakeLamports,
+                })
+            );
+
+            const { blockhash, lastValidBlockHeight } = await DEVNET_CONNECTION.getLatestBlockhash('confirmed');
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = publicKey;
+            tx.lastValidBlockHeight = lastValidBlockHeight;
+
+            // Send transaction
+            let signature = '';
+            try {
+                signature = await sendTransaction(tx, DEVNET_CONNECTION);
+            } catch (walletErr: any) {
+                throw new Error(`Transaction rejected or failed in wallet: ${walletErr?.message || 'Signature denied.'}`);
+            }
+
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⏳ Confirming on-chain: ${signature.slice(0, 16)}...` }]);
+
+            // Wait for confirmation
+            const confirmation = await DEVNET_CONNECTION.confirmTransaction({
+                signature,
+                blockhash,
+                lastValidBlockHeight,
+            }, 'confirmed');
+
+            if (confirmation.value.err) {
+                throw new Error(`On-chain transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+            }
+
+            setLogs(prev => [...prev, {
+                timestamp: Date.now(), type: 'signal',
+                message: `✅ On-chain stake confirmed! TX: ${signature.slice(0, 20)}... (${stakeSOL} SOL)`
+            }]);
+
+            // Now deploy the agent in the backend
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🔗 Registering agent with backend database...' }]);
+
             const body = {
                 name: agentName.trim(),
                 system_prompt: strategy,
                 competition_ids: marketIds,
-                stake_amount: parsedStake > 0 ? parsedStake : undefined,
+                stake_amount: stakeSOL,
             };
 
-            const endpoint = '/agents/deploy-forecaster';
+            let result: DeployedAgentResponse;
+            try {
+                result = await apiFetch<DeployedAgentResponse>('/agents/deploy-forecaster', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                    },
+                    body: JSON.stringify(body),
+                });
+            } catch (apiErr: any) {
+                throw new Error(`Database registration failed (SOL staked, TX: ${signature}). Error: ${apiErr?.message}`);
+            }
 
-            // Call backend API
-            const result = await apiFetch<DeployedAgentResponse>(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
-                },
-                body: JSON.stringify(body),
-            });
-
-            // ════════════════════════════════════════════════════════════
-            // REAL SOLANA DEVNET STAKE — Transfer SOL to pool vault PDA
-            // Only records entry when on-chain TX is CONFIRMED.
-            // If stake fails (insufficient SOL, rejected, etc), agent
-            // still deploys but NO ghost wager/entry is created.
-            // ════════════════════════════════════════════════════════════
-            let stakeSuccess = false;
-            const stakeSOL = parsedStake;
-
-            if (stakeSOL > 0 && marketIds.length > 0 && publicKey && sendTransaction) {
-                try {
-                    const stakeLamports = Math.floor(stakeSOL * LAMPORTS_PER_SOL);
-
-                    setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Preparing on-chain stake: ${stakeSOL} SOL on Solana devnet...` }]);
-
-                    // Check balance before attempting transaction
-                    const balance = await DEVNET_CONNECTION.getBalance(publicKey);
-                    const balanceSOL = balance / LAMPORTS_PER_SOL;
-
-                    if (balance < stakeLamports + 5000) { // 5000 lamports for tx fee
-                        setLogs(prev => [...prev, {
-                            timestamp: Date.now(), type: 'info',
-                            message: `⚠️ Insufficient Devnet SOL (${balanceSOL.toFixed(4)}). Auto-simulating transaction for testing...`
-                        }]);
-
-                        // Generate a realistic fake Solana base58 hash
-                        const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-                        const fakeSig = Array.from({ length: 88 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-
-                        setLogs(prev => [...prev, {
-                            timestamp: Date.now(), type: 'signal',
-                            message: `✅ Simulated Devnet stake confirmed! TX: ${fakeSig.slice(0, 20)}... (${stakeSOL} SOL)`
-                        }]);
-
-                        try {
-                            await apiFetch('/agents/wager', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
-                                },
-                                body: JSON.stringify({
-                                    agent_id: result.id,
-                                    competition_id: marketIds[0],
-                                    wager_amount: stakeSOL,
-                                    onchain_tx: fakeSig,
-                                }),
-                            });
-                            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📊 Backend synced — pool updated!` }]);
-                            stakeSuccess = true;
-                        } catch (backendErr: any) {
-                            console.error('Backend sync failed after simulated TX:', backendErr);
-                            setLogs(prev => [...prev, {
-                                timestamp: Date.now(), type: 'error',
-                                message: `🚨 CRITICAL: Simulated stake succeeded but database sync failed!`
-                            }]);
-                            throw new Error(`Database sync failed (TX: ${fakeSig})`);
-                        }
-
-                    } else {
-                        // Derive pool vault PDA for this market
-                        const marketSeed = Buffer.from(marketIds[0].replace(/-/g, '').slice(0, 32), 'hex');
-                        const [poolVaultPDA] = PublicKey.findProgramAddressSync(
-                            [POOL_VAULT_SEED, marketSeed],
-                            PROGRAM_ID,
-                        );
-
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `🔑 Pool Vault: ${poolVaultPDA.toBase58().slice(0, 12)}...` }]);
-
-                        // Build SOL transfer transaction
-                        const tx = new Transaction().add(
-                            SystemProgram.transfer({
-                                fromPubkey: publicKey,
-                                toPubkey: poolVaultPDA,
-                                lamports: stakeLamports,
-                            })
-                        );
-
-                        // Get latest blockhash
-                        const { blockhash, lastValidBlockHeight } = await DEVNET_CONNECTION.getLatestBlockhash('confirmed');
-                        tx.recentBlockhash = blockhash;
-                        tx.feePayer = publicKey;
-                        tx.lastValidBlockHeight = lastValidBlockHeight;
-
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `✍️ Sign the transaction in your wallet...` }]);
-
-                        // Send transaction via wallet adapter
-                        const signature = await sendTransaction(tx, DEVNET_CONNECTION);
-
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⏳ Confirming on-chain: ${signature.slice(0, 16)}...` }]);
-
-                        // Wait for confirmation
-                        const confirmation = await DEVNET_CONNECTION.confirmTransaction({
-                            signature,
-                            blockhash,
-                            lastValidBlockHeight,
-                        }, 'confirmed');
-
-                        if (confirmation.value.err) {
-                            throw new Error(`Transaction failed on-chain: ${JSON.stringify(confirmation.value.err)}`);
-                        }
-
-                        setLogs(prev => [...prev, {
-                            timestamp: Date.now(), type: 'signal',
-                            message: `✅ On-chain stake confirmed! TX: ${signature.slice(0, 20)}... (${stakeSOL} SOL)`
-                        }]);
-
-                        // We successfully staked on-chain. Now sync to backend.
-                        // If this fails, the user has spent SOL but it's not in the DB!
-                        try {
-                            await apiFetch('/agents/wager', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
-                                },
-                                body: JSON.stringify({
-                                    agent_id: result.id,
-                                    competition_id: marketIds[0],
-                                    wager_amount: stakeSOL,
-                                    onchain_tx: signature,
-                                }),
-                            });
-                            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📊 Backend synced — pool updated!` }]);
-                            stakeSuccess = true;
-                        } catch (backendErr: any) {
-                            console.error('Backend sync failed after successful on-chain TX:', backendErr);
-                            setLogs(prev => [...prev, {
-                                timestamp: Date.now(), type: 'error',
-                                message: `🚨 CRITICAL: On-chain stake succeeded but database sync failed! Please contact support with TX: ${signature}`
-                            }]);
-                            // We still consider the deploy finished, but stake synchronization is broken.
-                            throw new Error(`Database sync failed (TX: ${signature})`);
-                        }
-                    }
-                } catch (stakeErr: any) {
-                    const errMsg = stakeErr?.message || 'Unknown error';
-                    // Detect common wallet errors for better UX
-                    const isInsufficientFunds = errMsg.includes('insufficient') || errMsg.includes('0x1') || errMsg.includes('InsufficientFundsForRent');
-                    const isUserRejected = errMsg.includes('rejected') || errMsg.includes('User rejected') || errMsg.includes('cancelled');
-                    const isBackendSync = errMsg.includes('Database sync failed');
-
-                    if (isBackendSync) {
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'error', message: `⚠️ ${errMsg}` }]);
-                    } else if (isUserRejected) {
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `ℹ️ Stake cancelled by user — agent deployed without stake` }]);
-                    } else if (isInsufficientFunds) {
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ Insufficient SOL balance — agent deployed without stake` }]);
-                    } else {
-                        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⚠️ On-chain stake failed: ${errMsg}` }]);
-                    }
-
-                    if (!isBackendSync) {
-                        // NO fallback wager — only confirmed on-chain stakes create entries
-                        // This prevents ghost entries and entry_count drift
-                        setLogs(prev => [...prev, {
-                            timestamp: Date.now(), type: 'info',
-                            message: `💡 Agent is LIVE without stake — you can stake later from your dashboard`
-                        }]);
-                    }
-                }
-            } else if (stakeSOL > 0 && marketIds.length > 0) {
-                // User entered stake but wallet not connected — skip silently
-                setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💡 Connect wallet to stake SOL — agent deployed without stake` }]);
+            // Sync the wager
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '📊 Syncing on-chain wager with database...' }]);
+            try {
+                await apiFetch('/agents/wager', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                    },
+                    body: JSON.stringify({
+                        agent_id: result.id,
+                        competition_id: marketIds[0],
+                        wager_amount: stakeSOL,
+                        onchain_tx: signature,
+                    }),
+                });
+            } catch (wagerErr: any) {
+                throw new Error(`Wager sync failed (SOL staked, TX: ${signature}). Error: ${wagerErr?.message}`);
             }
 
             setDeployedAgent(result);
@@ -447,15 +377,10 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 ...prev,
                 { timestamp: Date.now(), type: 'info', message: '✅ Agent deployment successful!' },
                 { timestamp: Date.now() + 100, type: 'info', message: `🆔 Agent ID: ${result.id}` },
-                { timestamp: Date.now() + 200, type: 'info', message: `📊 Deploy #${result.deploy_number} — Quota: ${quota ? `${quota.total_deployed + 1}/${quota.max_deploys}` : 'N/A'}` },
-                ...(stakeSuccess
-                    ? [{ timestamp: Date.now() + 300, type: 'signal' as const, message: `💎 Staked ${stakeSOL} SOL on-chain — competing for prize pool!` }]
-                    : stakeSOL > 0
-                        ? [{ timestamp: Date.now() + 300, type: 'info' as const, message: '📋 Deployed without stake — transaction failed or cancelled' }]
-                        : [{ timestamp: Date.now() + 300, type: 'info' as const, message: '📋 Deployed without stake — you can stake SOL anytime to enter the prize pool' }]
-                ),
-                { timestamp: Date.now() + 500, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
+                { timestamp: Date.now() + 200, type: 'info', message: `📊 Deploy Completed — Quota updated` },
+                { timestamp: Date.now() + 300, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
             ]);
+            
             setStep('active');
             setViewTab('manage');
             refreshAgents();
@@ -464,40 +389,20 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: result.name } }));
             }
+
         } catch (err: any) {
-            setError(err.message || 'Deployment failed');
+            console.error('Deployment flow failed:', err);
+            const errMsg = err.message || 'Deployment failed';
+            setError(errMsg);
             setLogs(prev => [
                 ...prev,
-                { timestamp: Date.now(), type: 'info', message: `❌ API Error: ${err.message || 'Unknown error'}` },
-                { timestamp: Date.now() + 100, type: 'info', message: '⚡ Falling back to local simulation mode...' },
+                { timestamp: Date.now(), type: 'error', message: `❌ Error: ${errMsg}` }
             ]);
-            // Fallback: create a simulated agent
-            setDeployedAgent({
-                id: `local-${Date.now()}`,
-                name: agentName.trim(),
-                status: 'active',
-                strategy_prompt: strategy,
-                target_outcome: selectedMarket.outcomes[selectedOutcome],
-                direction: direction === 'UP' ? 'long' : 'short',
-                risk_level: riskLevel,
-                deploy_number: 0,
-                accuracy_score: 0,
-                total_trades: 0,
-                total_pnl: 0,
-                win_rate: 0,
-                deployed_at: new Date().toISOString(),
-            } as DeployedAgentResponse);
-            setStep('active');
-            setViewTab('manage');
-
-            // Fire event so ProbabilityCurve can draw the annotation line (Simulated)
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: agentName.trim() } }));
-            }
+            setStep('failed');
         } finally {
             setDeploying(false);
         }
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota, publicKey, sendTransaction]);
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota, publicKey, sendTransaction, refreshAgents]);
 
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
@@ -948,6 +853,20 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                 }}>SOL ◎</span>
                             </div>
 
+                            {/* Validation warning message */}
+                            {stakeAmount.trim() !== '' && parsedStake < 0.1 && (
+                                <div style={{
+                                    marginTop: '0.35rem', padding: '0.4rem 0.65rem',
+                                    borderRadius: 'var(--radius-xs)',
+                                    background: 'rgba(239, 68, 68, 0.08)',
+                                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                                    fontSize: '0.6rem', color: '#ef4444',
+                                    fontWeight: 600,
+                                }}>
+                                    ⚠️ Minimum stake amount is 0.1 SOL to deploy an agent.
+                                </div>
+                            )}
+
                             {/* Stake Info */}
                             <div style={{
                                 marginTop: '0.4rem', padding: '0.5rem 0.65rem',
@@ -1083,6 +1002,63 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
                         </div>
                     )}
+                </div>
+            );
+        }
+
+        if (step === 'failed') {
+            return (
+                <div className="glass-card card-body animate-in" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '1.5rem', overflowY: 'auto' }}>
+                    <div style={{
+                        width: '72px',
+                        height: '72px',
+                        borderRadius: '50%',
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '2px dashed #ef4444',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '1rem',
+                        animation: 'pulse 2s infinite',
+                        boxShadow: '0 0 20px rgba(239, 68, 68, 0.15)'
+                    }}>
+                        <span style={{ fontSize: '2.5rem', color: '#ef4444', animation: 'shake 0.5s ease-in-out' }}>✕</span>
+                    </div>
+
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+                        Deployment Failed
+                    </h3>
+
+                    <p style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: '280px', marginBottom: '1.25rem' }}>
+                        {error || 'The on-chain stake transaction failed or was cancelled. Your AI agent could not be deployed.'}
+                    </p>
+
+                    {logs.length > 0 && (
+                        <div className="agent-console" style={{ width: '100%', height: '110px', marginBottom: '1.25rem', textAlign: 'left', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-card)' }}>
+                            {logs.map((log, i) => (
+                                <div key={i} className={`agent-log ${log.type}`}>
+                                    <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                    {log.message}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        className="btn-primary"
+                        onClick={() => {
+                            setStep('config');
+                            setError(null);
+                            setLogs([]);
+                        }}
+                        style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid var(--border-glass)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        🔄 Try Again
+                    </button>
                 </div>
             );
         }

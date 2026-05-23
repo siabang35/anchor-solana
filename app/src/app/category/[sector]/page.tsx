@@ -117,6 +117,15 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const [leaderboardLoading, setLeaderboardLoading] = useState(false);
     const [leaderboardLastUpdated, setLeaderboardLastUpdated] = useState<Date | null>(null);
 
+    // Restore selected competition from homepage/feed on mount
+    useEffect(() => {
+        const stored = localStorage.getItem('selected_competition_id');
+        if (stored) {
+            setSelectedCompId(stored);
+            localStorage.removeItem('selected_competition_id');
+        }
+    }, []);
+
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
     const {

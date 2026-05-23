@@ -77,7 +77,7 @@ export class TechETLOrchestrator extends BaseETLOrchestrator implements OnModule
             const techNews = await this.fetchTechNews();
             recordsFetched += techNews.length;
 
-            const newsItems = await Promise.all(techNews.map(n => this.transformNewsToItem(n, model)));
+            const newsItems = await Promise.all(techNews.map(n => this.transformNewsToItem(n)));
 
             // Enrich news items with scraped images (fallback to topic-based images)
             await this.enrichItemsWithImages(newsItems, (title) => this.getTechImageUrl(title));
