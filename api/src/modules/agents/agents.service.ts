@@ -643,11 +643,33 @@ export class AgentsService {
             throw new BadRequestException('wager_amount must be a positive number matching the on-chain stake');
         }
 
-        const isVerifiedOnchain = !!(data.onchain_tx && data.onchain_tx.length > 20);
-        this.logger.log(`📥 createWager: ${data.wager_amount} SOL | agent=${data.agent_id.slice(0,8)} | onchain=${isVerifiedOnchain ? data.onchain_tx?.slice(0,16) : 'none'}`);
-
         const supabase = this.supabaseService.getClient();
         const adminSupabase = this.supabaseService.getAdminClient();
+
+        // Anti-hacking / Anti-replay: Validate on-chain transaction format and prevent reuse
+        if (data.onchain_tx) {
+            const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{40,128}$/;
+            if (!base58Regex.test(data.onchain_tx)) {
+                this.logger.warn(`Security Warning: Invalid Solana transaction signature format: ${data.onchain_tx}`);
+                throw new BadRequestException('Invalid transaction signature format.');
+            }
+
+            const { data: duplicateStake } = await adminSupabase
+                .from('pool_stakes')
+                .select('id, agent_id, user_id')
+                .eq('onchain_tx', data.onchain_tx)
+                .neq('agent_id', data.agent_id) // Allow updating own agent's transaction
+                .limit(1)
+                .maybeSingle();
+
+            if (duplicateStake) {
+                this.logger.error(`Security Warning: User ${userId} attempted to reuse transaction signature ${data.onchain_tx} from agent ${duplicateStake.agent_id}`);
+                throw new BadRequestException('Transaction signature has already been used for another stake.');
+            }
+        }
+
+        const isVerifiedOnchain = !!(data.onchain_tx && data.onchain_tx.length > 20);
+        this.logger.log(`📥 createWager: ${data.wager_amount} SOL | agent=${data.agent_id.slice(0,8)} | onchain=${isVerifiedOnchain ? data.onchain_tx?.slice(0,16) : 'none'}`);
 
         // Verify agent belongs to user using admin client to bypass RLS since users use wallet authentication
         const { data: agent } = await adminSupabase
@@ -803,15 +825,22 @@ export class AgentsService {
                 this.logger.log(`Agent ${data.agent_id} status updated to active`);
             }
 
+            // Self-healing: Upsert to ensure entry exists and is active, preventing count/UI drift
             const { error: entryUpdateErr } = await adminSupabase
                 .from('agent_competition_entries')
-                .update({ status: 'active' })
-                .eq('agent_id', data.agent_id);
+                .upsert({
+                    agent_id: data.agent_id,
+                    competition_id: data.competition_id,
+                    user_id: userId,
+                    status: 'active',
+                }, {
+                    onConflict: 'agent_id,competition_id'
+                });
 
             if (entryUpdateErr) {
-                this.logger.error(`Failed to activate competition entries for agent ${data.agent_id}: ${entryUpdateErr.message}`);
+                this.logger.error(`Failed to upsert/activate competition entries for agent ${data.agent_id}: ${entryUpdateErr.message}`);
             } else {
-                this.logger.log(`Competition entries for agent ${data.agent_id} status updated to active`);
+                this.logger.log(`Competition entry for agent ${data.agent_id} successfully upserted and activated`);
             }
 
             // Immediately run predictions for this agent now that it's active!

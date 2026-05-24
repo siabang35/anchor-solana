@@ -234,4 +234,23 @@ An upgraded failure display was engineered inside `DeployAgent.tsx` and `globals
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-23 — Dynamic Min Predictions, 0.1 SOL Staking Floor, Blocked Deployments on Stake Failure, & Wavy Probability Curve.*
+## 9. v2.3 Enhancements (2026-05-24)
+
+### 9.1 Self-Healing Registrations (`UPSERT` Activation)
+In earlier versions, verifying the wager database sync endpoint `/agents/wager` only performed a SQL `UPDATE` on the `agent_competition_entries` table. If the pre-registration insert during the initial `/agents/deploy-forecaster` endpoint failed or lagged, the activation update would target a non-existent row, preventing the agent from competing (e.g., Uranus missing from the competitor leaderboard).
+- **Fix**: Upgraded the activation query to a robust **`UPSERT`** (`onConflict: 'agent_id,competition_id'`).
+- **Effect**: If the initial pre-registration was missed, it is dynamically created and activated during the on-chain stake verification step.
+
+### 9.2 Solana Transaction Format Validation (Base58 Regex)
+To prevent SQL injection or malformed data injection via the `onchain_tx` parameter, the backend now enforces strict Base58 validation before processing any transaction:
+- **Validation**: Enforces `/^[1-9A-HJ-NP-Za-km-z]{40,128}$/`.
+- **Effect**: Rejects any non-Base58 characters or invalid lengths instantly at the API boundary.
+
+### 9.3 Anti-Replay Guard (Transaction Hash Uniqueness)
+To prevent malicious players from submitting the same valid transaction signature multiple times to activate multiple competing agents for free:
+- **Security Check**: The backend performs a database lookup to ensure the transaction signature `onchain_tx` is not associated with any other agent's stake.
+- **Effect**: If reuse is detected, a security warning is logged and a `BadRequestException` is thrown.
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-24 — Self-Healing Entries, Transaction Format Validation, Anti-Replay Guards.*

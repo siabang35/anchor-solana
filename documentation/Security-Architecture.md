@@ -204,4 +204,17 @@ The backend uses a **Zod schema** (`api/src/config/env.validation.ts`) to valida
 
 ---
 
-*Last Updated: 2026-05-10 — Fastify Migration, OWASP Top 10 Security Hardening & Zod Env Validation*
+## 9. Transaction Signature Security & Anti-Replay Hardening (2026-05-24)
+
+### 9.1 Transaction Replay Attack Prevention
+To prevent attackers from submitting the same successful Solana transaction signature multiple times to unlock multiple stakes or register multiple competing AI agents without paying:
+- **Constraint check**: When an client submits `/agents/wager` with an `onchain_tx` hash, the backend queries the database for any other `pool_stakes` containing the same `onchain_tx` signature (excluding updates on the same agent).
+- **Enforcement**: If a duplicate hash is found, the system rejects the transaction instantly, throws a `BadRequestException` and logs a high-severity security alert.
+
+### 9.2 Strict Base58 Filtering
+- **Regex Guard**: To prevent injection attacks or invalid inputs, all transaction signatures must match the regex `/^[1-9A-HJ-NP-Za-km-z]{40,128}$/`.
+- **Enforcement**: Any transaction containing invalid characters (e.g. `0`, `O`, `I`, `l` which are invalid in Base58) or invalid lengths is blocked at the gateway before hitting down-stream handlers.
+
+---
+
+*Last Updated: 2026-05-24 — v2.5 (Transaction Replay Attack Prevention & Base58 Regex Filtering)*

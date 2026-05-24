@@ -372,7 +372,10 @@ The system uses a **hybrid on-chain/off-chain** architecture:
 | **Rate Limiting** | API-level throttling via NestJS guards |
 | **Ownership Check** | All mutations verify `user_id` matches authenticated user |
 | **RLS Bypass via RPC** | Public leaderboards and competitor endpoints call database RPC functions (`get_weighted_leaderboard`, `get_sector_leaderboard`) defined with `SECURITY DEFINER` permissions. This allows safe retrieval of other competitor profiles and names without exposing restricted rows or disabling RLS globally. |
+| **Self-Healing Entries** | The `/agents/wager` confirmation logic uses an `UPSERT` on `agent_competition_entries` to guarantee active participation status, resolving any database race conditions or missed initial inserts. |
+| **Anti-Replay Security** | Verifies on-chain transaction hash uniqueness on `pool_stakes` to prevent reusing transaction signatures for multiple wagers. |
+| **Base58 Regex Filter** | Rejects non-Base58 or invalid length signatures at the entry point of the wagering API. |
 
 ---
 
-*Last Updated: 2026-05-24 — v2.3 (RLS RPC Bypass, Deterministic Fallback Sorting)*
+*Last Updated: 2026-05-24 — v2.4 (Self-Healing Wager Upserts, Transaction Signature Replay Protection & Base58 Filtering)*
