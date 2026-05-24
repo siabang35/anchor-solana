@@ -138,7 +138,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     // Fetch competitions for this sector
     const { competitions, loading: compLoading, connected } = useCompetitions(sector);
 
-    // Sort: live first, then upcoming, then ended
+    // Sort: live first, then upcoming, then ended, prioritizing competitions with active AI agents (highest entry count)
     const sorted = useMemo(() => {
         const now = Date.now();
         return [...competitions]
@@ -151,6 +151,11 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                 const order = { live: 0, upcoming: 1, ended: 2 };
                 const diff = order[getCompetitionStatus(a)] - order[getCompetitionStatus(b)];
                 if (diff !== 0) return diff;
+
+                // Prioritize competitions with active competing AI agents (entry_count)
+                const entryDiff = (b.entry_count || 0) - (a.entry_count || 0);
+                if (entryDiff !== 0) return entryDiff;
+
                 return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
             });
     }, [competitions]);

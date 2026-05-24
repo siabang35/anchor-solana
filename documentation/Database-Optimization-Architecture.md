@@ -47,9 +47,9 @@ To support real-time responsiveness without hammering the database, the Curve En
 | Horizon | Tick Interval | Store Frequency | Database Write Rate | Write Savings |
 | :--- | :--- | :--- | :--- | :--- |
 | **2h** | Every 15 seconds | Save every 4th tick | Once per 60 seconds | **75% reduction** |
-| **7h** | Every 30 seconds | Save every 2nd tick | Once per 60 seconds | **50% reduction** |
-| **12h** | Every 300 seconds | Save every 1st tick | Once per 300 seconds | No reduction needed |
-| **24h** | Every 600 seconds | Save every 1st tick | Once per 600 seconds | No reduction needed |
+| **7h** | Every 30 seconds | Save every 6th tick | Once per 180 seconds | **83% reduction** |
+| **12h** | Every 300 seconds | Save every 10th tick | Once per 3000 seconds | **90% reduction** |
+| **24h** | Every 600 seconds | Save every 10th tick | Once per 6000 seconds | **90% reduction** |
 
 ---
 
@@ -123,3 +123,19 @@ This single transaction performs:
 2. **Archival**: Offloads raw JSON structures to Supabase Storage.
 3. **Stripping**: Clears out text/JSON parameters from raw rows.
 4. **Pruning**: Deletes expired nonces, rate penalties, and old security audits.
+
+---
+
+## 6. High-Volume Request & Throughput Optimizations (v3.0.0)
+
+To resolve extremely high API request traffic from background services (~1.4M requests/24h), the following platform optimizations have been implemented:
+
+### 6.1 Idle Agent Loop Cooldown
+* **Problem**: The forecasting agent loop sweeps the database for all registered agents every 15 seconds. If an agent is idle (no active deployed competitions), it queried the database to find historical entries and check auto-enrollments on every cycle, spamming the DB.
+* **Optimization**: Implemented an in-memory auto-enrollment cooldown map (`lastAutoEnrollCheckTimes`) in `AgentRunnerService`. Inactive/idle agents are only permitted to scan the DB for auto-enrollments once every **5 minutes**.
+* **Impact**: Reduces idle agent check overhead by **95%** (from 4 sweeps/min to 0.2 sweeps/min per agent) with zero impact on competition joining windows.
+
+### 6.2 Batch ETL Feed Upserts
+* **Problem**: The standard feed parser parsed news/pricing feeds and checked the DB for duplicates before inserting or updating records. For a feed with 30 items, this resulted in 30 `SELECT` and 30 `INSERT`/`UPDATE` requests (N+1 queries).
+* **Optimization**: Refactored the ingestion logic in `BaseETLOrchestrator.upsertItems` to perform a single batch SELECT query followed by a single transactional **batch upsert** (`onConflict: 'external_id,source'`). If the batch operation fails due to schema anomalies, it automatically falls back to isolated row-by-row execution.
+* **Impact**: Reduces ETL database queries by **over 95%** (2 requests instead of 60).

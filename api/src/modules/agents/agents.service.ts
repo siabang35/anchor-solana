@@ -813,6 +813,11 @@ export class AgentsService {
             } else {
                 this.logger.log(`Competition entries for agent ${data.agent_id} status updated to active`);
             }
+
+            // Immediately run predictions for this agent now that it's active!
+            this.agentRunnerService.runSingleAgentId(data.agent_id).catch(err => {
+                this.logger.warn(`Failed to trigger immediate run for agent ${data.agent_id} after wager confirmation: ${err.message}`);
+            });
         } catch (actErr: any) {
             this.logger.error(`Error during agent activation: ${actErr.message}`);
         }

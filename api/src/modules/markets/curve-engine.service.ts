@@ -269,7 +269,12 @@ export class CurveEngineService implements OnModuleInit, OnModuleDestroy {
 
     // Write-throttle config: horizon → store_every_n_ticks
     // Reduces DB writes by 75%+ while keeping full WebSocket UX
-    private writeThrottleConfig: Map<string, number> = new Map();
+    private writeThrottleConfig: Map<string, number> = new Map([
+        ['2h', 4],
+        ['7h', 6],
+        ['12h', 10],
+        ['24h', 10],
+    ]);
 
     // Per-competition tick counter for write throttling
     private tickCounters: Map<string, number> = new Map();

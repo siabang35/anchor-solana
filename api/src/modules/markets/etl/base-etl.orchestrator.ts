@@ -151,82 +151,137 @@ export abstract class BaseETLOrchestrator {
             return stats;
         }
 
-        for (const item of items) {
-            try {
-                // Check for existing item
-                const { data: existing } = await this.supabase
-                    .from('market_data_items')
-                    .select('id, content_hash')
-                    .eq('external_id', item.externalId)
-                    .eq('source', item.source)
-                    .single();
+        try {
+            // 1. Batch check existing items to count created vs updated
+            const externalIds = items.map(item => item.externalId);
+            const { data: existingItems, error: selectErr } = await this.supabase
+                .from('market_data_items')
+                .select('external_id')
+                .in('external_id', externalIds);
 
-                if (existing) {
-                    // Update existing
-                    const { error } = await this.supabase
-                        .from('market_data_items')
-                        .update({
-                            title: item.title,
-                            description: item.description,
-                            content: item.content,
-                            image_url: item.imageUrl,
-                            sentiment: item.sentiment,
-                            sentiment_score: item.sentimentScore,
-                            relevance_score: item.relevanceScore,
-                            tags: item.tags,
-                            keywords: item.keywords,
-                            metadata: item.metadata,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq('id', existing.id);
+            if (selectErr) throw selectErr;
 
-                    if (error) {
-                        stats.failed++;
-                        this.logger.warn(`Failed to update item ${item.externalId}: ${error.message}`);
-                    } else {
-                        stats.updated++;
-                    }
+            const existingSet = new Set(existingItems?.map(x => x.external_id) || []);
+
+            // 2. Prepare payload for batch upsert
+            const upsertData = items.map(item => ({
+                external_id: item.externalId,
+                source: item.source,
+                category: item.category,
+                content_type: item.contentType || 'news',
+                title: item.title,
+                description: item.description,
+                content: item.content,
+                url: item.url,
+                image_url: item.imageUrl,
+                source_name: item.sourceName,
+                author: item.author,
+                published_at: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+                tags: item.tags || [],
+                keywords: item.keywords || [],
+                impact: item.impact || 'medium',
+                sentiment: item.sentiment || 'neutral',
+                sentiment_score: item.sentimentScore,
+                relevance_score: item.relevanceScore || 0.5,
+                metadata: item.metadata || {},
+                updated_at: new Date().toISOString(),
+            }));
+
+            // 3. Execute batch upsert
+            const { error: upsertErr } = await this.supabase
+                .from('market_data_items')
+                .upsert(upsertData, { onConflict: 'external_id,source' });
+
+            if (upsertErr) throw upsertErr;
+
+            // Update stats
+            for (const item of items) {
+                if (existingSet.has(item.externalId)) {
+                    stats.updated++;
                 } else {
-                    // Insert new
-                    const { error } = await this.supabase
-                        .from('market_data_items')
-                        .insert({
-                            external_id: item.externalId,
-                            source: item.source,
-                            category: item.category,
-                            content_type: item.contentType || 'news',
-                            title: item.title,
-                            description: item.description,
-                            content: item.content,
-                            url: item.url,
-                            image_url: item.imageUrl,
-                            source_name: item.sourceName,
-                            author: item.author,
-                            published_at: item.publishedAt?.toISOString(),
-                            tags: item.tags || [],
-                            keywords: item.keywords || [],
-                            impact: item.impact || 'medium',
-                            sentiment: item.sentiment || 'neutral',
-                            sentiment_score: item.sentimentScore,
-                            relevance_score: item.relevanceScore || 0.5,
-                            metadata: item.metadata || {},
-                        });
+                    stats.created++;
+                }
+            }
 
-                    if (error) {
-                        if (error.code === '23505') {
-                            // Duplicate
-                            stats.duplicates++;
-                        } else {
+            return stats;
+
+        } catch (batchError: any) {
+            this.logger.warn(`Batch upsert failed (${batchError.message}). Falling back to individual processing...`);
+            
+            // Fallback: Individual processing (original slow behavior)
+            for (const item of items) {
+                try {
+                    const { data: existing } = await this.supabase
+                        .from('market_data_items')
+                        .select('id')
+                        .eq('external_id', item.externalId)
+                        .eq('source', item.source)
+                        .single();
+
+                    if (existing) {
+                        const { error } = await this.supabase
+                            .from('market_data_items')
+                            .update({
+                                title: item.title,
+                                description: item.description,
+                                content: item.content,
+                                image_url: item.imageUrl,
+                                sentiment: item.sentiment,
+                                sentiment_score: item.sentimentScore,
+                                relevance_score: item.relevanceScore,
+                                tags: item.tags,
+                                keywords: item.keywords,
+                                metadata: item.metadata,
+                                updated_at: new Date().toISOString(),
+                            })
+                            .eq('id', existing.id);
+
+                        if (error) {
                             stats.failed++;
-                            this.logger.warn(`Failed to insert item ${item.externalId}: ${error.message}`);
+                            this.logger.warn(`Failed to update item ${item.externalId}: ${error.message}`);
+                        } else {
+                            stats.updated++;
                         }
                     } else {
-                        stats.created++;
+                        const { error } = await this.supabase
+                            .from('market_data_items')
+                            .insert({
+                                external_id: item.externalId,
+                                source: item.source,
+                                category: item.category,
+                                content_type: item.contentType || 'news',
+                                title: item.title,
+                                description: item.description,
+                                content: item.content,
+                                url: item.url,
+                                image_url: item.imageUrl,
+                                source_name: item.sourceName,
+                                author: item.author,
+                                published_at: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+                                tags: item.tags || [],
+                                keywords: item.keywords || [],
+                                impact: item.impact || 'medium',
+                                sentiment: item.sentiment || 'neutral',
+                                sentiment_score: item.sentimentScore,
+                                relevance_score: item.relevanceScore || 0.5,
+                                metadata: item.metadata || {},
+                            });
+
+                        if (error) {
+                            if (error.code === '23505') {
+                                stats.duplicates++;
+                            } else {
+                                stats.failed++;
+                                this.logger.warn(`Failed to insert item ${item.externalId}: ${error.message}`);
+                            }
+                        } else {
+                            stats.created++;
+                        }
                     }
+                } catch (singleError: any) {
+                    stats.failed++;
+                    this.logger.error(`Error processing item ${item.externalId}: ${singleError.message}`);
                 }
-            } catch (error) {
-                stats.failed++;
-                this.logger.error(`Error processing item ${item.externalId}: ${(error as Error).message}`);
             }
         }
 

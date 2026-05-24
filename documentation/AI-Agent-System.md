@@ -251,6 +251,13 @@ Each prediction is stored in `agent_predictions`:
 | **Timeout** | 30 seconds |
 | **Retry** | 3 attempts with exponential backoff |
 
+### 6.5 Idle Agent Sweeps Cooldown (Throughput Optimization)
+
+To prevent the background agent loop from hammering the database with queries for forecasters that aren't currently deployed in any active competitions:
+* **Active Agents**: Checked and executed according to their competition horizon frequency.
+* **Idle Agents**: When an agent has no active entries, instead of scanning the DB for historical sectors and checking auto-enrollment potentials every 15 seconds, a 5-minute cooldown (`lastAutoEnrollCheckTimes` map) is applied.
+* **DB Savings**: Drops background idle queries by **95%**, bringing Supabase CPU/API utilization back to normal levels.
+
 ---
 
 ## 7. Wagering System

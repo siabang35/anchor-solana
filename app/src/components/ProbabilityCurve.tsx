@@ -596,8 +596,54 @@ const firstPoint = knownPoints[0];
     const teamHome = competition?.team_home;
     const teamAway = competition?.team_away;
 
+    // ── Build Momentum Vector (Trend Projection) or Status Quo Baseline ──
+    const momentumDataset: any[] = [];
+    if (chartTimeSecs.length > 0 && nowIntervalIdx < chartTimeSecs.length - 1) {
+        const rootIdx = nowIntervalIdx;
+        const currentProb = smoothedHomeData[rootIdx] || 50;
+
+        let slopePerStep = 0;
+        let label = "Status Quo Baseline";
+        let isPositive = true;
+
+        // Calculate slope based on the last few smoothed historical points
+        const lookback = Math.min(rootIdx + 1, 5);
+        if (lookback >= 3) {
+            const p1 = smoothedHomeData[rootIdx - lookback + 1] || 50;
+            const p2 = currentProb;
+            const slope = (p2 - p1) / (lookback - 1);
+            slopePerStep = slope * 0.5; // Initial momentum force
+            label = "🚀 Market Momentum";
+            isPositive = slope >= 0;
+        }
+
+        const momentumData = chartLabels.map(() => null as number | null);
+        momentumData[rootIdx] = currentProb;
+
+        let projectedValue = currentProb;
+        for (let i = rootIdx + 1; i < chartLabels.length; i++) {
+            // Apply exponential decay to the slope to create a natural asymptotic curve
+            slopePerStep *= 0.90;
+            projectedValue += slopePerStep;
+            momentumData[i] = Math.max(1, Math.min(99, projectedValue));
+        }
+
+        momentumDataset.push({
+            label: label,
+            data: momentumData,
+            borderColor: isPositive ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)',
+            borderWidth: 2,
+            borderDash: [6, 4],
+            tension: 0.05, // sharper momentum line
+            pointRadius: 0,
+            fill: false,
+            order: 2,
+        });
+    }
+
     // ── Build agent datasets (neural lines) ──────────────────────
-    const AGENT_DATASET_OFFSET = 3;
+    const agentDatasetOffset = 1 + momentumDataset.length + (outcomes.length > 2 ? 2 : 0);
+    const datasetAgentMap: ForecasterAgent[] = [];
 
     const agentDatasets = visibleAgents.flatMap((agent, idx) => {
         // Generate a distinct neon color from the agent's ID hash for infinite scale
@@ -648,56 +694,14 @@ const firstPoint = knownPoints[0];
                 spanGaps: true,
                 order: 1, // Draw behind the bouncy curve
             };
+            datasetAgentMap.push(agent);
+            datasetAgentMap.push(agent);
             return [mainDataset, trueDataset];
         }
 
+        datasetAgentMap.push(agent);
         return [mainDataset];
     });
-
-    // ── Build Momentum Vector (Trend Projection) or Status Quo Baseline ──
-    const momentumDataset: any[] = [];
-    if (chartTimeSecs.length > 0 && nowIntervalIdx < chartTimeSecs.length - 1) {
-        const rootIdx = nowIntervalIdx;
-        const currentProb = smoothedHomeData[rootIdx] || 50;
-
-        let slopePerStep = 0;
-        let label = "Status Quo Baseline";
-        let isPositive = true;
-
-        // Calculate slope based on the last few smoothed historical points
-        const lookback = Math.min(rootIdx + 1, 5);
-        if (lookback >= 3) {
-            const p1 = smoothedHomeData[rootIdx - lookback + 1] || 50;
-            const p2 = currentProb;
-            const slope = (p2 - p1) / (lookback - 1);
-            slopePerStep = slope * 0.5; // Initial momentum force
-            label = "🚀 Market Momentum";
-            isPositive = slope >= 0;
-        }
-
-        const momentumData = chartLabels.map(() => null as number | null);
-        momentumData[rootIdx] = currentProb;
-
-        let projectedValue = currentProb;
-        for (let i = rootIdx + 1; i < chartLabels.length; i++) {
-            // Apply exponential decay to the slope to create a natural asymptotic curve
-            slopePerStep *= 0.90;
-            projectedValue += slopePerStep;
-            momentumData[i] = Math.max(1, Math.min(99, projectedValue));
-        }
-
-        momentumDataset.push({
-            label: label,
-            data: momentumData,
-            borderColor: isPositive ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)',
-            borderWidth: 2,
-            borderDash: [6, 4],
-            tension: 0.05, // sharper momentum line
-            pointRadius: 0,
-            fill: false,
-            order: 2,
-        });
-    }
 
     // Determine overall trend direction for the gradient fill
     const overallTrendUp = smoothedHomeData.length >= 2
@@ -821,13 +825,13 @@ const firstPoint = knownPoints[0];
         const el = elements[0];
         const dsIndex = el.datasetIndex;
 
-        // Only handle clicks on agent datasets (index >= 3)
-        if (dsIndex < AGENT_DATASET_OFFSET) return;
+        // Only handle clicks on agent datasets
+        if (dsIndex < agentDatasetOffset) return;
 
-        const agentIdx = dsIndex - AGENT_DATASET_OFFSET;
-        if (agentIdx >= visibleAgents.length) return;
+        const agentIdx = dsIndex - agentDatasetOffset;
+        if (agentIdx >= datasetAgentMap.length) return;
 
-        const agent = visibleAgents[agentIdx];
+        const agent = datasetAgentMap[agentIdx];
         const chart = chartRef.current;
         if (!chart) return;
 
@@ -839,7 +843,7 @@ const firstPoint = knownPoints[0];
         setConfirmAction(null);
         setPopover({
             agent,
-            color: AGENT_COLORS[agentIdx % AGENT_COLORS.length],
+            color: `hsl(${Math.abs(hashString(agent.id)) % 360}, 85%, 65%)`,
             x: point.x,
             y: point.y,
         });
@@ -880,7 +884,7 @@ const firstPoint = knownPoints[0];
                     label: (ctx) => {
                         const val = ctx.parsed.y;
                         if (val === null || val === undefined) return '';
-                        const isAgent = ctx.datasetIndex >= AGENT_DATASET_OFFSET;
+                        const isAgent = ctx.datasetIndex >= agentDatasetOffset;
                         if (isAgent) {
                             return ` ${ctx.dataset.label}: ${val.toFixed(1)}% — Click to manage`;
                         }

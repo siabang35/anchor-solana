@@ -544,6 +544,22 @@ export class RealtimeCompetitionSeederService {
                     const idx = clusteredTopics.indexOf(bestTopic);
                     if (idx >= 0) clusteredTopics.splice(idx, 1);
                     await this.insertInitialNewsCluster(comp.id, bestTopic);
+
+                    // AUTO-ENROLL ACTIVE AGENTS INTO THE NEW COMPETITION
+                    try {
+                        const { data: enrollData, error: enrollError } = await supabase.rpc('auto_enroll_agents_into_competition', {
+                            p_new_competition_id: comp.id,
+                            p_sector: category
+                        });
+                        if (enrollError) {
+                            this.logger.warn(`Failed to auto-enroll agents for competition ${comp.id}: ${enrollError.message}`);
+                        } else {
+                            this.logger.log(`Auto-enrolled ${enrollData || 0} agents into competition ${comp.id}`);
+                        }
+                    } catch (enrollErr: any) {
+                        this.logger.warn(`Auto-enrollment error for competition ${comp.id}: ${enrollErr.message}`);
+                    }
+
                     this.logger.log(`  ✅ Filled [${category}/${horizon}] "${bestTopic.title.substring(0, 60)}..." (${bestTopic.consumedSources?.length || 0} sources tracked)`);
                 }
             } catch (err: any) {

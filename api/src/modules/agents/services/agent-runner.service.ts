@@ -41,6 +41,12 @@ export class AgentRunnerService {
      */
     private lastPredictionTimes = new Map<string, Map<string, number>>();
 
+    /**
+     * In-memory auto-enrollment cooldown: agentId → last check timestamp.
+     * Prevents hammering the database with queries for idle agents.
+     */
+    private lastAutoEnrollCheckTimes = new Map<string, number>();
+
     constructor(
         private readonly supabaseService: SupabaseService,
         private readonly configService: ConfigService,
@@ -133,6 +139,13 @@ export class AgentRunnerService {
             .eq('status', 'active');
 
         if (!entries || entries.length === 0) {
+            const lastCheck = this.lastAutoEnrollCheckTimes.get(agent.id) || 0;
+            if (Date.now() - lastCheck < 5 * 60 * 1000) {
+                // Skip check during 5-minute cooldown
+                return;
+            }
+            this.lastAutoEnrollCheckTimes.set(agent.id, Date.now());
+
             // Check if agent has EVER joined any competitions
             const { data: allEntries } = await supabase
                 .from('agent_competition_entries')

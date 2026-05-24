@@ -623,10 +623,13 @@ CREATE POLICY "admin_read" ON public.profiles
 
 To support high-scale operations (100,000+ MAU) without database throttling or excessive costs, a hybrid storage architecture has been implemented.
 
-* **Decoupled Write-Throttling**: The Curve Engine broadcasts 100% of ticks via WebSockets for real-time responsiveness, but only persists every Nth tick (configurable per-horizon in `curve_write_config`) to the database, saving up to 75% of write operations.
+* **Decoupled Write-Throttling**: The Curve Engine broadcasts 100% of ticks via WebSockets for real-time responsiveness, but only persists every Nth tick (configured as save every 4th tick for 2h [75% reduction], every 6th tick for 7h [83% reduction], and every 10th tick for 12h/24h [90% reduction]) to the database, saving up to 90% of write operations.
 * **Metadata Stripping & Archiving**: Ticks older than 48 hours are compiled into JSON format, compressed, and archived to cheap Supabase Storage (`data-archives`). The heavy coordinate columns (`entropy_seed`, `chaos_state`) are then nullified in the database, reducing row size by **~97%** to preserve historical values forever.
 * **Downsampling & Lean View**: Minute-average summaries are compiled into `probability_history_summary`. Query consumers utilize `probability_history_lean`, which unions active high-res records and historical summaries seamlessly.
 * **Security & Progressive Cooldowns**: Incorporates anti-replay nonce validation (`used_nonces`) and a progressive anti-chunking cooldown trigger (`anti_chunk_guard_v2`) that penalizes abusive prediction scripts by doubling wait times up to 1 hour.
+* **Throughput Optimizations (v3.0.0)**:
+  * **Idle Agent Cooldown**: Restricts auto-enrollment checks for idle forecasting agents to a 5-minute cooldown window, reducing sweep query volume by **95%**.
+  * **Batch ETL Ingestion**: Implemented a highly optimized single-query batch upsert for incoming feeds (`onConflict: 'external_id,source'`) with dynamic fallback to isolated operations, decreasing ETL API queries by **over 95%**.
 
 > **Detailed Guide:** [Database-Optimization-Architecture.md](./Database-Optimization-Architecture.md)
 
