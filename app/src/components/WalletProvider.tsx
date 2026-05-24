@@ -38,6 +38,10 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
             }
         } else {
             setIsAuthenticated(false);
+            // Clear any declined status when wallet is explicitly disconnected
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('siwe_declined');
+            }
         }
     }, [connected, publicKey]);
 
@@ -56,6 +60,11 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
 
             if (isAuthenticated) return;
             if (isSigningRef.current) return;
+
+            // Prevent prompt loops if the user previously declined in this session
+            if (typeof window !== 'undefined' && sessionStorage.getItem('siwe_declined') === 'true') {
+                return;
+            }
             
             isSigningRef.current = true;
 
@@ -92,13 +101,18 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
                 if (verifyRes?.tokens?.accessToken) {
                     localStorage.setItem('access_token', verifyRes.tokens.accessToken);
                     localStorage.setItem('wallet_address', publicKey.toBase58());
+                    if (typeof window !== 'undefined') {
+                        sessionStorage.removeItem('siwe_declined');
+                    }
                     setIsAuthenticated(true);
                 }
             } catch (err) {
                 console.error('Wallet SIWE authentication failed:', err);
-                // DO NOT disconnect() automatically on mobile.
-                // Calling disconnect() on any aborted signature/timeout forces the wallet adapter 
-                // to completely log out, triggering disconnect loops on mobile page transitions or backgrounding.
+                
+                // Set the declined flag in sessionStorage to prevent loop prompts
+                if (typeof window !== 'undefined') {
+                    sessionStorage.setItem('siwe_declined', 'true');
+                }
             } finally {
                 isSigningRef.current = false;
             }
@@ -123,6 +137,25 @@ export default function WalletProvider({ children }: { children: React.ReactNode
         if (!mounted || typeof window === 'undefined') return [];
 
         const origin = window.location.origin;
+
+        // Check if inside a mobile wallet in-app browser (Phantom / Solflare)
+        // In-app browsers already have window.solana/window.phantom/window.solflare injected.
+        // Using SolanaMobileWalletAdapter inside these in-app browsers causes WebSocket conflicts
+        // and app redirects to crash.
+        const isMobileInAppBrowser = 
+            /phantom|solflare/i.test(navigator.userAgent) ||
+            (typeof window !== 'undefined' && (
+                (window as any).solana?.isPhantom ||
+                (window as any).phantom?.solana ||
+                (window as any).solflare
+            ));
+
+        if (isMobileInAppBrowser) {
+            return [
+                new PhantomWalletAdapter(),
+                new SolflareWalletAdapter(),
+            ];
+        }
 
         return [
             new SolanaMobileWalletAdapter({
