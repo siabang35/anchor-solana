@@ -19,20 +19,35 @@ import { apiFetch } from '@/lib/supabase';
 import { useWallet } from '@solana/wallet-adapter-react';
 
 function WalletAuthHandler({ children }: { children: React.ReactNode }) {
-    const { publicKey, signMessage, disconnect, connected } = useWallet();
+    const { publicKey, signMessage, connected } = useWallet();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const isSigningRef = React.useRef(false);
+
+    useEffect(() => {
+        if (connected && publicKey) {
+            const token = localStorage.getItem('access_token');
+            const storedAddress = localStorage.getItem('wallet_address');
+            if (token && storedAddress === publicKey.toBase58()) {
+                setIsAuthenticated(true);
+            } else {
+                if (token || storedAddress) {
+                    localStorage.removeItem('access_token');
+                    localStorage.removeItem('wallet_address');
+                }
+                setIsAuthenticated(false);
+            }
+        } else {
+            setIsAuthenticated(false);
+        }
+    }, [connected, publicKey]);
 
     useEffect(() => {
         const authenticate = async () => {
             // Only trigger if connected, have public key, and signMessage is available
             if (!connected || !publicKey || !signMessage || isAuthenticated) return;
+            if (isSigningRef.current) return;
             
-            // If we already have a token for this session, skip signing
-            const token = localStorage.getItem('access_token');
-            if (token) {
-                setIsAuthenticated(true);
-                return;
-            }
+            isSigningRef.current = true;
 
             try {
                 // Request challenge from backend
@@ -43,6 +58,10 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
                         chain: 'solana'
                     })
                 });
+
+                if (!challengeRes?.message) {
+                    throw new Error('Invalid challenge response');
+                }
 
                 // Request user to sign the message
                 const encodedMessage = new TextEncoder().encode(challengeRes.message);
@@ -62,17 +81,21 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
 
                 if (verifyRes?.tokens?.accessToken) {
                     localStorage.setItem('access_token', verifyRes.tokens.accessToken);
+                    localStorage.setItem('wallet_address', publicKey.toBase58());
                     setIsAuthenticated(true);
                 }
             } catch (err) {
                 console.error('Wallet SIWE authentication failed:', err);
-                // Disconnect if user rejects signature to mimic EVM strict-auth behavior
-                disconnect();
+                // DO NOT disconnect() automatically on mobile.
+                // Calling disconnect() on any aborted signature/timeout forces the wallet adapter 
+                // to completely log out, triggering disconnect loops on mobile page transitions or backgrounding.
+            } finally {
+                isSigningRef.current = false;
             }
         };
 
         authenticate();
-    }, [publicKey, signMessage, connected, isAuthenticated, disconnect]);
+    }, [publicKey, signMessage, connected, isAuthenticated]);
 
     return <>{children}</>;
 }
