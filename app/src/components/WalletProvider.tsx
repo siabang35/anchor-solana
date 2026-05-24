@@ -10,6 +10,7 @@ import {
     createDefaultAddressSelector, 
     createDefaultWalletNotFoundHandler 
 } from '@solana-mobile/wallet-adapter-mobile';
+import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -102,6 +103,8 @@ export default function WalletProvider({ children }: { children: React.ReactNode
                 cluster: 'devnet',
                 onWalletNotFound: createDefaultWalletNotFoundHandler(),
             }),
+            new PhantomWalletAdapter(),
+            new SolflareWalletAdapter(),
         ];
     }, [mounted]);
 
