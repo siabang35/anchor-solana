@@ -556,6 +556,93 @@ export class RealtimeCompetitionSeederService {
                         } else {
                             this.logger.log(`Auto-enrolled ${enrollData || 0} agents into competition ${comp.id}`);
                         }
+
+                        // MANUAL FALLBACK AUTO-ENROLLMENT FOR NEWLY DEPLOYED AGENTS
+                        const { data: activeAgents } = await supabase
+                            .from('agents')
+                            .select('id, user_id, competition_id')
+                            .eq('status', 'active');
+
+                        if (activeAgents && activeAgents.length > 0) {
+                            for (const agent of activeAgents) {
+                                // 1. Check if already enrolled in this competition
+                                const { data: existing } = await supabase
+                                    .from('agent_competition_entries')
+                                    .select('id')
+                                    .eq('competition_id', comp.id)
+                                    .eq('agent_id', agent.id)
+                                    .maybeSingle();
+                                
+                                if (existing) continue;
+
+                                // 2. Determine if the agent belongs to this sector
+                                let belongsToSector = false;
+
+                                // A. Check their primary competition_id sector
+                                if (agent.competition_id) {
+                                    const { data: origComp } = await supabase
+                                        .from('competitions')
+                                        .select('sector')
+                                        .eq('id', agent.competition_id)
+                                        .maybeSingle();
+                                    if (origComp && origComp.sector === category) {
+                                        belongsToSector = true;
+                                    }
+                                }
+
+                                // B. If not resolved, check historical entries
+                                if (!belongsToSector) {
+                                    const { data: histEntries } = await supabase
+                                        .from('agent_competition_entries')
+                                        .select('competition_id')
+                                        .eq('agent_id', agent.id);
+                                    
+                                    if (histEntries && histEntries.length > 0) {
+                                        const compIds = histEntries.map(e => e.competition_id);
+                                        const { data: comps } = await supabase
+                                            .from('competitions')
+                                            .select('sector')
+                                            .in('id', compIds);
+                                        
+                                        if (comps && comps.some((c: any) => c.sector === category)) {
+                                            belongsToSector = true;
+                                        }
+                                    }
+                                }
+
+                                // 3. If they belong to this sector, enroll them!
+                                if (belongsToSector) {
+                                    const { error: insertErr } = await supabase
+                                        .from('agent_competition_entries')
+                                        .insert({
+                                            agent_id: agent.id,
+                                            competition_id: comp.id,
+                                            user_id: agent.user_id,
+                                            status: 'active',
+                                            prediction_count: 0
+                                        });
+                                    if (insertErr) {
+                                        this.logger.warn(`Manual fallback enroll failed for agent ${agent.id}: ${insertErr.message}`);
+                                    } else {
+                                        this.logger.log(`Manual fallback: enrolled agent ${agent.id} into competition ${comp.id}`);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sync entry count for the competition
+                        const { data: actualCount } = await supabase
+                            .from('agent_competition_entries')
+                            .select('agent_id')
+                            .eq('competition_id', comp.id);
+                        
+                        if (actualCount) {
+                            await supabase
+                                .from('competitions')
+                                .update({ entry_count: actualCount.length })
+                                .eq('id', comp.id);
+                            this.logger.log(`Synced entry_count to ${actualCount.length} for competition ${comp.id}`);
+                        }
                     } catch (enrollErr: any) {
                         this.logger.warn(`Auto-enrollment error for competition ${comp.id}: ${enrollErr.message}`);
                     }

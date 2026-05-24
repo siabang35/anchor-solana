@@ -44,7 +44,17 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const authenticate = async () => {
             // Only trigger if connected, have public key, and signMessage is available
-            if (!connected || !publicKey || !signMessage || isAuthenticated) return;
+            if (!connected || !publicKey || !signMessage) return;
+
+            // Synchronous check of localStorage to prevent race conditions on page load/refresh
+            const token = localStorage.getItem('access_token');
+            const storedAddress = localStorage.getItem('wallet_address');
+            if (token && storedAddress === publicKey.toBase58()) {
+                setIsAuthenticated(true);
+                return;
+            }
+
+            if (isAuthenticated) return;
             if (isSigningRef.current) return;
             
             isSigningRef.current = true;
