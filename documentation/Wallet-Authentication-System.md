@@ -104,11 +104,14 @@ To ensure a seamless experience on mobile browsers (like Chrome or Safari) witho
   - **EVM-Style Auto-Trigger (`WalletAuthHandler`)**: A dedicated React component wrapper explicitly listens to the `useWallet()` connection state. The millisecond a mobile wallet connects, it fetches a challenge and triggers `signMessage()`. This perfectly mimics EVM WalletConnect behavior, ensuring the user immediately signs the SIWE message inside the wallet app before returning to Chrome.
   - **Auto-Disconnect**: If the user declines the signature, the wallet is aggressively disconnected to maintain strict security boundaries.
 
+#### **Mobile In-App Wallet Browser Compatibility (Phantom/Solflare)**
+- **Challenge**: Standard mobile adapters (like `SolanaMobileWalletAdapter`) are designed to deep-link external browsers (like Chrome/Safari) to wallet apps. If loaded inside a wallet's own in-app DApp browser, it conflicts with the local injected provider, causing socket connections to drop, loops, or app crashes.
+- **Solution**: Dynamic in-app browser detection (inspecting `window.solana`, `window.phantom`, `window.solflare`, or User-Agent). If inside an in-app browser, the `SolanaMobileWalletAdapter` is dynamically excluded, allowing the DApp to directly and securely interface with the wallet's injected provider.
+
 #### **Configuration**
 - **MWA Setup**: Uses `createDefaultAddressSelector` and `createDefaultAuthorizationResultCache` to maintain session persistence.
 - **Provider**: `@solana/wallet-adapter-react-ui` `WalletModalProvider` combined with `SolanaWalletProvider`.
 - **Chains**: Bound to Solana Devnet via `clusterApiUrl('devnet')`.
-
 
 ---
 
@@ -183,6 +186,12 @@ Audits every authentication attempt (success or failure) with a risk score based
 
 3. **Rate Limiting (Updated)**:
    Authentication endpoints have been upgraded to allow **50 requests/min** (up from 5) to accommodate the multi-step handshake process (Connect -> Challenge -> Verify) without false positives during heavy use.
+
+4. **SIWE Decline Loop Prevention**:
+   If a user declines a signature challenge, the app stores a `siwe_declined` session flag in `sessionStorage`. This prevents the application from automatically triggering signature prompts on every subsequent page navigation or refresh within that tab, while leaving public pages accessible. The flag is cleared when the wallet is disconnected.
+
+5. **JWT Expiration Alignment**:
+   To minimize signature fatigue on both mobile and desktop while maintaining security, the access token lifespan (`JWT_EXPIRES_IN`) has been extended to 7 days, aligning with modern Web3 standards where wallet connection serves as the primary authentication check.
 
 ---
 
