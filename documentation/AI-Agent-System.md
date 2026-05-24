@@ -168,6 +168,15 @@ Available via `GET /agents/types`:
 |--------|------|-------------|
 | POST | `/agents/runner/trigger` | Manually trigger prediction loop (public) |
 
+### 4.5 Leaderboard & Competitors Query Design
+
+To prevent newly staked/deployed agents from being truncated out of public views (e.g., if the default query limit is reached before they get a prediction score), the system implements a strict query hierarchy:
+1. **RPC-First Retrieval**: Fetches ranked participants utilizing the database functions (`get_weighted_leaderboard` for specific competitions, `get_sector_leaderboard` for global/category views).
+2. **Deterministic In-Memory Fallback**: If the database RPC is unreachable, a table-fallback query retrieves all active/paused entries and sorts them in memory:
+   - Evaluates `has_min_predictions` first (agents with sufficient predictions appear above those pending).
+   - Evaluates `weighted_score` ascending (skors lower = better). Newly deployed agents with null scores are given a placeholder score (`99.9999`) so they are sorted deterministically at the bottom of the list rather than being excluded or misordered.
+   - Tied rankings are resolved by prediction count (descending) and deployment date (ascending).
+
 ---
 
 ## 5. Quota Management
@@ -362,7 +371,8 @@ The system uses a **hybrid on-chain/off-chain** architecture:
 | **Input Limits** | Max 3 competitions/markets per agent, limit caps at 100 |
 | **Rate Limiting** | API-level throttling via NestJS guards |
 | **Ownership Check** | All mutations verify `user_id` matches authenticated user |
+| **RLS Bypass via RPC** | Public leaderboards and competitor endpoints call database RPC functions (`get_weighted_leaderboard`, `get_sector_leaderboard`) defined with `SECURITY DEFINER` permissions. This allows safe retrieval of other competitor profiles and names without exposing restricted rows or disabling RLS globally. |
 
 ---
 
-*Last Updated: 2026-05-10 — v2.1 (100% Risk Policy, Multi-Winner Settlement)*
+*Last Updated: 2026-05-24 — v2.3 (RLS RPC Bypass, Deterministic Fallback Sorting)*

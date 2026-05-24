@@ -832,7 +832,7 @@ export class AgentsService {
     async getLeaderboard(competitionId?: string, sector?: string, limit: number = 20): Promise<any[]> {
         const supabase = this.supabaseService.getAdminClient();
 
-        // If competition_id provided, use the DB function for weighted ranking
+        // If competitionId provided, use the DB function for weighted ranking
         if (competitionId) {
             const { data, error } = await supabase.rpc('get_weighted_leaderboard', {
                 p_competition_id: competitionId,
@@ -855,20 +855,49 @@ export class AgentsService {
                     competition_id: competitionId,
                     status: row.agent_status,
                 }));
+            } else if (error) {
+                this.logger.warn(`Failed to call get_weighted_leaderboard RPC: ${error.message}. Falling back to table query.`);
             }
         }
 
-        // Fallback: global leaderboard or no weighted scores yet
-        let selectStr = '*, agents(id, name, user_id, model), competitions(id, leaderboard_score_config(min_predictions))';
+        // If competitionId is not provided, use get_sector_leaderboard RPC for global/sector leaderboard
+        if (!competitionId) {
+            const { data, error } = await supabase.rpc('get_sector_leaderboard', {
+                p_sector: sector || 'all',
+                p_limit: Math.min(Math.max(1, limit), 100),
+            });
+
+            if (!error && data && data.length > 0) {
+                return data.map((row: any) => ({
+                    rank: row.rank_position,
+                    agent_id: row.agent_id,
+                    agent_name: row.agent_name,
+                    user_id: null, // sanitized
+                    brier_score: row.raw_brier_avg ? Number(row.raw_brier_avg) : null,
+                    weighted_score: row.weighted_score ? Number(row.weighted_score) : null,
+                    prediction_count: row.prediction_count || 0,
+                    last_scored_at: row.last_scored_at,
+                    rank_trend: row.rank_trend || 0,
+                    has_min_predictions: row.has_min_predictions,
+                    accuracy_pct: row.accuracy_pct != null ? Number(row.accuracy_pct) : null,
+                    competition_id: row.competition_id,
+                    status: row.agent_status,
+                }));
+            } else if (error) {
+                this.logger.warn(`Failed to call get_sector_leaderboard RPC: ${error.message}. Falling back to table query.`);
+            }
+        }
+
+        // Fallback: global leaderboard or direct query fallback
+        let selectStr = '*, agents(id, name, user_id, model, created_at), competitions(id, leaderboard_score_config(min_predictions))';
         if (sector && sector !== 'all' && sector !== 'top') {
-            selectStr = '*, agents(id, name, user_id, model), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
+            selectStr = '*, agents(id, name, user_id, model, created_at), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
         }
 
         let query = supabase
             .from('agent_competition_entries')
             .select(selectStr)
-            .order('weighted_score', { ascending: true, nullsFirst: false })
-            .limit(limit);
+            .in('status', ['active', 'paused']);
 
         if (competitionId) {
             query = query.eq('competition_id', competitionId);
@@ -881,15 +910,14 @@ export class AgentsService {
         const { data, error } = await query;
 
         if (error) {
-            this.logger.error(`Failed to get leaderboard: ${error.message}`);
+            this.logger.error(`Failed to get leaderboard fallback: ${error.message}`);
             return [];
         }
 
-        return (data || []).map((entry: any, index: number) => {
+        const mapped = (data || []).map((entry: any) => {
             const config = entry.competitions?.leaderboard_score_config;
             const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
             return {
-                rank: index + 1,
                 agent_id: entry.agent_id,
                 agent_name: entry.agents?.name || 'Unknown',
                 user_id: null,
@@ -901,14 +929,50 @@ export class AgentsService {
                 has_min_predictions: (entry.prediction_count || 0) >= minPreds,
                 competition_id: entry.competition_id,
                 status: entry.status,
+                deployed_at: entry.agents?.created_at ? new Date(entry.agents.created_at).getTime() : 0,
             };
         });
+
+        // Smart sorting (simulates DB RPC order):
+        // 1. has_min_predictions DESC
+        // 2. weighted_score ASC (nulls last = 99.9999)
+        // 3. prediction_count DESC
+        // 4. deployed_at ASC
+        mapped.sort((a: any, b: any) => {
+            if (a.has_min_predictions !== b.has_min_predictions) {
+                return a.has_min_predictions ? -1 : 1;
+            }
+            const scoreA = a.weighted_score !== null ? a.weighted_score : 99.9999;
+            const scoreB = b.weighted_score !== null ? b.weighted_score : 99.9999;
+            if (scoreA !== scoreB) {
+                return scoreA - scoreB;
+            }
+            if (a.prediction_count !== b.prediction_count) {
+                return b.prediction_count - a.prediction_count;
+            }
+            return a.deployed_at - b.deployed_at;
+        });
+
+        return mapped.slice(0, limit).map((entry: any, index: number) => ({
+            rank: index + 1,
+            agent_id: entry.agent_id,
+            agent_name: entry.agent_name,
+            user_id: entry.user_id,
+            brier_score: entry.brier_score,
+            weighted_score: entry.weighted_score,
+            prediction_count: entry.prediction_count,
+            last_scored_at: entry.last_scored_at,
+            rank_trend: entry.rank_trend,
+            has_min_predictions: entry.has_min_predictions,
+            competition_id: entry.competition_id,
+            status: entry.status,
+        }));
     }
 
     /**
      * Get all active competitors for a competition (public, sanitized)
      * Returns only safe-to-display fields — no system_prompt, no user secrets
-     * Now includes weighted_score, prediction_count, rank_trend for live leaderboard
+     * Now uses RPC get_weighted_leaderboard for precise, non-truncated rankings.
      */
     async getCompetitors(
         competitionId: string,
@@ -928,25 +992,50 @@ export class AgentsService {
 
         const supabase = this.supabaseService.getAdminClient();
 
-        const { data, error } = await supabase
+        // Attempt to call RPC for correct security policy bypass and optimal sorting
+        const { data, error } = await supabase.rpc('get_weighted_leaderboard', {
+            p_competition_id: competitionId,
+            p_limit: safeLimit,
+        });
+
+        if (!error && data) {
+            return data.map((row: any) => ({
+                rank: row.rank_position,
+                agent_id: row.agent_id,
+                agent_name: row.agent_name || 'Unknown Agent',
+                model: row.model || 'Unknown',
+                agent_status: row.agent_status || 'active',
+                brier_score: row.raw_brier_avg ? Number(row.raw_brier_avg) : null,
+                weighted_score: row.weighted_score ? Number(row.weighted_score) : null,
+                prediction_count: row.prediction_count || 0,
+                last_scored_at: row.last_scored_at,
+                rank_trend: row.rank_trend || 0,
+                has_min_predictions: row.has_min_predictions,
+                competition_id: competitionId,
+                deployed_at: row.deployed_at,
+            }));
+        }
+
+        if (error) {
+            this.logger.warn(`Failed to call get_weighted_leaderboard RPC in getCompetitors: ${error.message}. Falling back to table query.`);
+        }
+
+        // Fallback: table query with smart in-memory sorting to prevent truncation of newly staked/deployed agents
+        const { data: tableData, error: tableError } = await supabase
             .from('agent_competition_entries')
             .select('agent_id, brier_score, weighted_score, prediction_count, last_scored_at, rank_trend, status, agents(id, name, model, status, created_at), competitions(id, leaderboard_score_config(min_predictions))')
             .eq('competition_id', competitionId)
-            .in('status', ['active', 'paused'])
-            .order('weighted_score', { ascending: true, nullsFirst: false })
-            .limit(safeLimit);
+            .in('status', ['active', 'paused']);
 
-        if (error) {
-            this.logger.error(`Failed to get competitors: ${error.message}`);
+        if (tableError) {
+            this.logger.error(`Failed to get competitors fallback: ${tableError.message}`);
             return [];
         }
 
-        // Sanitize: only return public-safe fields, no system_prompt or user_id
-        return (data || []).map((entry: any, index: number) => {
+        const mapped = (tableData || []).map((entry: any) => {
             const config = entry.competitions?.leaderboard_score_config;
             const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
             return {
-                rank: index + 1,
                 agent_id: entry.agent_id,
                 agent_name: entry.agents?.name || 'Unknown Agent',
                 model: entry.agents?.model || 'Unknown',
@@ -958,9 +1047,41 @@ export class AgentsService {
                 rank_trend: entry.rank_trend || 0,
                 has_min_predictions: (entry.prediction_count || 0) >= minPreds,
                 competition_id: competitionId,
-                deployed_at: entry.agents?.created_at,
+                deployed_at: entry.agents?.created_at ? new Date(entry.agents.created_at).getTime() : 0,
             };
         });
+
+        // Sort identically to RPC
+        mapped.sort((a: any, b: any) => {
+            if (a.has_min_predictions !== b.has_min_predictions) {
+                return a.has_min_predictions ? -1 : 1;
+            }
+            const scoreA = a.weighted_score !== null ? a.weighted_score : 99.9999;
+            const scoreB = b.weighted_score !== null ? b.weighted_score : 99.9999;
+            if (scoreA !== scoreB) {
+                return scoreA - scoreB;
+            }
+            if (a.prediction_count !== b.prediction_count) {
+                return b.prediction_count - a.prediction_count;
+            }
+            return a.deployed_at - b.deployed_at;
+        });
+
+        return mapped.slice(0, safeLimit).map((entry: any, index: number) => ({
+            rank: index + 1,
+            agent_id: entry.agent_id,
+            agent_name: entry.agent_name,
+            model: entry.model,
+            agent_status: entry.agent_status,
+            brier_score: entry.brier_score,
+            weighted_score: entry.weighted_score,
+            prediction_count: entry.prediction_count,
+            last_scored_at: entry.last_scored_at,
+            rank_trend: entry.rank_trend,
+            has_min_predictions: entry.has_min_predictions,
+            competition_id: entry.competition_id,
+            deployed_at: entry.deployed_at,
+        }));
     }
 
     /**
