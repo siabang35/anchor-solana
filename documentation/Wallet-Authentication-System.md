@@ -106,7 +106,7 @@ To ensure a seamless experience on mobile browsers (like Chrome or Safari) witho
 
 #### **Mobile In-App Wallet Browser Compatibility (Phantom/Solflare)**
 - **Challenge**: Standard mobile adapters (like `SolanaMobileWalletAdapter`) are designed to deep-link external browsers (like Chrome/Safari) to wallet apps. If loaded inside a wallet's own in-app DApp browser, it conflicts with the local injected provider, causing socket connections to drop, loops, or app crashes.
-- **Solution**: Dynamic in-app browser detection (inspecting `window.solana`, `window.phantom`, `window.solflare`, or User-Agent). If inside an in-app browser, the `SolanaMobileWalletAdapter` is dynamically excluded, allowing the DApp to directly and securely interface with the wallet's injected provider.
+- **Solution**: Dynamic, asynchronous in-app browser detection. Since mobile wallet providers (like Phantom or Solflare) inject `window.solana`, `window.phantom`, and `window.solflare` asynchronously after page load, we run interval-based checks (at 100ms, 250ms, 500ms, and 1000ms) to detect injection. If an injected provider is detected or the User Agent matches, `SolanaMobileWalletAdapter` is dynamically excluded from the `wallets` list, allowing the DApp to interface directly with the injected provider.
 
 #### **Configuration**
 - **MWA Setup**: Uses `createDefaultAddressSelector` and `createDefaultAuthorizationResultCache` to maintain session persistence.

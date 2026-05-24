@@ -126,9 +126,44 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
 
 export default function WalletProvider({ children }: { children: React.ReactNode }) {
     const [mounted, setMounted] = useState(false);
+    const [isInApp, setIsInApp] = useState(false);
     
     useEffect(() => {
         setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const checkInApp = () => {
+            const hasInjected = !!(
+                (window as any).solana?.isPhantom ||
+                (window as any).phantom?.solana ||
+                (window as any).solflare ||
+                (window as any).ethereum
+            );
+            const matchesUA = /phantom|solflare/i.test(navigator.userAgent);
+            
+            if (hasInjected || matchesUA) {
+                setIsInApp(true);
+            }
+        };
+
+        // Check immediately
+        checkInApp();
+
+        // Check again after multiple delayed intervals to handle async injection
+        const t1 = setTimeout(checkInApp, 100);
+        const t2 = setTimeout(checkInApp, 250);
+        const t3 = setTimeout(checkInApp, 500);
+        const t4 = setTimeout(checkInApp, 1000);
+
+        return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+            clearTimeout(t3);
+            clearTimeout(t4);
+        };
     }, []);
 
     const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
@@ -138,19 +173,9 @@ export default function WalletProvider({ children }: { children: React.ReactNode
 
         const origin = window.location.origin;
 
-        // Check if inside a mobile wallet in-app browser (Phantom / Solflare)
-        // In-app browsers already have window.solana/window.phantom/window.solflare injected.
-        // Using SolanaMobileWalletAdapter inside these in-app browsers causes WebSocket conflicts
-        // and app redirects to crash.
-        const isMobileInAppBrowser = 
-            /phantom|solflare/i.test(navigator.userAgent) ||
-            (typeof window !== 'undefined' && (
-                (window as any).solana?.isPhantom ||
-                (window as any).phantom?.solana ||
-                (window as any).solflare
-            ));
-
-        if (isMobileInAppBrowser) {
+        // If inside a mobile wallet in-app browser (Phantom / Solflare),
+        // we omit SolanaMobileWalletAdapter to avoid socket connection failures.
+        if (isInApp) {
             return [
                 new PhantomWalletAdapter(),
                 new SolflareWalletAdapter(),
@@ -172,7 +197,7 @@ export default function WalletProvider({ children }: { children: React.ReactNode
             new PhantomWalletAdapter(),
             new SolflareWalletAdapter(),
         ];
-    }, [mounted]);
+    }, [mounted, isInApp]);
 
     return (
         <ConnectionProvider endpoint={endpoint}>
