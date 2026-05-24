@@ -237,7 +237,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         && (!quota || quota.deploys_remaining > 0) && !agentAlreadyInMarket && isStakeValid;
 
     // ========================
-    // Deploy via Backend API
+    // Deploy via Backend API (Verify -> Reserve -> Commit)
     // ========================
     const handleDeploy = useCallback(async () => {
         if (!canDeploy || !selectedMarket) return;
@@ -251,6 +251,9 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         await new Promise(r => setTimeout(r, 600));
         setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `📝 Strategy loaded: "${strategy.slice(0, 80)}${strategy.length > 80 ? '...' : ''}"` }]);
         await new Promise(r => setTimeout(r, 600));
+
+        let createdAgent: DeployedAgentResponse | null = null;
+        let signature = '';
 
         try {
             if (!publicKey || !sendTransaction) {
@@ -274,6 +277,37 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             if (balance < stakeLamports + 5000) { // 5000 lamports for transaction fee
                 throw new Error(`Insufficient Devnet SOL. You have ${balanceSOL.toFixed(4)} SOL, but need at least ${stakeSOL} SOL + transaction fee.`);
             }
+
+            // Step 1 & 2: Verify & Reserve (Register agent in database before staking)
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🔗 Pre-registering agent with backend database...' }]);
+
+            const body = {
+                name: agentName.trim(),
+                system_prompt: strategy,
+                competition_ids: marketIds,
+                stake_amount: stakeSOL,
+            };
+
+            try {
+                createdAgent = await apiFetch<DeployedAgentResponse>('/agents/deploy-forecaster', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                    },
+                    body: JSON.stringify(body),
+                });
+            } catch (apiErr: any) {
+                // Fails BEFORE any Solana transaction! Crucial for Stake Integrity.
+                throw new Error(`Agent pre-registration failed: ${apiErr?.message || 'Database rejected request.'}`);
+            }
+
+            const activeAgent = createdAgent;
+            if (!activeAgent || !activeAgent.id) {
+                throw new Error('Backend failed to return a valid agent reference.');
+            }
+
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `🆔 Reserved Agent ID: ${activeAgent.id}` }]);
 
             // Derive pool vault PDA for the competition
             const marketSeed = Buffer.from(marketIds[0].replace(/-/g, '').slice(0, 32), 'hex');
@@ -303,10 +337,21 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             tx.lastValidBlockHeight = lastValidBlockHeight;
 
             // Send transaction
-            let signature = '';
             try {
                 signature = await sendTransaction(tx, DEVNET_CONNECTION);
             } catch (walletErr: any) {
+                // Clean up reserved agent if transaction is rejected / denied
+                setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '⚠️ Transaction rejected. Cleaning up reserved database records...' }]);
+                try {
+                    await apiFetch(`/agents/forecasters/${activeAgent.id}/hard`, {
+                        method: 'DELETE',
+                        headers: {
+                            ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                        }
+                    });
+                } catch (delErr) {
+                    console.error('Failed to clean up pending agent:', delErr);
+                }
                 throw new Error(`Transaction rejected or failed in wallet: ${walletErr?.message || 'Signature denied.'}`);
             }
 
@@ -320,6 +365,18 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             }, 'confirmed');
 
             if (confirmation.value.err) {
+                // Clean up reserved agent if transaction fails to confirm on-chain
+                setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '⚠️ Transaction failed to confirm. Cleaning up reserved database records...' }]);
+                try {
+                    await apiFetch(`/agents/forecasters/${activeAgent.id}/hard`, {
+                        method: 'DELETE',
+                        headers: {
+                            ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                        }
+                    });
+                } catch (delErr) {
+                    console.error('Failed to clean up pending agent:', delErr);
+                }
                 throw new Error(`On-chain transaction failed: ${JSON.stringify(confirmation.value.err)}`);
             }
 
@@ -328,32 +385,8 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 message: `✅ On-chain stake confirmed! TX: ${signature.slice(0, 20)}... (${stakeSOL} SOL)`
             }]);
 
-            // Now deploy the agent in the backend
-            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🔗 Registering agent with backend database...' }]);
-
-            const body = {
-                name: agentName.trim(),
-                system_prompt: strategy,
-                competition_ids: marketIds,
-                stake_amount: stakeSOL,
-            };
-
-            let result: DeployedAgentResponse;
-            try {
-                result = await apiFetch<DeployedAgentResponse>('/agents/deploy-forecaster', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
-                    },
-                    body: JSON.stringify(body),
-                });
-            } catch (apiErr: any) {
-                throw new Error(`Database registration failed (SOL staked, TX: ${signature}). Error: ${apiErr?.message}`);
-            }
-
-            // Sync the wager
-            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '📊 Syncing on-chain wager with database...' }]);
+            // Sync the wager (Commit step)
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '📊 Syncing on-chain wager & activating agent...' }]);
             try {
                 await apiFetch('/agents/wager', {
                     method: 'POST',
@@ -362,7 +395,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                         ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
                     },
                     body: JSON.stringify({
-                        agent_id: result.id,
+                        agent_id: activeAgent.id,
                         competition_id: marketIds[0],
                         wager_amount: stakeSOL,
                         onchain_tx: signature,
@@ -372,11 +405,11 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 throw new Error(`Wager sync failed (SOL staked, TX: ${signature}). Error: ${wagerErr?.message}`);
             }
 
-            setDeployedAgent(result);
+            setDeployedAgent(activeAgent);
             setLogs(prev => [
                 ...prev,
                 { timestamp: Date.now(), type: 'info', message: '✅ Agent deployment successful!' },
-                { timestamp: Date.now() + 100, type: 'info', message: `🆔 Agent ID: ${result.id}` },
+                { timestamp: Date.now() + 100, type: 'info', message: `🆔 Agent ID: ${activeAgent.id}` },
                 { timestamp: Date.now() + 200, type: 'info', message: `📊 Deploy Completed — Quota updated` },
                 { timestamp: Date.now() + 300, type: 'signal', message: '✨ Agent is now LIVE — monitoring feeds and generating signals...' },
             ]);
@@ -387,7 +420,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
             // Fire event so ProbabilityCurve can draw the annotation line
             if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: result.name } }));
+                window.dispatchEvent(new CustomEvent('agentDeployed', { detail: { name: createdAgent.name } }));
             }
 
         } catch (err: any) {

@@ -204,11 +204,16 @@ export class AgentsService {
             );
         }
 
-        // 2. Insert forecaster agent with 'pending_stake' status
+        // 2. Insert forecaster agent with correct initial status ('pending' if there is a stake, 'active' if not)
         const competitionIds = dto.competition_ids || [];
+        if (competitionIds.length === 0) {
+            throw new BadRequestException('At least one competition must be selected.');
+        }
         if (competitionIds.length > 3) {
             throw new BadRequestException('Cannot deploy forecaster agent to more than 3 competitions at once.');
         }
+
+        const initialStatus = (dto.stake_amount && dto.stake_amount > 0) ? 'pending' : 'active';
 
         const { data: agent, error: insertError } = await supabase
             .from('agents')
@@ -217,7 +222,8 @@ export class AgentsService {
                 name: dto.name,
                 system_prompt: dto.system_prompt,
                 model: 'Qwen/Qwen2.5-7B-Instruct',
-                status: 'active',
+                status: initialStatus,
+                competition_id: competitionIds[0], // Set primary competition_id to satisfy DB trigger
             })
             .select('*')
             .single();
@@ -241,7 +247,7 @@ export class AgentsService {
                         agent_id: agent.id,
                         competition_id: compId,
                         user_id: userId,
-                        status: 'active',
+                        status: initialStatus,
                     });
                     if (entryError) {
                         this.logger.warn(`Competition entry insert error: ${entryError.message}`);
@@ -256,14 +262,7 @@ export class AgentsService {
                 });
             }
 
-            // Activate agent immediately — staking is handled separately by the frontend
-            try {
-                await supabase.from('agents').update({ status: 'active' }).eq('id', agent.id);
-                agent.status = 'active';
-            } catch (updateErr: any) {
-                this.logger.warn(`Agent status update failed: ${updateErr.message}`);
-                agent.status = 'active';
-            }
+            agent.status = initialStatus;
         }
 
         this.logger.log(`Forecasting Agent deployed: ${agent.id} by user ${userId} (max ${MAX_FREE_DEPLOYS} free prompts)`);
@@ -790,6 +789,34 @@ export class AgentsService {
         }
 
         this.logger.log(`Wager created: ${wager.id} — ${data.wager_amount} SOL on agent ${data.agent_id}`);
+
+        // Activate the agent and its competition entries in the database
+        try {
+            const { error: agentUpdateErr } = await adminSupabase
+                .from('agents')
+                .update({ status: 'active' })
+                .eq('id', data.agent_id);
+
+            if (agentUpdateErr) {
+                this.logger.error(`Failed to activate agent ${data.agent_id}: ${agentUpdateErr.message}`);
+            } else {
+                this.logger.log(`Agent ${data.agent_id} status updated to active`);
+            }
+
+            const { error: entryUpdateErr } = await adminSupabase
+                .from('agent_competition_entries')
+                .update({ status: 'active' })
+                .eq('agent_id', data.agent_id);
+
+            if (entryUpdateErr) {
+                this.logger.error(`Failed to activate competition entries for agent ${data.agent_id}: ${entryUpdateErr.message}`);
+            } else {
+                this.logger.log(`Competition entries for agent ${data.agent_id} status updated to active`);
+            }
+        } catch (actErr: any) {
+            this.logger.error(`Error during agent activation: ${actErr.message}`);
+        }
+
         return wager;
     }
 

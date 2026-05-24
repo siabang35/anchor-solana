@@ -5,6 +5,8 @@ import { CreateCompetitionDto, CompetitionResponseDto, SectorSummaryDto } from '
 @Injectable()
 export class CompetitionsService {
     private readonly logger = new Logger(CompetitionsService.name);
+    private readonly probHistoryCache = new Map<string, { timestamp: number; data: any[] }>();
+    private readonly CACHE_TTL_MS = 5000; // 5 seconds
 
     constructor(private readonly supabaseService: SupabaseService) {}
 
@@ -302,5 +304,33 @@ export class CompetitionsService {
             created_at: competition.created_at,
             updated_at: competition.updated_at,
         };
+    }
+
+    /**
+     * Get probability history for a competition (with caching to prevent throttling & DB exhaustion)
+     */
+    async getProbabilityHistory(competitionId: string): Promise<any[]> {
+        const now = Date.now();
+        const cached = this.probHistoryCache.get(competitionId);
+        if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+            return cached.data;
+        }
+
+        const supabase = this.supabaseService.getAdminClient();
+        const { data, error } = await supabase
+            .from('probability_history_lean')
+            .select('home, draw, away, created_at, narrative')
+            .eq('competition_id', competitionId)
+            .order('created_at', { ascending: true })
+            .limit(1000);
+
+        if (error) {
+            this.logger.error(`Failed to fetch probability history for competition ${competitionId}: ${error.message}`);
+            return cached ? cached.data : []; // Fallback to cache if database error
+        }
+
+        const result = data || [];
+        this.probHistoryCache.set(competitionId, { timestamp: now, data: result });
+        return result;
     }
 }

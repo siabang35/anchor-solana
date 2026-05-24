@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, apiFetch } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface OnChainMarket {
@@ -88,13 +88,8 @@ export function useOnChainMarket(competitionId?: string | null): UseOnChainMarke
                 setMarket(onChainMarket);
             }
 
-            // Fetch historical snapshots to populate curve
-            const { data: snapshots } = await supabase
-                .from('probability_history_lean')
-                .select('home, draw, away, created_at, narrative')
-                .eq('competition_id', competitionId)
-                .order('created_at', { ascending: true })
-                .limit(1000);
+            // Fetch historical snapshots to populate curve via secure API (anti-throttling cache)
+            const snapshots = await apiFetch<any[]>(`/competitions/${competitionId}/probability-history`);
 
             if (isCancelled()) return;
 

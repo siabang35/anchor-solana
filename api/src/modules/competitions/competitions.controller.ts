@@ -9,6 +9,7 @@ import {
     HttpStatus,
     Headers,
     ForbiddenException,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CompetitionsService } from './competitions.service.js';
@@ -137,5 +138,14 @@ export class CompetitionsController {
     @ApiOperation({ summary: 'Get competition details by ID' })
     async findById(@Param('id') id: string) {
         return this.competitionsService.findById(id);
+    }
+
+    /**
+     * Get probability history for a competition
+     */
+    @Get(':id/probability-history')
+    @ApiOperation({ summary: 'Get probability history snapshots for a competition' })
+    async getProbabilityHistory(@Param('id', ParseUUIDPipe) id: string) {
+        return this.competitionsService.getProbabilityHistory(id);
     }
 }
