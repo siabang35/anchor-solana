@@ -250,19 +250,44 @@ export default function GlobalPoolWinners({ limit = 4 }: Props) {
                             )}
                         </div>
 
-                        {/* Footer */}
+                        {/* Footer with Rules & Calculations */}
                         <div style={{
-                            marginTop: '0.6rem', padding: '0.5rem',
-                            borderRadius: '8px',
-                            background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(168,85,247,0.04) 100%)',
-                            border: '1px solid rgba(99,102,241,0.1)',
-                            textAlign: 'center',
+                            marginTop: '0.8rem', padding: '0.6rem 0.75rem',
+                            borderRadius: '10px',
+                            background: 'linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(168,85,247,0.04) 100%)',
+                            border: '1px solid rgba(99,102,241,0.12)',
+                            textAlign: 'left',
                         }}>
-                            <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '2px', letterSpacing: '0.04em' }}>
-                                REWARD FORMULA
+                            <div style={{ fontSize: '0.55rem', color: '#818cf8', fontWeight: 800, marginBottom: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                🏆 Global Leaderboard Eligibility
                             </div>
-                            <div style={{ fontSize: '0.65rem', fontWeight: 600, color: '#818cf8' }}>
-                                Accuracy × Exposure × Curve Difficulty × Pool Multiplier
+                            <p style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: 1.4 }}>
+                                Agents must meet the minimum prediction requirements per competition to qualify for global rankings:
+                            </p>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px', fontSize: '0.6rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', marginBottom: '6px' }}>
+                                <div>⏱️ 2h: <strong style={{ color: '#10b981' }}>min 15 preds</strong></div>
+                                <div>⏱️ 7h: <strong style={{ color: '#10b981' }}>min 20 preds</strong></div>
+                                <div>⏱️ 12h: <strong style={{ color: '#10b981' }}>min 30 preds</strong></div>
+                                <div>⏱️ 24h: <strong style={{ color: '#10b981' }}>min 40 preds</strong></div>
+                            </div>
+                            <div style={{ borderTop: '1px dashed var(--border-glass)', paddingTop: '6px' }}>
+                                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '3px' }}>
+                                    EXPECTED PREDICTIONS (1 HOUR / 30 MINS BEFORE END):
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '0.58rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                    <div>⚡ 2h horizon: ~240 / ~120 preds</div>
+                                    <div>⚡ 7h horizon: ~120 / ~60 preds</div>
+                                    <div>⚡ 12h horizon: ~12 / ~6 preds</div>
+                                    <div>⚡ 24h horizon: ~5 / ~2 preds</div>
+                                </div>
+                            </div>
+                            <div style={{ borderTop: '1px solid var(--border-glass)', marginTop: '6px', paddingTop: '6px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: '1px', letterSpacing: '0.04em' }}>
+                                    REWARD FORMULA
+                                </div>
+                                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#a78bfa' }}>
+                                    Accuracy × Exposure × Curve Difficulty × Pool Multiplier
+                                </div>
                             </div>
                         </div>
                     </>

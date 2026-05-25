@@ -184,34 +184,52 @@ export class PoolService {
         // Fallback: aggregate from agent_competition_entries
         const { data, error } = await supabase
             .from('agent_competition_entries')
-            .select('agent_id, weighted_score, prediction_count, agents(id, name, model, status)')
+            .select('agent_id, weighted_score, prediction_count, competitions(time_horizon), agents(id, name, model, status)')
             .not('weighted_score', 'is', null)
-            .order('weighted_score', { ascending: true })
-            .limit(limit * 3);
+            .order('weighted_score', { ascending: true });
 
         if (error) {
             this.logger.error(`Failed to get global winners: ${error.message}`);
             return [];
         }
 
-        // Deduplicate by agent_id, pick best score
+        // Filter qualified entries in-memory based on horizon limits:
+        // - 2h horizon: min 15 predictions
+        // - 7h horizon: min 20 predictions
+        // - 12h horizon: min 30 predictions
+        // - 24h horizon: min 40 predictions
+        const qualifiedData = (data || []).filter((entry: any) => {
+            const horizon = entry.competitions?.time_horizon || '24h';
+            const preds = entry.prediction_count || 0;
+            if (horizon === '2h') return preds >= 15;
+            if (horizon === '7h') return preds >= 20;
+            if (horizon === '12h') return preds >= 30;
+            return preds >= 40; // 24h or default
+        });
+
+        // Deduplicate by agent_id, pick best score and calculate rank score
         const agentMap = new Map<string, any>();
-        for (const entry of (data || [])) {
+        for (const entry of qualifiedData) {
             const existing = agentMap.get(entry.agent_id);
-            if (!existing || (entry.weighted_score < existing.weighted_score)) {
+            const avgScore = entry.weighted_score || 99.9999;
+            if (!existing || (avgScore < existing.avg_weighted_score)) {
+                const totalPreds = entry.prediction_count || 0;
+                const rankScore = avgScore + (2.0 / Math.max(1, totalPreds));
+
                 agentMap.set(entry.agent_id, {
                     agent_id: entry.agent_id,
                     agent_name: (entry as any).agents?.name || 'Unknown',
                     model: (entry as any).agents?.model || 'Unknown',
-                    avg_weighted_score: entry.weighted_score,
-                    total_predictions: entry.prediction_count || 0,
-                    global_accuracy: Math.max(0, Math.min(99.9, 98.0 * Math.exp(-(entry.weighted_score || 0) * 6))),
+                    avg_weighted_score: avgScore,
+                    total_predictions: totalPreds,
+                    global_accuracy: Math.max(0, Math.min(99.9, 98.0 * Math.exp(-avgScore * 6))),
+                    rank_score: rankScore,
                 });
             }
         }
 
         return Array.from(agentMap.values())
-            .sort((a, b) => (a.avg_weighted_score || 99) - (b.avg_weighted_score || 99))
+            .sort((a, b) => a.rank_score - b.rank_score)
             .slice(0, limit)
             .map((entry, i) => ({ ...entry, rank: i + 1 }));
     }
