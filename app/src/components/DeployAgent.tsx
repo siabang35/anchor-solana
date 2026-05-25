@@ -7,6 +7,7 @@ import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { apiFetch } from '@/lib/supabase';
 import AgentManager from './AgentManager';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 import {
     CATEGORIES,
     MODEL_TIERS,
@@ -1160,7 +1161,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             <div className="glass-card card-body animate-in" style={{ height: '100%', overflowY: 'auto' }}>
                 <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                        <h3 className="section-title"><span className="icon">🤖</span> {deployedAgent?.name || 'Agent'}</h3>
+                        <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span className="icon" style={{ display: 'flex', alignItems: 'center' }}><Agents3DIcon size={14} /></span> {deployedAgent?.name || 'Agent'}</h3>
                         {deployedAgent && <span className={`agent-status ${deployedAgent.status}`}><span className="status-dot" />{statusLabels[deployedAgent.status] || deployedAgent.status}</span>}
                     </div>
                     {isMobileDrawerOpen && (

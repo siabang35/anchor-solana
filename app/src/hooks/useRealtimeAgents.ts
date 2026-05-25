@@ -44,6 +44,7 @@ export interface ForecasterAgent {
         competition_id: string;
         brier_score: number | null;
         status: string;
+        competition_status?: string;
         final_rank?: number;
         title?: string;
         sector?: string;

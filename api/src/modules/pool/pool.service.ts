@@ -391,41 +391,62 @@ export class PoolService {
 
             const prizeLamports = Math.floor(prizeAmount * LAMPORTS_PER_SOL);
 
-            // ── Layer 7: On-chain transfer ──
+            // ── Layer 7: Pre-claim Database Lock (anti double-spend) ──
+            // We set claimed = true and disburse_tx = 'claiming_onchain' BEFORE executing the on-chain transfer.
+            // This ensures that even if a network timeout or crash happens mid-transfer,
+            // the prize cannot be claimed again.
+            const { data: lockRecord, error: lockError } = await supabase
+                .from('pool_winners')
+                .update({
+                    claimed: true,
+                    disburse_tx: 'claiming_onchain',
+                    winner_wallet: requestingWallet,
+                    claimed_at: new Date().toISOString(),
+                })
+                .eq('id', winner.id)
+                .eq('claimed', false)
+                .select('*')
+                .maybeSingle();
+
+            if (lockError || !lockRecord) {
+                this.logger.error(`🚨 Lock failed for winner ${winnerId}: ${lockError?.message || 'already locked'}`);
+                await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'lock_failed_already_claimed', req);
+                throw new BadRequestException('Claim already processed or in progress.');
+            }
+
+            // ── Layer 8: On-chain transfer ──
             this.logger.log(`💸 Initiating on-chain transfer: ${prizeAmount} SOL → ${requestingWallet.slice(0, 12)}...`);
-            const txSignature = await this.sendPrizeTransfer(requestingWallet, prizeLamports);
+            let txSignature: string | null = null;
+            try {
+                txSignature = await this.sendPrizeTransfer(requestingWallet, prizeLamports);
+            } catch (txErr: any) {
+                this.logger.error(`❌ On-chain transfer exception for ${winnerId}: ${txErr.message}`);
+            }
 
             if (!txSignature) {
+                // Rollback pre-claim lock on failure
+                this.logger.warn(`🔄 Rolling back pre-claim database lock for winner ${winnerId}`);
+                await supabase
+                    .from('pool_winners')
+                    .update({
+                        claimed: false,
+                        disburse_tx: null,
+                        winner_wallet: null,
+                        claimed_at: null,
+                    })
+                    .eq('id', winner.id);
+
                 await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'transfer_failed', req);
                 throw new BadRequestException('On-chain transfer failed. Please try again later.');
             }
 
-            // ── Layer 8: Pessimistic re-check AFTER transfer ──
-            // Another request may have snuck through — verify claimed is still false
-            const { data: recheck } = await supabase
-                .from('pool_winners')
-                .select('claimed')
-                .eq('id', winnerId)
-                .single();
-
-            if (recheck?.claimed) {
-                // Extremely rare edge case — TX sent but someone else already marked it
-                this.logger.error(`🚨 RACE CONDITION detected: winner ${winnerId} claimed during transfer. TX: ${txSignature}`);
-                // Still return success since we already sent the SOL — but log for manual review
-                return { success: true, tx: txSignature, amount: prizeAmount, warning: 'race_condition_detected' };
-            }
-
-            // ── Layer 9: Record successful claim ──
+            // ── Layer 9: Update with final Transaction Signature ──
             await supabase
                 .from('pool_winners')
                 .update({
                     disburse_tx: txSignature,
-                    winner_wallet: requestingWallet,
-                    claimed: true,
-                    claimed_at: new Date().toISOString(),
                 })
-                .eq('id', winner.id)
-                .eq('claimed', false); // Extra safety: only update if still unclaimed
+                .eq('id', winner.id);
 
             const claimDuration = Date.now() - claimStartTime;
             this.logger.log(`🏆 Prize CLAIMED: ${prizeAmount} SOL → ${requestingWallet.slice(0, 12)}... (Rank #${winner.rank}) TX: ${txSignature} [${claimDuration}ms]`);

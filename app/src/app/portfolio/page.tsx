@@ -6,8 +6,10 @@ import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/supabase';
+import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
+import { Assets3DIcon, Agents3DIcon } from '@/components/Agents3DIcon';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
 const SolanaChart = dynamic(() => import('@/components/SolanaChart'), { ssr: false });
@@ -40,12 +42,94 @@ function DashboardView() {
     const { publicKey, connected } = useWallet();
     const { connection } = useConnection();
     const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const tabParam = searchParams.get('tab');
+
+    const [activeTab, setActiveTab] = useState<'assets' | 'agents'>('assets');
+    const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+    // Restore selected tab from search params
+    useEffect(() => {
+        if (tabParam === 'agents' || tabParam === 'assets') {
+            setActiveTab(tabParam);
+        }
+    }, [tabParam]);
+
+    // Theme toggle handling
+    const toggleTheme = () => {
+        const next = theme === 'dark' ? 'light' : 'dark';
+        setTheme(next);
+        document.documentElement.setAttribute('data-theme', next);
+    };
+
+    useEffect(() => {
+        const saved = (localStorage.getItem('exoduze-theme') as 'dark' | 'light') || 'dark';
+        setTheme(saved);
+        document.documentElement.setAttribute('data-theme', saved);
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('exoduze-theme', theme);
+    }, [theme]);
+
+    // Agent tracking hook
+    const {
+        forecasters,
+        pauseForecaster,
+        resumeForecaster,
+        stopForecaster,
+        deleteForecaster,
+        loading: agentsLoading
+    } = useRealtimeAgents(publicKey?.toString() || null);
+
     const [balance, setBalance] = useState<number | null>(null);
     const [solPrice, setSolPrice] = useState<number | null>(null);
     const [lastFetchedAt, setLastFetchedAt] = useState(0);
     const fetchInFlight = useRef(false);
     const abortRef = useRef<AbortController | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [claimingId, setClaimingId] = useState<string | null>(null);
+
+    const handleClaim = async (winnerId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!publicKey) {
+            alert('Please connect your Solana wallet to claim this prize.');
+            return;
+        }
+
+        if (claimingId === winnerId) return;
+
+        const confirmed = window.confirm(
+            'Confirm Claim Request\n\n' +
+            'You are about to claim this prize to your connected wallet.\n' +
+            `Wallet: ${publicKey.toString().slice(0, 8)}...${publicKey.toString().slice(-6)}\n\n` +
+            'Do you want to proceed?'
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setClaimingId(winnerId);
+            const res = await apiFetch<any>('/pool/claim', {
+                method: 'POST',
+                body: JSON.stringify({ winner_id: winnerId }),
+                headers: { 'x-user-id': publicKey.toString() }
+            });
+            
+            if (res.success) {
+                alert(`✅ Prize claimed successfully!\n\nTransaction: ${res.tx}`);
+                window.location.reload();
+            } else {
+                throw new Error(res.message || 'Unknown error occurred during claim');
+            }
+        } catch (err: any) {
+            console.error('Claim Error:', err);
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to claim prize';
+            alert(`❌ Claim Failed\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`);
+        } finally {
+            setClaimingId(null);
+        }
+    };
     const [stats, setStats] = useState<{
         activeStakedSol: number;
         totalWonSol: number;
@@ -121,20 +205,46 @@ function DashboardView() {
         <div className="portfolio-page-wrapper">
             <div className="db-container">
                 <style>{`
+                    :root {
+                        --db-bg: #000;
+                        --db-text: #fff;
+                        --db-text-muted: rgba(255,255,255,0.5);
+                        --db-text-secondary: rgba(255,255,255,0.8);
+                        --db-card-bg: rgba(255,255,255,0.03);
+                        --db-border: rgba(255,255,255,0.08);
+                        --db-radial-1: rgba(153,69,255,0.15);
+                        --db-radial-2: rgba(20,241,149,0.1);
+                        --db-radial-bg: #000;
+                        --db-header-border: rgba(255,255,255,0.05);
+                    }
+                    [data-theme='light'] {
+                        --db-bg: #f8fafc;
+                        --db-text: #0f172a;
+                        --db-text-muted: rgba(15,23,42,0.5);
+                        --db-text-secondary: rgba(15,23,42,0.8);
+                        --db-card-bg: #ffffff;
+                        --db-border: rgba(15,23,42,0.08);
+                        --db-radial-1: rgba(153,69,255,0.06);
+                        --db-radial-2: rgba(20,241,149,0.04);
+                        --db-radial-bg: #f8fafc;
+                        --db-header-border: rgba(15,23,42,0.06);
+                    }
                     .db-container {
-                        min-height: 100vh; background: radial-gradient(circle at 0% 0%, rgba(153,69,255,0.15) 0%, transparent 40%), radial-gradient(circle at 100% 0%, rgba(20,241,149,0.1) 0%, #000 50%);
-                        background-color: #000; color: #fff; padding-bottom: 100px;
+                        min-height: 100vh;
+                        background: radial-gradient(circle at 0% 0%, var(--db-radial-1) 0%, transparent 40%), radial-gradient(circle at 100% 0%, var(--db-radial-2) 0%, var(--db-radial-bg) 50%);
+                        background-color: var(--db-bg); color: var(--db-text); padding-bottom: 100px;
                         font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
                         animation: dbFadeIn 0.4s ease;
+                        transition: background-color 0.3s ease, color 0.3s ease;
                     }
-                    .portfolio-page-wrapper { background-color: #000; min-height: 100vh; }
+                    .portfolio-page-wrapper { background-color: var(--db-bg); min-height: 100vh; transition: background-color 0.3s ease; }
                     .desktop-only-header { display: none; }
                     @media (min-width: 769px) {
                         .db-container {
                             max-width: 1200px;
                             margin: 0 auto;
-                            border-left: 1px solid rgba(255,255,255,0.05);
-                            border-right: 1px solid rgba(255,255,255,0.05);
+                            border-left: 1px solid var(--db-header-border);
+                            border-right: 1px solid var(--db-header-border);
                         }
                         .db-hamburger-btn { display: none !important; }
                         .db-nav { padding-top: 2rem; }
@@ -143,21 +253,21 @@ function DashboardView() {
                     @keyframes dbFadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
                     .db-nav { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem; }
                     .db-icon-btn { width: 40px; height: 40px; border-radius: 50%;
-                        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05);
-                        display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff; text-decoration: none; }
+                        background: var(--db-card-bg); border: 1px solid var(--db-border);
+                        display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--db-text); text-decoration: none; }
                     .db-icon-btn:hover { background: rgba(255,255,255,0.1); }
                     .db-title-wrap { display: flex; align-items: center; gap: 0.5rem; }
                     .db-sol-logo { width: 24px; height: 24px; border-radius: 50%; }
-                    .db-title { font-size: 1.1rem; font-weight: 500; }
+                    .db-title { font-size: 1.1rem; font-weight: 600; color: var(--db-text); }
                     .db-bal { padding: 0 1.5rem; margin-top: 0.5rem; }
-                    .db-bal-label { color: rgba(255,255,255,0.5); font-size: 0.9rem; margin-bottom: 0.25rem; }
+                    .db-bal-label { color: var(--db-text-muted); font-size: 0.9rem; margin-bottom: 0.25rem; }
                     .db-bal-row { display: flex; align-items: baseline; justify-content: space-between; }
                     .db-bal-main { display: flex; align-items: baseline; gap: 0.5rem; }
-                    .db-bal-val { font-size: 2.5rem; font-weight: 500; letter-spacing: -0.02em; }
-                    .db-bal-cur { font-size: 1.25rem; color: rgba(255,255,255,0.6); }
-                    .db-bal-usd { font-size: 0.9rem; color: rgba(255,255,255,0.8); }
+                    .db-bal-val { font-size: 2.5rem; font-weight: 500; letter-spacing: -0.02em; color: var(--db-text); }
+                    .db-bal-cur { font-size: 1.25rem; color: var(--db-text-muted); }
+                    .db-bal-usd { font-size: 0.9rem; color: var(--db-text-secondary); }
                     .db-overview { padding: 0 1.5rem; margin-top: 2rem; }
-                    .db-overview-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 1rem; }
+                    .db-overview-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--db-text); }
                     .db-pb { display: flex; height: 32px; border-radius: 8px; overflow: hidden; gap: 4px; margin-bottom: 1.5rem; }
                     .db-pb-seg { height: 100%; border-radius: 6px; }
                     .db-pb-1 { background: #7c8db0; }
@@ -165,10 +275,10 @@ function DashboardView() {
                     .db-pb-3 { background: #5eead4; }
                     .db-pb-4 { background: repeating-linear-gradient(-45deg,rgba(255,255,255,0.05),rgba(255,255,255,0.05) 5px,rgba(255,255,255,0.1) 5px,rgba(255,255,255,0.1) 10px); }
                     .db-legend { display: flex; flex-direction: column; gap: 0.75rem; }
-                    .db-leg-item { display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; }
+                    .db-leg-item { display: flex; align-items: center; justify-content: space-between; font-size: 0.85rem; color: var(--db-text); }
                     .db-leg-left { display: flex; align-items: center; gap: 0.5rem; }
                     .db-leg-dot { width: 6px; height: 6px; border-radius: 50%; }
-                    .db-leg-val { color: rgba(255,255,255,0.6); }
+                    .db-leg-val { color: var(--db-text-muted); }
                     .db-chart { margin-top: 2.5rem; }
 
                     /* ── Connect Wallet UI ── */
@@ -206,7 +316,7 @@ function DashboardView() {
                 `}</style>
 
                 <div className="desktop-only-header">
-                    <Header theme="dark" onToggleTheme={() => {}} />
+                    <Header theme={theme} onToggleTheme={toggleTheme} />
                 </div>
 
                 <div className="db-nav">
@@ -282,22 +392,445 @@ function DashboardView() {
                             </div>
                         </div>
 
-                        <div className="db-overview">
-                            <div className="db-overview-title">Overview</div>
-                            <div className="db-pb">
-                                <div className="db-pb-seg db-pb-1" style={{ width: `${avPct}%` }}/>
-                                <div className="db-pb-seg db-pb-2" style={{ width: `${stPct}%` }}/>
-                                <div className="db-pb-seg db-pb-3" style={{ width: `${erPct}%` }}/>
-                                <div className="db-pb-seg db-pb-4" style={{ width: '0%' }}/>
-                            </div>
-                            <div className="db-legend">
-                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#7c8db0'}}/><span>Available</span></div><span className="db-leg-val">{solBal.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
-                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#6b7280'}}/><span>Staked</span></div><span className="db-leg-val">{stakedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
-                                <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#5eead4'}}/><span>Earned</span></div><span className="db-leg-val">{earnedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
-                            </div>
+                        {/* Tab Selector */}
+                        <div style={{ display: 'flex', gap: '0.75rem', padding: '0 1.5rem', marginBottom: '1.5rem', marginTop: '1.5rem' }}>
+                            <button 
+                                onClick={() => setActiveTab('assets')}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '20px',
+                                    border: activeTab === 'assets' ? '1px solid var(--accent-cyan)' : '1px solid var(--db-border)',
+                                    background: activeTab === 'assets' ? 'rgba(34,211,238,0.1)' : 'transparent',
+                                    color: activeTab === 'assets' ? 'var(--accent-cyan)' : 'var(--db-text-muted)',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                }}
+                            >
+                                <Assets3DIcon />
+                                Assets & Chart
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('agents')}
+                                style={{
+                                    padding: '8px 16px',
+                                    borderRadius: '20px',
+                                    border: activeTab === 'agents' ? '1px solid var(--accent-indigo)' : '1px solid var(--db-border)',
+                                    background: activeTab === 'agents' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                                    color: activeTab === 'agents' ? 'var(--accent-indigo)' : 'var(--db-text-muted)',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                }}
+                            >
+                                <Agents3DIcon size={16} />
+                                My Agents
+                            </button>
                         </div>
 
-                        <div className="db-chart"><SolanaChart symbol="SOLUSDT" interval="1m" onPriceUpdate={setSolPrice} /></div>
+                        {activeTab === 'agents' ? (
+                            <div style={{ padding: '0 1.5rem', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0, color: 'var(--db-text)' }}>My Deployed AI Agents</h3>
+                                    {forecasters.length > 0 && (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--db-text-muted)', background: 'var(--db-card-bg)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--db-border)' }}>
+                                            Deploys: {forecasters.filter(f => f.status !== 'terminated').length} / 10 Active
+                                        </span>
+                                    )}
+                                </div>
+
+                                {agentsLoading ? (
+                                    <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--db-text-muted)' }}>
+                                        <div className="circular-spinner" style={{ margin: '0 auto 1rem' }} />
+                                        <span>Loading deployed agents...</span>
+                                    </div>
+                                ) : forecasters.length === 0 ? (
+                                    <div style={{ padding: '3rem 2rem', textAlign: 'center', background: 'var(--db-card-bg)', borderRadius: '16px', border: '1px solid var(--db-border)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+                                            <Agents3DIcon size={72} />
+                                        </div>
+                                        <h4 style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--db-text)' }}>No AI Agents Deployed</h4>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--db-text-muted)', maxWidth: '280px', margin: '0 auto 1.5rem', lineHeight: '1.5' }}>
+                                            Deploy your first probability forecasting agent to start competing in tournaments!
+                                        </p>
+                                        <Link href="/" style={{
+                                            display: 'inline-block',
+                                            padding: '8px 20px',
+                                            borderRadius: '12px',
+                                            background: 'var(--accent-indigo)',
+                                            color: '#fff',
+                                            textDecoration: 'none',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 700,
+                                            boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+                                        }}>
+                                            Go to Markets & Deploy
+                                        </Link>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
+                                        {forecasters.map((agent) => {
+                                            const promptPct = (agent.prompts_used / agent.max_free_prompts) * 100;
+                                            return (
+                                                <div 
+                                                    key={agent.id}
+                                                    style={{
+                                                        padding: '1.25rem',
+                                                        borderRadius: '16px',
+                                                        background: 'var(--db-card-bg)',
+                                                        border: '1px solid var(--db-border)',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '0.75rem',
+                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                                                        transition: 'all 0.2s',
+                                                    }}
+                                                >
+                                                    {/* Agent Header */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <Agents3DIcon size={20} />
+                                                                <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--db-text)' }}>{agent.name}</h4>
+                                                                <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)' }}>({agent.id.slice(0, 4)})</span>
+                                                            </div>
+                                                            <span style={{ fontSize: '0.75rem', color: 'var(--db-text-muted)' }}>Model: <strong style={{ color: 'var(--db-text)' }}>{agent.model}</strong></span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                            {agent.status === 'active' && (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                                    fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px',
+                                                                    background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)'
+                                                                }}>
+                                                                    <span className="live-pulsing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                                                                    RUNNING
+                                                                </span>
+                                                            )}
+                                                            {agent.status === 'paused' && (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                                    fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px',
+                                                                    background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)'
+                                                                }}>
+                                                                    PAUSED
+                                                                </span>
+                                                            )}
+                                                            {agent.status === 'terminated' && (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                                    fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px',
+                                                                    background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)'
+                                                                }}>
+                                                                    STOPPED
+                                                                </span>
+                                                            )}
+                                                            {['exhausted', 'error'].includes(agent.status) && (
+                                                                <span style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                                    fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px',
+                                                                    background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)'
+                                                                }}>
+                                                                    {agent.status === 'error' ? 'STOPPED' : agent.status.toUpperCase()}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* System Prompt / Target */}
+                                                    {agent.system_prompt && (
+                                                        <div style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--db-border)', color: 'var(--db-text-secondary)', fontStyle: 'italic' }}>
+                                                            &ldquo;{agent.system_prompt.length > 120 ? agent.system_prompt.slice(0, 120) + '...' : agent.system_prompt}&rdquo;
+                                                        </div>
+                                                    )}
+
+                                                    {/* Quota Progress */}
+                                                    <div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--db-text-muted)', marginBottom: '4px', fontWeight: 600 }}>
+                                                            <span>Quota Free Prompts</span>
+                                                            <span>{agent.prompts_used} / {agent.max_free_prompts}</span>
+                                                        </div>
+                                                        <div style={{ height: '6px', borderRadius: '3px', background: 'var(--db-border)', overflow: 'hidden' }}>
+                                                            <div style={{ 
+                                                                height: '100%', 
+                                                                width: `${Math.min(100, promptPct)}%`, 
+                                                                background: promptPct >= 90 ? 'var(--accent-pink, #ec4899)' : 'var(--accent-indigo, #6366f1)',
+                                                                borderRadius: 'inherit',
+                                                                transition: 'width 0.3s ease'
+                                                            }} />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Competitions */}
+                                                    {agent.competitions && agent.competitions.length > 0 ? (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                            <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontWeight: 600 }}>Enrolled Tournaments:</span>
+                                                            {agent.competitions.map((comp) => (
+                                                                <div key={comp.competition_id} style={{ 
+                                                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                                    padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.01)',
+                                                                    border: '1px solid var(--db-border)', fontSize: '0.75rem' 
+                                                                }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                        <span style={{ textTransform: 'capitalize', fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)', border: '1px solid rgba(99,102,241,0.15)' }}>{comp.sector || 'global'}</span>
+                                                                        <span style={{ color: 'var(--db-text)', fontWeight: 500 }}>{comp.title || 'Competition'}</span>
+                                                                    </div>
+                                                                    <span style={{ 
+                                                                        fontFamily: 'var(--font-mono)', 
+                                                                        fontWeight: 600,
+                                                                        color: comp.brier_score !== null ? '#10b981' : 'var(--db-text-muted)' 
+                                                                    }}>
+                                                                        {comp.brier_score !== null ? `Brier: ${comp.brier_score.toFixed(4)}` : 'Evaluating...'}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontStyle: 'italic' }}>Not competing in any tournaments.</span>
+                                                    )}
+
+                                                    {/* On-Chain Stakes */}
+                                                    {(() => {
+                                                        const stakes = agent.pool_stakes || [];
+                                                        if (stakes.length === 0) return null;
+                                                        const bestStake = stakes.reduce((best: any, s: any) => {
+                                                            if (!best) return s;
+                                                            if (s.verified_onchain && !best.verified_onchain) return s;
+                                                            if (!s.verified_onchain && best.verified_onchain) return best;
+                                                            if (s.onchain_tx && !best.onchain_tx) return s;
+                                                            if (!s.onchain_tx && best.onchain_tx) return best;
+                                                            return Number(s.stake_amount) > Number(best.stake_amount) ? s : best;
+                                                        }, null);
+                                                        if (!bestStake) return null;
+                                                        const isVerified = bestStake.verified_onchain || !!bestStake.onchain_tx;
+                                                        return (
+                                                            <div style={{
+                                                                background: isVerified ? 'rgba(16,185,129,0.05)' : 'rgba(245,158,11,0.05)',
+                                                                border: `1px solid ${isVerified ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                                                                borderRadius: '8px', padding: '0.6rem',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                marginTop: '0.25rem'
+                                                            }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <span style={{ fontSize: '0.6rem', color: isVerified ? '#10b981' : '#f59e0b', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                        {isVerified ? '✅' : '🔗'} On-Chain Stake
+                                                                        {isVerified && (
+                                                                            <span style={{
+                                                                                fontSize: '0.5rem', padding: '1px 4px',
+                                                                                borderRadius: '3px', background: 'rgba(16,185,129,0.15)',
+                                                                                color: '#10b981', fontWeight: 800,
+                                                                            }}>VERIFIED</span>
+                                                                        )}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--db-text)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                                                        {Number(bestStake.stake_amount).toFixed(4)} SOL Staked
+                                                                    </span>
+                                                                </div>
+                                                                {bestStake.onchain_tx ? (
+                                                                    <a 
+                                                                        href={`https://solscan.io/tx/${bestStake.onchain_tx}?cluster=devnet`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        style={{
+                                                                            fontSize: '0.65rem', color: '#10b981', textDecoration: 'none',
+                                                                            display: 'flex', alignItems: 'center', gap: '4px',
+                                                                            padding: '5px 10px', background: 'rgba(16,185,129,0.1)', borderRadius: '6px',
+                                                                            fontWeight: 600, border: '1px solid rgba(16,185,129,0.2)', transition: 'all 0.2s'
+                                                                        }}
+                                                                    >
+                                                                        View Stake ↗
+                                                                    </a>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)' }}>Pending On-Chain</span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* On-Chain Claims */}
+                                                    {agent.pool_winners && agent.pool_winners.length > 0 && (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                                            {agent.pool_winners.map((winner, idx) => {
+                                                                const comp = agent.competitions?.find((c: any) => c.competition_id === winner.competition_id);
+                                                                return (
+                                                                    <div key={winner.id || idx} style={{
+                                                                        background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(245,158,11,0.04) 100%)', 
+                                                                        border: '1px solid rgba(251,191,36,0.25)',
+                                                                        borderRadius: '8px', padding: '0.6rem',
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                        boxShadow: '0 2px 8px rgba(251,191,36,0.05)'
+                                                                    }}>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                            <span style={{ fontSize: '0.6rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                                <span>{winner.rank === 1 ? '🥇' : winner.rank === 2 ? '🥈' : winner.rank === 3 ? '🥉' : '🏆'}</span> PRIZE WON: {comp?.sector || 'COMPETITION'}
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.78rem', color: 'var(--db-text)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                                                +{Number(winner.prize_amount).toFixed(4)} SOL
+                                                                            </span>
+                                                                            {comp?.title && (
+                                                                                <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)', fontWeight: 500, marginTop: '1px' }}>
+                                                                                    {comp.title}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        
+                                                                        {winner.disburse_tx ? (
+                                                                            <a 
+                                                                                href={`https://solscan.io/tx/${winner.disburse_tx}?cluster=devnet`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                style={{
+                                                                                    fontSize: '0.65rem', color: '#fbbf24', textDecoration: 'none',
+                                                                                    display: 'flex', alignItems: 'center', gap: '4px',
+                                                                                    padding: '5px 10px', background: 'rgba(251,191,36,0.12)', borderRadius: '6px',
+                                                                                    fontWeight: 600, border: '1px solid rgba(251,191,36,0.2)', transition: 'all 0.2s'
+                                                                                }}
+                                                                            >
+                                                                                View Payout TX ↗
+                                                                            </a>
+                                                                        ) : !winner.claimed && winner.id ? (
+                                                                            <button 
+                                                                                onClick={(e) => handleClaim(winner.id, e)}
+                                                                                disabled={claimingId === winner.id}
+                                                                                style={{
+                                                                                    fontSize: '0.65rem', color: '#fff', textDecoration: 'none',
+                                                                                    display: 'flex', alignItems: 'center', gap: '4px',
+                                                                                    padding: '5px 12px', background: '#10b981', borderRadius: '6px',
+                                                                                    fontWeight: 600, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                                                                    boxShadow: '0 2px 6px rgba(16,185,129,0.2)'
+                                                                                }}
+                                                                            >
+                                                                                {claimingId === winner.id ? 'Claiming...' : 'Claim Reward 💰'}
+                                                                            </button>
+                                                                        ) : null}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Latest Reasoning */}
+                                                    {agent.latest_reasoning && (
+                                                        <div style={{ 
+                                                            padding: '8px 10px', borderRadius: '8px', 
+                                                            background: 'rgba(0,0,0,0.05)', border: '1px solid var(--db-border)',
+                                                            fontSize: '0.7rem', color: 'var(--db-text-muted)',
+                                                            maxHeight: '60px', overflowY: 'auto'
+                                                        }}>
+                                                            <strong style={{ color: 'var(--db-text)' }}>Latest Reasoning: </strong>
+                                                            {agent.latest_reasoning}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Action Controls */}
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        justifyContent: 'flex-end', 
+                                                        gap: '0.5rem', 
+                                                        marginTop: '0.5rem', 
+                                                        paddingTop: '0.75rem', 
+                                                        borderTop: '1px solid var(--db-border)' 
+                                                    }}>
+                                                        {agent.status === 'active' && (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => pauseForecaster(agent.id)}
+                                                                    style={{
+                                                                        padding: '5px 12px', borderRadius: '8px',
+                                                                        border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.1)',
+                                                                        color: '#f59e0b', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    ⏸ Pause
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => stopForecaster(agent.id)}
+                                                                    style={{
+                                                                        padding: '5px 12px', borderRadius: '8px',
+                                                                        border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
+                                                                        color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    🛑 Stop
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {agent.status === 'paused' && (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => resumeForecaster(agent.id)}
+                                                                    style={{
+                                                                        padding: '5px 12px', borderRadius: '8px',
+                                                                        border: '1px solid rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.1)',
+                                                                        color: '#10b981', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    ▶ Resume
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => stopForecaster(agent.id)}
+                                                                    style={{
+                                                                        padding: '5px 12px', borderRadius: '8px',
+                                                                        border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
+                                                                        color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    🛑 Stop
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {agent.status === 'terminated' && (
+                                                            <button 
+                                                                onClick={() => deleteForecaster(agent.id)}
+                                                                style={{
+                                                                    padding: '5px 12px', borderRadius: '8px',
+                                                                    border: '1px solid var(--db-border)', background: 'rgba(148,163,184,0.06)',
+                                                                    color: 'var(--db-text-muted)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                    display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                }}
+                                                            >
+                                                                🗑 Delete
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="db-overview">
+                                    <div className="db-overview-title">Overview</div>
+                                    <div className="db-pb">
+                                        <div className="db-pb-seg db-pb-1" style={{ width: `${avPct}%` }}/>
+                                        <div className="db-pb-seg db-pb-2" style={{ width: `${stPct}%` }}/>
+                                        <div className="db-pb-seg db-pb-3" style={{ width: `${erPct}%` }}/>
+                                        <div className="db-pb-seg db-pb-4" style={{ width: '0%' }}/>
+                                    </div>
+                                    <div className="db-legend">
+                                        <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#7c8db0'}}/><span>Available</span></div><span className="db-leg-val">{solBal.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
+                                        <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#6b7280'}}/><span>Staked</span></div><span className="db-leg-val">{stakedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
+                                        <div className="db-leg-item"><div className="db-leg-left"><div className="db-leg-dot" style={{background:'#5eead4'}}/><span>Earned</span></div><span className="db-leg-val">{earnedSol.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})} SOL</span></div>
+                                    </div>
+                                </div>
+
+                                <div className="db-chart"><SolanaChart symbol="SOLUSDT" interval="1m" onPriceUpdate={setSolPrice} /></div>
+                            </>
+                        )}
                     </>
                 ) : (
                     <div className="cw-container">
@@ -339,7 +872,14 @@ function PortfolioContent() {
 export default function PortfolioPage() {
     return (
         <WalletProvider>
-            <PortfolioContent />
+            <React.Suspense fallback={
+                <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="circular-spinner" />
+                    <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>Loading...</div>
+                </div>
+            }>
+                <PortfolioContent />
+            </React.Suspense>
         </WalletProvider>
     );
 }

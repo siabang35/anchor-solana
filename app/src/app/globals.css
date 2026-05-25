@@ -836,15 +836,35 @@ body {
 /* ===== LEADERBOARD ===== */
 .leaderboard-row {
   display: grid;
-  grid-template-columns: 40px 1fr 80px 50px;
+  grid-template-columns: 40px 1fr 60px 80px 40px;
   align-items: center;
   padding: 0.5rem 0.25rem;
   font-size: 0.8rem;
   border-bottom: 1px solid var(--border-card);
 }
 
+.leaderboard-row.has-weighted {
+  grid-template-columns: 40px 1fr 50px 80px 60px 40px;
+}
+
+.leaderboard-row.no-weighted {
+  grid-template-columns: 40px 1fr 60px 80px 40px;
+}
+
 .leaderboard-row:last-child {
   border: none;
+}
+
+@media (max-width: 700px) {
+  .leaderboard-row.has-weighted,
+  .leaderboard-row.no-weighted,
+  .leaderboard-row {
+    grid-template-columns: 35px 1fr 60px 30px !important;
+    font-size: 0.72rem;
+  }
+  .leaderboard-hide-mobile {
+    display: none !important;
+  }
 }
 
 .rank {

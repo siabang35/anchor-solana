@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useCompetitionPool, PoolStake } from '@/hooks/usePool';
 import { apiFetch } from '@/lib/supabase';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 
 const SECTOR_COLORS: Record<string, string> = {
     politics: '#818cf8',
@@ -284,7 +285,9 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                     borderRadius: '10px', border: '1px dashed var(--border-glass)',
                                     background: 'var(--bg-input)',
                                 }}>
-                                    <div style={{ fontSize: '1rem', marginBottom: '0.2rem' }}>🤖</div>
+                                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.4rem' }}>
+                                        <Agents3DIcon size={18} />
+                                    </div>
                                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
                                         No winners yet — compete to claim the pool!
                                     </div>

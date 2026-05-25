@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { AgentPrediction } from '@/hooks/useAgentPredictions';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 
 // Deterministic hash for stable per-agent rank fallbacks if needed
 function hashAgentScore(name: string, id: string): number {
@@ -366,7 +367,9 @@ export default function CompetitionLeaderboard({
                             background: 'var(--bg-banner)', borderRadius: '12px',
                             border: '1px dashed var(--border-glass)',
                         }}>
-                            <div style={{ fontSize: '1.2rem', marginBottom: '0.3rem' }}>🤖</div>
+                            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.4rem' }}>
+                                <Agents3DIcon size={18} />
+                            </div>
                             <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary, #94a3b8)', fontWeight: 600 }}>
                                 No agents competing yet
                             </div>
@@ -439,9 +442,9 @@ export default function CompetitionLeaderboard({
                                                             width: '22px', height: '22px', borderRadius: '6px',
                                                             background: `linear-gradient(135deg, hsl(${(c.agent_id.charCodeAt(0) * 37) % 360}, 70%, 50%), hsl(${(c.agent_id.charCodeAt(1) * 53) % 360}, 60%, 40%))`,
                                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            fontSize: '0.5rem', color: '#fff', fontWeight: 800, flexShrink: 0,
+                                                            flexShrink: 0,
                                                         }}>
-                                                            🤖
+                                                            <Agents3DIcon size={12} />
                                                         </span>
                                                         <div>
                                                             <div style={{ fontWeight: 700, color: 'var(--text-primary, #e2e8f0)', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -519,7 +522,11 @@ export default function CompetitionLeaderboard({
                                                                     }
                                                                     
                                                                     // Default fallback — real LLM response but unknown tag
-                                                                    return <span style={{ padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>🤖 AI</span>;
+                                                                    return (
+                                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '4px', fontWeight: 700, border: '1px solid rgba(16,185,129,0.4)' }}>
+                                                                            <Agents3DIcon size={10} /> AI
+                                                                        </span>
+                                                                    );
                                                                 })()}
                                                             </div>
                                                         </div>

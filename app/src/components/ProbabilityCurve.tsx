@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -660,7 +661,7 @@ const firstPoint = knownPoints[0];
         const hasPredictions = agentPreds.length > 0;
 
         const mainDataset = {
-            label: `🤖 ${agent.name}${hasPredictions ? ` (${agentPreds.length} preds · Pred: ${agentPreds[agentPreds.length - 1].probability * 100}%)` : ' 🔥 Competing'}`,
+            label: `◈ ${agent.name}${hasPredictions ? ` (${agentPreds.length} preds · Pred: ${agentPreds[agentPreds.length - 1].probability * 100}%)` : ' 🔥 Competing'}`,
             data: curveData,
             borderColor: isPaused ? color.replace(')', ', 0.4)').replace('hsl', 'hsla') : color,
             backgroundColor: 'transparent',
@@ -895,7 +896,7 @@ const firstPoint = knownPoints[0];
                         const narrative = mappedNarratives[dataIndex];
                         let lines: string[] = [];
                         if (narrative) {
-                            lines.push(`🤖 ${narrative}`);
+                            lines.push(`◈ ${narrative}`);
                         }
                         if (visibleAgents.length > 0) {
                             lines.push(`📡 ${visibleAgents.length} agents competing`);
@@ -1101,8 +1102,9 @@ const firstPoint = knownPoints[0];
                                 border: '1px solid rgba(129,140,248,0.12)',
                                 fontSize: '0.55rem', color: 'var(--text-muted)',
                                 textAlign: 'center', fontWeight: 600,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
                             }}>
-                                🤖 Competitor Agent — view only
+                                <Agents3DIcon size={12} /> Competitor Agent — view only
                             </div>
                         ) : (
                             /* Action buttons grid */
@@ -1147,7 +1149,7 @@ const firstPoint = knownPoints[0];
                                     style={{
                                         padding: '0.35rem', borderRadius: '6px',
                                         background: 'rgba(239,68,68,0.05)', color: '#ef444480',
-                                        border: '1px solid rgba(239,68,68,0.1)', fontSize: '0.55rem',
+                                        border: '1px solid rgba(239,68,68,0.15)', fontSize: '0.55rem',
                                         fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s',
                                     }}
                                 >🗑 Delete</button>
@@ -1156,7 +1158,7 @@ const firstPoint = knownPoints[0];
                     </div>
                 )}
             </div>
-
+ 
             {/* Pipeline info bar */}
             <div style={{
                 marginTop: '0.75rem', display: 'flex', justifyContent: 'space-between',
@@ -1164,9 +1166,13 @@ const firstPoint = knownPoints[0];
                 background: 'var(--gradient-card)', border: '1px solid var(--border-card)',
                 flexWrap: 'wrap', gap: '0.3rem',
             }}>
-                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
                     📡 {competition?.entry_count || 0} participants
-                    {visibleAgents.length > 0 && ` · 🤖 ${visibleAgents.length} agent${visibleAgents.length > 1 ? 's' : ''} competing`}
+                    {visibleAgents.length > 0 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            · <Agents3DIcon size={11} /> {visibleAgents.length} agent{visibleAgents.length > 1 ? 's' : ''} competing
+                        </span>
+                    )}
                 </span>
                 <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                     {visibleAgents.length > 0 ? '🧬 Neural Competition Active' : data.some(d => d.narrative) ? '✨ Bayesian Live Updates' : 'ΔP updated every 3s'}

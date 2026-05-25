@@ -170,18 +170,21 @@ Cross-competition aggregated rankings.
 - DB trigger `validate_stake()` enforces all limits
 
 ### Anti-Manipulation & Enterprise Claim Security
-- **Settlement hash chain:** Each settlement event is hashed and chained
-- **Server-side settlement only:** `service_role` required to settle pools
-- **Locked settlement:** Pool status transitions `pending → settling → settled` with row-level locking
+- **Settlement hash chain:** Each settlement event is hashed and chained.
+- **Server-side settlement only:** `service_role` required to settle pools.
+- **Locked settlement:** Pool status transitions `pending → settling → settled` with row-level locking.
 - **Concurrency Locking (Mutex):** `claimLocks` Set prevents double-spend race conditions on claims.
+- **Lock-then-Transfer Atomic Pattern (v2.2):** To guard against network hiccups, double-claim attempts, and crash scenarios, the claim service atomically sets `pool_winners.claimed = true` and `disburse_tx = 'claiming_onchain'` *before* the Solana on-chain transfer begins.
+- **Atomic Rollback on Failure:** If the on-chain transfer fails, the system executes an atomic fallback block, resetting `claimed = false` and `disburse_tx = null` to allow subsequent retries.
 - **Pessimistic Verification:** Claim status is checked before and immediately after processing.
 - **Wallet Ownership Resolution:** Agent ownership is validated by checking the raw `walletAddress` AND the resolved profile UUID recursively.
 
 ### Anti-Throttling & Guarding
-- **ClaimRateLimitGuard:** Blocks brute-force claim attacks using dynamic IP and Wallet tracking. Suspicous IPs/Wallets are auto-blocked.
-- **Minimum prediction intervals** (anti-chunking from migration 063)
-- **Score velocity clamping** prevents rapid score manipulation
-- **Rate limiting** on stake API endpoints
+- **ClaimRateLimitGuard:** Blocks brute-force claim attacks using dynamic IP and Wallet tracking. Suspicious IPs/Wallets are auto-blocked.
+- **Minimum prediction intervals** (anti-chunking from migration 063).
+- **Score velocity clamping** prevents rapid score manipulation.
+- **Rate limiting** on stake API endpoints.
+- **Dynamic Empty-Pool Settle (v2.2):** The competition seeder daemon handles empty pools (0 stakes) in both `'pending'` and `'settling'` statuses, preventing stuck pools during network restarts.
 
 ### Fair Winner Determination
 Winners are ranked by **weighted_score** (lower = better):

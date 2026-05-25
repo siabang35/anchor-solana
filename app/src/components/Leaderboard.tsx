@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiFetch, supabase } from '@/lib/supabase';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 
 // Convert Weighted Score to a realistic graded percentage (0-100%)
 // We apply an exponential decay based on the time/entropy weighted score so scores fluctuate realistically in the 20%-98% range.
@@ -10,6 +11,36 @@ function getRealAccuracy(weightedScore: number | string | null): number {
     const wScore = Number(weightedScore);
     const accuracy = 98.0 * Math.exp(-wScore * 6);
     return Math.max(0, Math.min(99.9, accuracy));
+}
+
+function getSectorBg(sector: string): string {
+    const s = sector.toLowerCase();
+    if (s === 'crypto') return 'rgba(99, 102, 241, 0.12)';
+    if (s === 'tech') return 'rgba(59, 130, 246, 0.12)';
+    if (s === 'finance') return 'rgba(16, 185, 129, 0.12)';
+    if (s === 'politics') return 'rgba(239, 68, 68, 0.12)';
+    if (s === 'sports') return 'rgba(245, 158, 11, 0.12)';
+    return 'rgba(148, 163, 184, 0.12)';
+}
+
+function getSectorColor(sector: string): string {
+    const s = sector.toLowerCase();
+    if (s === 'crypto') return '#818cf8';
+    if (s === 'tech') return '#60a5fa';
+    if (s === 'finance') return '#34d399';
+    if (s === 'politics') return '#f87171';
+    if (s === 'sports') return '#fbbf24';
+    return '#94a3b8';
+}
+
+function getSectorBorder(sector: string): string {
+    const s = sector.toLowerCase();
+    if (s === 'crypto') return 'rgba(99, 102, 241, 0.2)';
+    if (s === 'tech') return 'rgba(59, 130, 246, 0.2)';
+    if (s === 'finance') return 'rgba(16, 185, 129, 0.2)';
+    if (s === 'politics') return 'rgba(239, 68, 68, 0.2)';
+    if (s === 'sports') return 'rgba(245, 158, 11, 0.2)';
+    return 'rgba(148, 163, 184, 0.2)';
 }
 
 interface LeaderboardEntry {
@@ -26,6 +57,7 @@ interface LeaderboardEntry {
     competition_id: string;
     status: string;
     deployed_at?: string;
+    sector?: string;
 }
 
 interface Props {
@@ -154,6 +186,12 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
 
     const hasWeighted = players.some(p => p.weighted_score !== null);
     const [isOpen, setIsOpen] = useState(true);
+    const isAnyActive = players.some(p => p.status === 'active');
+    const displayTitle = sector && sector !== 'all' && sector !== 'top'
+        ? `${sector.charAt(0).toUpperCase() + sector.slice(1)} Leaderboard`
+        : isAnyActive 
+            ? 'Live Leaderboard'
+            : 'Global AI Leaderboard (All-Time)';
 
     return (
         <div className="glass-card card-body animate-in" style={{ ...style, padding: 0, overflow: 'hidden' }}>
@@ -166,7 +204,7 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <h3 style={{ fontSize: '0.85rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>🏆</span> {sector && sector !== 'all' && sector !== 'top' ? `${sector.charAt(0).toUpperCase() + sector.slice(1)} Leaderboard` : 'Live Leaderboard'}
+                        <span>🏆</span> {displayTitle}
                     </h3>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -200,17 +238,16 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
                     </div>
 
             {/* Table Header */}
-            <div className="leaderboard-row" style={{
+            <div className={`leaderboard-row ${hasWeighted ? 'has-weighted' : 'no-weighted'}`} style={{
                 borderBottom: '1px solid var(--border-glass)',
                 paddingBottom: '0.5rem',
                 marginBottom: '0.25rem',
-                gridTemplateColumns: hasWeighted ? '40px 1fr 50px 80px 60px 40px' : '40px 1fr 60px 80px 40px'
             }}>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>#</span>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>AGENT</span>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>PREDS</span>
+                <span className="leaderboard-hide-mobile" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>PREDS</span>
                 {hasWeighted && (
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>W.SCORE</span>
+                    <span className="leaderboard-hide-mobile" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>W.SCORE</span>
                 )}
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>ACC</span>
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'center' }}>Δ</span>
@@ -222,7 +259,9 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
                 </div>
             ) : players.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '1rem' }}>
-                    <div style={{ fontSize: '1.2rem', marginBottom: '0.2rem' }}>🤖</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.4rem' }}>
+                        <Agents3DIcon size={18} />
+                    </div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                         No agents competing yet.
                     </div>
@@ -235,31 +274,59 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
 
                     return (
                         <div
-                            className="leaderboard-row"
+                            className={`leaderboard-row ${hasWeighted ? 'has-weighted' : 'no-weighted'}`}
                             key={`${player.agent_id}-${player.competition_id}`}
                             style={{
-                                opacity: player.status === 'active' ? 1 : 0.55,
+                                opacity: (isAnyActive && player.status !== 'active') ? 0.55 : 1,
                                 transition: 'all 0.5s ease',
                                 background: isFlash ? 'rgba(129,140,248,0.12)' : 'transparent',
                                 borderRadius: '8px',
-                                gridTemplateColumns: hasWeighted ? '40px 1fr 50px 80px 60px 40px' : '40px 1fr 60px 80px 40px'
                             }}
                         >
                             <span className={`rank ${rankStyle(player.rank)}`}>
                                 {rankEmoji(player.rank)}
                             </span>
-                            <span className="trader-name">
-                                {player.agent_name}
-                                <span style={{ opacity: 0.5, fontSize: '0.65em', marginLeft: '4px' }}>
+                            <span className="trader-name" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 600 }}>{player.agent_name}</span>
+                                <span style={{ opacity: 0.5, fontSize: '0.65em' }}>
                                     ({player.agent_id.slice(0, 4)})
                                 </span>
+                                {player.sector && (
+                                    <span style={{
+                                        fontSize: '0.55rem',
+                                        fontWeight: 700,
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        textTransform: 'uppercase',
+                                        background: getSectorBg(player.sector),
+                                        color: getSectorColor(player.sector),
+                                        border: `1px solid ${getSectorBorder(player.sector)}`,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                    }}>
+                                        {player.sector}
+                                    </span>
+                                )}
+                                <span style={{
+                                    fontSize: '0.5rem',
+                                    fontWeight: 700,
+                                    padding: '1px 4px',
+                                    borderRadius: '3px',
+                                    background: player.status === 'active' ? 'rgba(16,185,129,0.12)' : 'rgba(148,163,184,0.12)',
+                                    color: player.status === 'active' ? '#10b981' : '#94a3b8',
+                                    border: `1px solid ${player.status === 'active' ? 'rgba(16,185,129,0.2)' : 'rgba(148,163,184,0.2)'}`,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                }}>
+                                    {player.status === 'active' ? '● LIVE' : 'OFFLINE'}
+                                </span>
                             </span>
-                            <span style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: (player.prediction_count || 0) >= 3 ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
+                            <span className="leaderboard-hide-mobile" style={{ textAlign: 'right', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: (player.prediction_count || 0) >= 3 ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
                                 {player.prediction_count || 0}
                                 {belowMin && (player.prediction_count || 0) > 0 && <span style={{ color: 'var(--accent-amber)', marginLeft: '2px', fontSize: '0.6rem' }}>⚠</span>}
                             </span>
                             {hasWeighted && (
-                                <span style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: player.weighted_score !== null ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
+                                <span className="leaderboard-hide-mobile" style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: player.weighted_score !== null ? 'var(--accent-indigo)' : 'var(--text-muted)' }}>
                                     {player.weighted_score !== null ? player.weighted_score.toFixed(4) : '—'}
                                 </span>
                             )}

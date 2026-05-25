@@ -297,7 +297,7 @@ export class AgentsService {
 
         let query = supabase
             .from('agents')
-            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector)), pool_stakes(stake_amount, onchain_tx, verified_onchain, created_at), pool_winners(id, prize_amount, disburse_tx, claimed, rank, competition_id)', { count: 'exact' })
+            .select('*, agent_competition_entries(competition_id, brier_score, status, final_rank, competitions(title, sector, status)), pool_stakes(stake_amount, onchain_tx, verified_onchain, created_at), pool_winners(id, prize_amount, disburse_tx, claimed, rank, competition_id)', { count: 'exact' })
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -334,6 +334,7 @@ export class AgentsService {
                         competition_id: e.competition_id,
                         brier_score: e.brier_score,
                         status: e.status,
+                        competition_status: e.competitions?.status,
                         final_rank: e.final_rank,
                         title: e.competitions?.title,
                         sector: e.competitions?.sector,
@@ -860,6 +861,7 @@ export class AgentsService {
      */
     async getLeaderboard(competitionId?: string, sector?: string, limit: number = 20): Promise<any[]> {
         const supabase = this.supabaseService.getAdminClient();
+        let leaderboardEntries: any[] = [];
 
         // If competitionId provided, use the DB function for weighted ranking
         if (competitionId) {
@@ -869,7 +871,7 @@ export class AgentsService {
             });
 
             if (!error && data && data.length > 0) {
-                return data.map((row: any) => ({
+                leaderboardEntries = data.map((row: any) => ({
                     rank: row.rank_position,
                     agent_id: row.agent_id,
                     agent_name: row.agent_name,
@@ -897,7 +899,7 @@ export class AgentsService {
             });
 
             if (!error && data && data.length > 0) {
-                return data.map((row: any) => ({
+                leaderboardEntries = data.map((row: any) => ({
                     rank: row.rank_position,
                     agent_id: row.agent_id,
                     agent_name: row.agent_name,
@@ -917,85 +919,127 @@ export class AgentsService {
             }
         }
 
-        // Fallback: global leaderboard or direct query fallback
-        let selectStr = '*, agents(id, name, user_id, model, created_at), competitions(id, leaderboard_score_config(min_predictions))';
-        if (sector && sector !== 'all' && sector !== 'top') {
-            selectStr = '*, agents(id, name, user_id, model, created_at), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
-        }
+        // Fallback: global leaderboard or direct query fallback (or if RPCs returned no entries)
+        if (leaderboardEntries.length === 0) {
+            let selectStr = '*, agents(id, name, user_id, model, created_at), competitions(id, sector, leaderboard_score_config(min_predictions))';
+            if (sector && sector !== 'all' && sector !== 'top') {
+                selectStr = '*, agents(id, name, user_id, model, created_at), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
+            }
 
-        let query = supabase
-            .from('agent_competition_entries')
-            .select(selectStr)
-            .in('status', ['active', 'paused']);
+            let query = supabase
+                .from('agent_competition_entries')
+                .select(selectStr)
+                .in('status', ['active', 'paused']);
 
-        if (competitionId) {
-            query = query.eq('competition_id', competitionId);
-        }
+            if (competitionId) {
+                query = query.eq('competition_id', competitionId);
+            }
 
-        if (sector && sector !== 'all' && sector !== 'top') {
-            query = query.eq('competitions.sector', sector);
-        }
+            if (sector && sector !== 'all' && sector !== 'top') {
+                query = query.eq('competitions.sector', sector);
+            }
 
-        const { data, error } = await query;
+            let { data, error } = await query;
 
-        if (error) {
-            this.logger.error(`Failed to get leaderboard fallback: ${error.message}`);
-            return [];
-        }
+            if (!error && (!data || data.length === 0)) {
+                let fallbackQuery = supabase
+                    .from('agent_competition_entries')
+                    .select(selectStr)
+                    .in('status', ['completed', 'terminated']);
 
-        const mapped = (data || []).map((entry: any) => {
-            const config = entry.competitions?.leaderboard_score_config;
-            const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
-            return {
+                if (competitionId) {
+                    fallbackQuery = fallbackQuery.eq('competition_id', competitionId);
+                }
+
+                if (sector && sector !== 'all' && sector !== 'top') {
+                    fallbackQuery = fallbackQuery.eq('competitions.sector', sector);
+                }
+
+                const fallbackResult = await fallbackQuery;
+                if (!fallbackResult.error && fallbackResult.data && fallbackResult.data.length > 0) {
+                    data = fallbackResult.data;
+                }
+            }
+
+            if (error) {
+                this.logger.error(`Failed to get leaderboard fallback: ${error.message}`);
+                return [];
+            }
+
+            const mapped = (data || []).map((entry: any) => {
+                const config = entry.competitions?.leaderboard_score_config;
+                const minPreds = (Array.isArray(config) ? config[0]?.min_predictions : config?.min_predictions) || 3;
+                return {
+                    agent_id: entry.agent_id,
+                    agent_name: entry.agents?.name || 'Unknown',
+                    user_id: null,
+                    brier_score: entry.brier_score,
+                    weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
+                    prediction_count: entry.prediction_count || 0,
+                    last_scored_at: entry.last_scored_at,
+                    rank_trend: entry.rank_trend || 0,
+                    has_min_predictions: (entry.prediction_count || 0) >= minPreds,
+                    competition_id: entry.competition_id,
+                    status: entry.status,
+                    deployed_at: entry.agents?.created_at ? new Date(entry.agents.created_at).getTime() : 0,
+                };
+            });
+
+            // Smart sorting (simulates DB RPC order):
+            // 1. has_min_predictions DESC
+            // 2. weighted_score ASC (nulls last = 99.9999)
+            // 3. prediction_count DESC
+            // 4. deployed_at ASC
+            mapped.sort((a: any, b: any) => {
+                if (a.has_min_predictions !== b.has_min_predictions) {
+                    return a.has_min_predictions ? -1 : 1;
+                }
+                const scoreA = a.weighted_score !== null ? a.weighted_score : 99.9999;
+                const scoreB = b.weighted_score !== null ? b.weighted_score : 99.9999;
+                if (scoreA !== scoreB) {
+                    return scoreA - scoreB;
+                }
+                if (a.prediction_count !== b.prediction_count) {
+                    return b.prediction_count - a.prediction_count;
+                }
+                return a.deployed_at - b.deployed_at;
+            });
+
+            leaderboardEntries = mapped.slice(0, limit).map((entry: any, index: number) => ({
+                rank: index + 1,
                 agent_id: entry.agent_id,
-                agent_name: entry.agents?.name || 'Unknown',
-                user_id: null,
+                agent_name: entry.agent_name,
+                user_id: entry.user_id,
                 brier_score: entry.brier_score,
-                weighted_score: entry.weighted_score ? Number(entry.weighted_score) : null,
-                prediction_count: entry.prediction_count || 0,
+                weighted_score: entry.weighted_score,
+                prediction_count: entry.prediction_count,
                 last_scored_at: entry.last_scored_at,
-                rank_trend: entry.rank_trend || 0,
-                has_min_predictions: (entry.prediction_count || 0) >= minPreds,
+                rank_trend: entry.rank_trend,
+                has_min_predictions: entry.has_min_predictions,
                 competition_id: entry.competition_id,
                 status: entry.status,
-                deployed_at: entry.agents?.created_at ? new Date(entry.agents.created_at).getTime() : 0,
-            };
-        });
+            }));
+        }
 
-        // Smart sorting (simulates DB RPC order):
-        // 1. has_min_predictions DESC
-        // 2. weighted_score ASC (nulls last = 99.9999)
-        // 3. prediction_count DESC
-        // 4. deployed_at ASC
-        mapped.sort((a: any, b: any) => {
-            if (a.has_min_predictions !== b.has_min_predictions) {
-                return a.has_min_predictions ? -1 : 1;
+        // Fetch and map sectors for all entries
+        if (leaderboardEntries.length > 0) {
+            const compIds = [...new Set(leaderboardEntries.map(r => r.competition_id).filter(Boolean))];
+            if (compIds.length > 0) {
+                const { data: comps, error: compsErr } = await supabase
+                    .from('competitions')
+                    .select('id, sector')
+                    .in('id', compIds);
+                
+                if (!compsErr && comps) {
+                    const sectorMap = new Map(comps.map(c => [c.id, c.sector]));
+                    leaderboardEntries.forEach(r => {
+                        r.sector = sectorMap.get(r.competition_id) || null;
+                    });
+                }
             }
-            const scoreA = a.weighted_score !== null ? a.weighted_score : 99.9999;
-            const scoreB = b.weighted_score !== null ? b.weighted_score : 99.9999;
-            if (scoreA !== scoreB) {
-                return scoreA - scoreB;
-            }
-            if (a.prediction_count !== b.prediction_count) {
-                return b.prediction_count - a.prediction_count;
-            }
-            return a.deployed_at - b.deployed_at;
-        });
+        }
 
-        return mapped.slice(0, limit).map((entry: any, index: number) => ({
-            rank: index + 1,
-            agent_id: entry.agent_id,
-            agent_name: entry.agent_name,
-            user_id: entry.user_id,
-            brier_score: entry.brier_score,
-            weighted_score: entry.weighted_score,
-            prediction_count: entry.prediction_count,
-            last_scored_at: entry.last_scored_at,
-            rank_trend: entry.rank_trend,
-            has_min_predictions: entry.has_min_predictions,
-            competition_id: entry.competition_id,
-            status: entry.status,
-        }));
+        return leaderboardEntries;
     }
 
     /**

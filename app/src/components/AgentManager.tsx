@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import type { ForecasterAgent } from '@/hooks/useRealtimeAgents';
 import { apiFetch } from '@/lib/supabase';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'terminated';
 
@@ -21,7 +22,7 @@ const STATUS_BADGE: Record<string, { label: string; color: string; bg: string; i
     paused:     { label: 'Paused',     color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  icon: '⏸' },
     terminated: { label: 'Stopped',    color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '⏹' },
     exhausted:  { label: 'Exhausted',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)',  icon: '⚡' },
-    error:      { label: 'Error',      color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '⚠' },
+    error:      { label: 'Stopped',    color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   icon: '⏹' },
 };
 
 const FILTER_TABS: { key: StatusFilter; label: string; icon: string }[] = [
@@ -89,6 +90,9 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
 
     const filtered = useMemo(() => {
         if (filter === 'all') return forecasters;
+        if (filter === 'terminated') {
+            return forecasters.filter(a => a.status === 'terminated' || a.status === 'exhausted' || a.status === 'error');
+        }
         return forecasters.filter(a => a.status === filter);
     }, [forecasters, filter]);
 
@@ -96,7 +100,7 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
         all: forecasters.length,
         active: forecasters.filter(a => a.status === 'active').length,
         paused: forecasters.filter(a => a.status === 'paused').length,
-        terminated: forecasters.filter(a => a.status === 'terminated' || a.status === 'exhausted').length,
+        terminated: forecasters.filter(a => a.status === 'terminated' || a.status === 'exhausted' || a.status === 'error').length,
     }), [forecasters]);
 
     // Fetch history when an agent card is expanded
@@ -220,7 +224,9 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                     flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     padding: '2.5rem 1rem', color: 'var(--text-muted)',
                 }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🤖</div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                        <Agents3DIcon size={36} />
+                    </div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>
                         {filter === 'all' ? 'No agents deployed yet' : `No ${filter} agents`}
                     </div>
@@ -270,8 +276,8 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                             <div style={{
                                                 width: '32px', height: '32px', borderRadius: '50%',
                                                 background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem',
-                                            }}>🤖</div>
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}><Agents3DIcon size={18} /></div>
                                             <div>
                                                 <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                                     {agent.name}
@@ -504,7 +510,7 @@ export default function AgentManager({ forecasters, loading: initLoading, onPaus
                                                     {mainComp.title || `Competition ID: ${mainComp.competition_id.slice(0, 8)}...`}
                                                 </div>
                                                 <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', marginTop: '0.2rem', display: 'flex', gap: '0.5rem' }}>
-                                                    <span>Status: {mainComp.status === 'active' ? '🟢 Live' : mainComp.status === 'completed' ? '🏁 Ended' : mainComp.status}</span>
+                                                    <span>Status: {mainComp.competition_status ? (mainComp.competition_status === 'active' ? '🟢 Live' : '🏁 Ended') : (mainComp.status === 'active' ? '🟢 Live' : '🏁 Ended')}</span>
                                                     {mainComp.brier_score !== null && <span>Brier Score: {mainComp.brier_score.toFixed(3)}</span>}
                                                     {mainComp.final_rank && <span>Rank: #{mainComp.final_rank}</span>}
                                                 </div>

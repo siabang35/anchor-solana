@@ -1410,29 +1410,28 @@ export class RealtimeCompetitionSeederService {
             // --- PHASE 1: Find expired competitions that need proper settlement ---
             //     The DB trigger may have already marked them as settled,
             //     but we still need to do pool distribution + prize disbursement.
-            const { data: expired, error } = await supabase
-                .from('competitions')
-                .select('id, title, sector, time_horizon, outcomes, status')
-                .or('status.eq.active,status.eq.settled')
-                .lt('competition_end', new Date().toISOString())
-                .is('winning_outcome', null); // Only unprocessed ones
+            //     Instead of querying competitions with null winning outcome, we fetch all
+            //     pending/settling pools whose competition is past its end time.
+            const { data: pendingPools, error: poolError } = await supabase
+                .from('competition_pools')
+                .select('competition_id, competitions(id, title, sector, time_horizon, outcomes, status, winning_outcome, competition_end)')
+                .in('settlement_status', ['pending', 'settling']);
 
-            // Also find any that were auto-settled by DB trigger but not pool-settled
-            const { data: autoSettled } = await supabase
-                .from('competitions')
-                .select('id, title, sector, time_horizon, outcomes')
-                .eq('status', 'settled')
-                .is('winning_outcome', null)
-                .lt('competition_end', new Date().toISOString());
+            if (poolError) {
+                this.logger.error(`Failed to fetch pending pools: ${poolError.message}`);
+            }
 
-            const toProcess = [
-                ...(expired || []),
-                ...(autoSettled || []),
-            ];
+            const expiredCompetitions = (pendingPools || [])
+                .map((p: any) => p.competitions)
+                .filter((comp: any) => {
+                    if (!comp) return false;
+                    const isExpired = new Date(comp.competition_end) < new Date();
+                    return isExpired;
+                });
 
             // Deduplicate by id
             const seen = new Set<string>();
-            const uniqueToProcess = toProcess.filter(c => {
+            const uniqueToProcess = expiredCompetitions.filter((c: any) => {
                 if (seen.has(c.id)) return false;
                 seen.add(c.id);
                 return true;
@@ -1448,9 +1447,12 @@ export class RealtimeCompetitionSeederService {
 
             for (const comp of uniqueToProcess) {
                 // Anti-manipulation: CSPRNG outcome (not predictable Math.random)
-                let winningOutcome = 0;
-                if (comp.outcomes && Array.isArray(comp.outcomes) && comp.outcomes.length > 0) {
-                    winningOutcome = AntiManipulationUtil.secureRandomOutcome(comp.outcomes.length);
+                let winningOutcome = comp.winning_outcome;
+                if (winningOutcome === null || winningOutcome === undefined) {
+                    winningOutcome = 0;
+                    if (comp.outcomes && Array.isArray(comp.outcomes) && comp.outcomes.length > 0) {
+                        winningOutcome = AntiManipulationUtil.secureRandomOutcome(comp.outcomes.length);
+                    }
                 }
 
                 // Generate settlement integrity hash
@@ -1504,7 +1506,7 @@ export class RealtimeCompetitionSeederService {
                                 .select('id, total_staked, settlement_status')
                                 .eq('competition_id', comp.id)
                                 .single();
-                            if (poolCheck && poolCheck.settlement_status === 'pending' && Number(poolCheck.total_staked) === 0) {
+                            if (poolCheck && (poolCheck.settlement_status === 'pending' || poolCheck.settlement_status === 'settling') && Number(poolCheck.total_staked) === 0) {
                                 await supabase
                                     .from('competition_pools')
                                     .update({ settlement_status: 'settled', settled_at: new Date().toISOString(), settled_by: 'system_no_stakes' })

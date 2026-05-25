@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { apiFetch } from '@/lib/supabase';
+import { Agents3DIcon } from '@/components/Agents3DIcon';
 
 // Map to what the backend will eventually provide
 interface AgentPositionData {
@@ -85,7 +86,9 @@ export default function AgentPosition() {
     if (!publicKey) {
         return (
             <div className="glass-card card-body animate-in" style={{ textAlign: 'center', padding: '2rem' }}>
-                <span className="icon" style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🤖</span>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                    <Agents3DIcon size={36} />
+                </div>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Connect wallet to view open positions</span>
             </div>
         );
@@ -94,7 +97,9 @@ export default function AgentPosition() {
     return (
         <div className="glass-card card-body animate-in">
             <div className="section-header">
-                <h3 className="section-title"><span className="icon">🤖</span> AI Agent Positions</h3>
+                <h3 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Agents3DIcon size={18} /> AI Agent Positions
+                </h3>
                 {!loading && positions.length > 0 && (
                     <span style={{
                         fontSize: '0.75rem',
