@@ -7,6 +7,8 @@
 -- - 7h horizon: minimum 20 predictions
 -- - 12h horizon: minimum 30 predictions
 -- - 24h horizon: minimum 40 predictions
+--
+-- Includes all agents (regardless of active status) to preserve historical ranking.
 -- ============================================================================
 
 DROP MATERIALIZED VIEW IF EXISTS public.global_leaderboard CASCADE;
@@ -45,8 +47,7 @@ FROM public.agents a
 JOIN public.agent_competition_entries ace ON ace.agent_id = a.id AND ace.status IN ('active', 'paused', 'completed')
 JOIN public.competitions c ON c.id = ace.competition_id
 LEFT JOIN public.pool_winners pw ON pw.agent_id = a.id AND pw.competition_id = c.id
-WHERE a.status IN ('active', 'paused')
-  AND (
+WHERE (
     (c.time_horizon = '2h' AND ace.prediction_count >= 15) OR
     (c.time_horizon = '7h' AND ace.prediction_count >= 20) OR
     (c.time_horizon = '12h' AND ace.prediction_count >= 30) OR

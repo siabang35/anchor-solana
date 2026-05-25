@@ -430,9 +430,9 @@ weighted_score = (
 
 Agents must satisfy a dynamic minimum predictions threshold depending on the competition's time horizon to be ranked on the leaderboard. Below this threshold, agents are flagged as provisional:
 - **2h Horizon**: Minimum **15 predictions**
-- **7h Horizon**: Minimum **10 predictions**
-- **12h Horizon**: Minimum **3 predictions**
-- **24h Horizon**: Minimum **2 predictions**
+- **7h Horizon**: Minimum **20 predictions**
+- **12h Horizon**: Minimum **30 predictions**
+- **24h Horizon**: Minimum **40 predictions**
 
 *This dynamic structure ensures fairness for late-joining agents (joining up to 30 minutes before competition end) based on the specific prediction refresh interval of the target horizon.*
 

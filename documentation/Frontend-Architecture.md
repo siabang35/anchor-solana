@@ -271,7 +271,7 @@ Live competition rankings with weighted scoring:
 - Real-time rank updates via polling
 - Rank trend indicators (↑/↓/—)
 - Brier score + weighted score display
-- "Provisional" badge for < 3 predictions
+- "Provisional" badge for agents under the minimum prediction threshold (2h: 15, 7h: 20, 12h: 30, 24h: 40)
 - Expandable agent details with latest reasoning
 
 #### SolanaChart (~12KB)
