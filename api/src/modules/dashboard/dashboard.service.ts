@@ -149,9 +149,14 @@ export class DashboardService {
         try {
             const wallets = await this.usersService.getWalletAddresses(userId);
             const primarySolWallet = wallets.find((w: any) => w.chain === 'solana');
-            if (primarySolWallet) {
-                const balanceLamports = await connection.getBalance(new PublicKey(primarySolWallet.address));
-                walletBalanceSol = balanceLamports / 1000000000;
+            if (primarySolWallet && primarySolWallet.address) {
+                try {
+                    const pubkey = new PublicKey(primarySolWallet.address);
+                    const balanceLamports = await connection.getBalance(pubkey);
+                    walletBalanceSol = balanceLamports / 1000000000;
+                } catch (pubkeyErr: any) {
+                    this.logger.warn(`Invalid Solana address format "${primarySolWallet.address}": ${pubkeyErr.message}`);
+                }
             }
         } catch (err: any) {
             this.logger.error(`Failed to get Solana wallet balance: ${err.message}`);

@@ -89,6 +89,23 @@ function DashboardView() {
     const abortRef = useRef<AbortController | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [claimingId, setClaimingId] = useState<string | null>(null);
+    const [resumeAgent, setResumeAgent] = useState<{ id: string; name: string } | null>(null);
+    const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
+    const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+
+    const toggleAgentTournaments = (agentId: string) => {
+        setExpandedAgents(prev => ({
+            ...prev,
+            [agentId]: !prev[agentId]
+        }));
+    };
+
+    const toggleAgentCard = (agentId: string) => {
+        setExpandedCards(prev => ({
+            ...prev,
+            [agentId]: !prev[agentId]
+        }));
+    };
 
     const handleClaim = async (winnerId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -476,9 +493,12 @@ function DashboardView() {
                                         </Link>
                                     </div>
                                 ) : (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '1rem' }}>
                                         {forecasters.map((agent) => {
                                             const promptPct = (agent.prompts_used / agent.max_free_prompts) * 100;
+                                            const isCardExpanded = !!expandedCards[agent.id];
+                                            const totalStake = (agent.pool_stakes || []).reduce((sum: number, s: any) => sum + Number(s.stake_amount), 0);
+                                            const totalWon = (agent.pool_winners || []).reduce((sum: number, w: any) => sum + Number(w.prize_amount), 0);
                                             return (
                                                 <div 
                                                     key={agent.id}
@@ -519,9 +539,9 @@ function DashboardView() {
                                                                 <span style={{
                                                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                                                     fontSize: '0.65rem', fontWeight: 700, padding: '3px 8px', borderRadius: '6px',
-                                                                    background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)'
+                                                                    background: 'rgba(148,163,184,0.12)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)'
                                                                 }}>
-                                                                    PAUSED
+                                                                    STOPPED
                                                                 </span>
                                                             )}
                                                             {agent.status === 'terminated' && (
@@ -542,269 +562,338 @@ function DashboardView() {
                                                                     {agent.status === 'error' ? 'STOPPED' : agent.status.toUpperCase()}
                                                                 </span>
                                                             )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* System Prompt / Target */}
-                                                    {agent.system_prompt && (
-                                                        <div style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--db-border)', color: 'var(--db-text-secondary)', fontStyle: 'italic' }}>
-                                                            &ldquo;{agent.system_prompt.length > 120 ? agent.system_prompt.slice(0, 120) + '...' : agent.system_prompt}&rdquo;
-                                                        </div>
-                                                    )}
-
-                                                    {/* Quota Progress */}
-                                                    <div>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--db-text-muted)', marginBottom: '4px', fontWeight: 600 }}>
-                                                            <span>Quota Free Prompts</span>
-                                                            <span>{agent.prompts_used} / {agent.max_free_prompts}</span>
-                                                        </div>
-                                                        <div style={{ height: '6px', borderRadius: '3px', background: 'var(--db-border)', overflow: 'hidden' }}>
-                                                            <div style={{ 
-                                                                height: '100%', 
-                                                                width: `${Math.min(100, promptPct)}%`, 
-                                                                background: promptPct >= 90 ? 'var(--accent-pink, #ec4899)' : 'var(--accent-indigo, #6366f1)',
-                                                                borderRadius: 'inherit',
-                                                                transition: 'width 0.3s ease'
-                                                            }} />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Competitions */}
-                                                    {agent.competitions && agent.competitions.length > 0 ? (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                            <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontWeight: 600 }}>Enrolled Tournaments:</span>
-                                                            {agent.competitions.map((comp) => (
-                                                                <div key={comp.competition_id} style={{ 
-                                                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                                    padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.01)',
-                                                                    border: '1px solid var(--db-border)', fontSize: '0.75rem' 
-                                                                }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                        <span style={{ textTransform: 'capitalize', fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)', border: '1px solid rgba(99,102,241,0.15)' }}>{comp.sector || 'global'}</span>
-                                                                        <span style={{ color: 'var(--db-text)', fontWeight: 500 }}>{comp.title || 'Competition'}</span>
-                                                                    </div>
-                                                                    <span style={{ 
-                                                                        fontFamily: 'var(--font-mono)', 
-                                                                        fontWeight: 600,
-                                                                        color: comp.brier_score !== null ? '#10b981' : 'var(--db-text-muted)' 
-                                                                    }}>
-                                                                        {comp.brier_score !== null ? `Brier: ${comp.brier_score.toFixed(4)}` : 'Evaluating...'}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontStyle: 'italic' }}>Not competing in any tournaments.</span>
-                                                    )}
-
-                                                    {/* On-Chain Stakes */}
-                                                    {(() => {
-                                                        const stakes = agent.pool_stakes || [];
-                                                        if (stakes.length === 0) return null;
-                                                        const bestStake = stakes.reduce((best: any, s: any) => {
-                                                            if (!best) return s;
-                                                            if (s.verified_onchain && !best.verified_onchain) return s;
-                                                            if (!s.verified_onchain && best.verified_onchain) return best;
-                                                            if (s.onchain_tx && !best.onchain_tx) return s;
-                                                            if (!s.onchain_tx && best.onchain_tx) return best;
-                                                            return Number(s.stake_amount) > Number(best.stake_amount) ? s : best;
-                                                        }, null);
-                                                        if (!bestStake) return null;
-                                                        const isVerified = bestStake.verified_onchain || !!bestStake.onchain_tx;
-                                                        return (
-                                                            <div style={{
-                                                                background: isVerified ? 'rgba(16,185,129,0.05)' : 'rgba(245,158,11,0.05)',
-                                                                border: `1px solid ${isVerified ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
-                                                                borderRadius: '8px', padding: '0.6rem',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                                marginTop: '0.25rem'
-                                                            }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                    <span style={{ fontSize: '0.6rem', color: isVerified ? '#10b981' : '#f59e0b', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                        {isVerified ? '✅' : '🔗'} On-Chain Stake
-                                                                        {isVerified && (
-                                                                            <span style={{
-                                                                                fontSize: '0.5rem', padding: '1px 4px',
-                                                                                borderRadius: '3px', background: 'rgba(16,185,129,0.15)',
-                                                                                color: '#10b981', fontWeight: 800,
-                                                                            }}>VERIFIED</span>
-                                                                        )}
-                                                                    </span>
-                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--db-text)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                                                                        {Number(bestStake.stake_amount).toFixed(4)} SOL Staked
-                                                                    </span>
-                                                                </div>
-                                                                {bestStake.onchain_tx ? (
-                                                                    <a 
-                                                                        href={`https://solscan.io/tx/${bestStake.onchain_tx}?cluster=devnet`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        style={{
-                                                                            fontSize: '0.65rem', color: '#10b981', textDecoration: 'none',
-                                                                            display: 'flex', alignItems: 'center', gap: '4px',
-                                                                            padding: '5px 10px', background: 'rgba(16,185,129,0.1)', borderRadius: '6px',
-                                                                            fontWeight: 600, border: '1px solid rgba(16,185,129,0.2)', transition: 'all 0.2s'
-                                                                        }}
-                                                                    >
-                                                                        View Stake ↗
-                                                                    </a>
-                                                                ) : (
-                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)' }}>Pending On-Chain</span>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })()}
-
-                                                    {/* On-Chain Claims */}
-                                                    {agent.pool_winners && agent.pool_winners.length > 0 && (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
-                                                            {agent.pool_winners.map((winner, idx) => {
-                                                                const comp = agent.competitions?.find((c: any) => c.competition_id === winner.competition_id);
-                                                                return (
-                                                                    <div key={winner.id || idx} style={{
-                                                                        background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(245,158,11,0.04) 100%)', 
-                                                                        border: '1px solid rgba(251,191,36,0.25)',
-                                                                        borderRadius: '8px', padding: '0.6rem',
-                                                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                                        boxShadow: '0 2px 8px rgba(251,191,36,0.05)'
-                                                                    }}>
-                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                                            <span style={{ fontSize: '0.6rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                                                <span>{winner.rank === 1 ? '🥇' : winner.rank === 2 ? '🥈' : winner.rank === 3 ? '🥉' : '🏆'}</span> PRIZE WON: {comp?.sector || 'COMPETITION'}
-                                                                            </span>
-                                                                            <span style={{ fontSize: '0.78rem', color: 'var(--db-text)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                                                                                +{Number(winner.prize_amount).toFixed(4)} SOL
-                                                                            </span>
-                                                                            {comp?.title && (
-                                                                                <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)', fontWeight: 500, marginTop: '1px' }}>
-                                                                                    {comp.title}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        
-                                                                        {winner.disburse_tx ? (
-                                                                            <a 
-                                                                                href={`https://solscan.io/tx/${winner.disburse_tx}?cluster=devnet`}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                style={{
-                                                                                    fontSize: '0.65rem', color: '#fbbf24', textDecoration: 'none',
-                                                                                    display: 'flex', alignItems: 'center', gap: '4px',
-                                                                                    padding: '5px 10px', background: 'rgba(251,191,36,0.12)', borderRadius: '6px',
-                                                                                    fontWeight: 600, border: '1px solid rgba(251,191,36,0.2)', transition: 'all 0.2s'
-                                                                                }}
-                                                                            >
-                                                                                View Payout TX ↗
-                                                                            </a>
-                                                                        ) : !winner.claimed && winner.id ? (
-                                                                            <button 
-                                                                                onClick={(e) => handleClaim(winner.id, e)}
-                                                                                disabled={claimingId === winner.id}
-                                                                                style={{
-                                                                                    fontSize: '0.65rem', color: '#fff', textDecoration: 'none',
-                                                                                    display: 'flex', alignItems: 'center', gap: '4px',
-                                                                                    padding: '5px 12px', background: '#10b981', borderRadius: '6px',
-                                                                                    fontWeight: 600, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
-                                                                                    boxShadow: '0 2px 6px rgba(16,185,129,0.2)'
-                                                                                }}
-                                                                            >
-                                                                                {claimingId === winner.id ? 'Claiming...' : 'Claim Reward 💰'}
-                                                                            </button>
-                                                                        ) : null}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Latest Reasoning */}
-                                                    {agent.latest_reasoning && (
-                                                        <div style={{ 
-                                                            padding: '8px 10px', borderRadius: '8px', 
-                                                            background: 'rgba(0,0,0,0.05)', border: '1px solid var(--db-border)',
-                                                            fontSize: '0.7rem', color: 'var(--db-text-muted)',
-                                                            maxHeight: '60px', overflowY: 'auto'
-                                                        }}>
-                                                            <strong style={{ color: 'var(--db-text)' }}>Latest Reasoning: </strong>
-                                                            {agent.latest_reasoning}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Action Controls */}
-                                                    <div style={{ 
-                                                        display: 'flex', 
-                                                        justifyContent: 'flex-end', 
-                                                        gap: '0.5rem', 
-                                                        marginTop: '0.5rem', 
-                                                        paddingTop: '0.75rem', 
-                                                        borderTop: '1px solid var(--db-border)' 
-                                                    }}>
-                                                        {agent.status === 'active' && (
-                                                            <>
-                                                                <button 
-                                                                    onClick={() => pauseForecaster(agent.id)}
-                                                                    style={{
-                                                                        padding: '5px 12px', borderRadius: '8px',
-                                                                        border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.1)',
-                                                                        color: '#f59e0b', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
-                                                                    }}
-                                                                >
-                                                                    ⏸ Pause
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => stopForecaster(agent.id)}
-                                                                    style={{
-                                                                        padding: '5px 12px', borderRadius: '8px',
-                                                                        border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
-                                                                        color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
-                                                                    }}
-                                                                >
-                                                                    🛑 Stop
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                        {agent.status === 'paused' && (
-                                                            <>
-                                                                <button 
-                                                                    onClick={() => resumeForecaster(agent.id)}
-                                                                    style={{
-                                                                        padding: '5px 12px', borderRadius: '8px',
-                                                                        border: '1px solid rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.1)',
-                                                                        color: '#10b981', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
-                                                                    }}
-                                                                >
-                                                                    ▶ Resume
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => stopForecaster(agent.id)}
-                                                                    style={{
-                                                                        padding: '5px 12px', borderRadius: '8px',
-                                                                        border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
-                                                                        color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                                                                        display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
-                                                                    }}
-                                                                >
-                                                                    🛑 Stop
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                        {agent.status === 'terminated' && (
                                                             <button 
-                                                                onClick={() => deleteForecaster(agent.id)}
+                                                                onClick={() => toggleAgentCard(agent.id)}
                                                                 style={{
-                                                                    padding: '5px 12px', borderRadius: '8px',
-                                                                    border: '1px solid var(--db-border)', background: 'rgba(148,163,184,0.06)',
-                                                                    color: 'var(--db-text-muted)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
-                                                                    display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                    background: 'rgba(255,255,255,0.05)',
+                                                                    border: '1px solid var(--db-border)',
+                                                                    borderRadius: '8px',
+                                                                    padding: '4px 8px',
+                                                                    fontSize: '0.65rem',
+                                                                    color: 'var(--db-text)',
+                                                                    cursor: 'pointer',
+                                                                    fontWeight: 600,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    marginLeft: '4px'
                                                                 }}
                                                             >
-                                                                🗑 Delete
+                                                                {isCardExpanded ? 'Collapse ▴' : 'Expand ▾'}
                                                             </button>
-                                                        )}
+                                                        </div>
                                                     </div>
+
+                                                    {/* Collapsed Summary Row */}
+                                                    {!isCardExpanded && (
+                                                        <div style={{ 
+                                                            display: 'flex', 
+                                                            gap: '8px', 
+                                                            flexWrap: 'wrap',
+                                                            marginTop: '2px',
+                                                            fontSize: '0.7rem'
+                                                        }}>
+                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--db-border)', color: 'var(--db-text-secondary)' }}>
+                                                                🏆 <strong>{agent.competitions?.length || 0}</strong> Tournaments
+                                                            </span>
+                                                            {totalStake > 0 && (
+                                                                <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.15)', color: '#10b981' }}>
+                                                                    🔗 <strong>{totalStake.toFixed(2)} SOL</strong> Staked
+                                                                </span>
+                                                            )}
+                                                            {totalWon > 0 && (
+                                                                <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.15)', color: '#fbbf24' }}>
+                                                                    💰 <strong>{totalWon.toFixed(2)} SOL</strong> Won
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Expandable Details Area */}
+                                                    {isCardExpanded && (
+                                                        <>
+                                                            {/* System Prompt / Target */}
+                                                            {agent.system_prompt && (
+                                                                <div style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--db-border)', color: 'var(--db-text-secondary)', fontStyle: 'italic' }}>
+                                                                    &ldquo;{agent.system_prompt.length > 120 ? agent.system_prompt.slice(0, 120) + '...' : agent.system_prompt}&rdquo;
+                                                                </div>
+                                                            )}
+
+                                                            {/* Quota Progress */}
+                                                            <div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--db-text-muted)', marginBottom: '4px', fontWeight: 600 }}>
+                                                                    <span>Quota Free Prompts</span>
+                                                                    <span>{agent.prompts_used} / {agent.max_free_prompts}</span>
+                                                                </div>
+                                                                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--db-border)', overflow: 'hidden' }}>
+                                                                    <div style={{ 
+                                                                        height: '100%', 
+                                                                        width: `${Math.min(100, promptPct)}%`, 
+                                                                        background: promptPct >= 90 ? 'var(--accent-pink, #ec4899)' : 'var(--accent-indigo, #6366f1)',
+                                                                        borderRadius: 'inherit',
+                                                                        transition: 'width 0.3s ease'
+                                                                    }} />
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Competitions */}
+                                                            {agent.competitions && agent.competitions.length > 0 ? (() => {
+                                                                const isExpanded = !!expandedAgents[agent.id];
+                                                                return (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontWeight: 600 }}>Enrolled Tournaments ({agent.competitions.length}):</span>
+                                                                            {agent.competitions.length > 2 && (
+                                                                                <button 
+                                                                                    onClick={() => toggleAgentTournaments(agent.id)}
+                                                                                    style={{
+                                                                                        background: 'transparent',
+                                                                                        border: 'none',
+                                                                                        color: 'var(--accent-indigo, #6366f1)',
+                                                                                        fontSize: '0.7rem',
+                                                                                        fontWeight: 600,
+                                                                                        cursor: 'pointer',
+                                                                                        display: 'flex',
+                                                                                        alignItems: 'center',
+                                                                                        gap: '2px',
+                                                                                        padding: '2px 6px',
+                                                                                        borderRadius: '4px'
+                                                                                    }}
+                                                                                >
+                                                                                    {isExpanded ? 'Show Less ▴' : `Show More (${agent.competitions.length - 2}) ▾`}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                        {(isExpanded ? agent.competitions : agent.competitions.slice(0, 2)).map((comp) => (
+                                                                            <div key={comp.competition_id} style={{ 
+                                                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                                                padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.01)',
+                                                                                border: '1px solid var(--db-border)', fontSize: '0.75rem',
+                                                                                minWidth: 0
+                                                                            }}>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', minWidth: 0, flex: 1, marginRight: '8px' }}>
+                                                                                    <span style={{ textTransform: 'capitalize', fontSize: '0.65rem', padding: '1px 4px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-indigo)', border: '1px solid rgba(99,102,241,0.15)', flexShrink: 0 }}>{comp.sector || 'global'}</span>
+                                                                                    <span style={{ color: 'var(--db-text)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0 }}>{comp.title || 'Competition'}</span>
+                                                                                </div>
+                                                                                <span style={{ 
+                                                                                    fontFamily: 'var(--font-mono)', 
+                                                                                    fontWeight: 600,
+                                                                                    color: comp.brier_score !== null ? '#10b981' : 'var(--db-text-muted)',
+                                                                                    flexShrink: 0
+                                                                                }}>
+                                                                                    {comp.brier_score !== null ? `Brier: ${comp.brier_score.toFixed(4)}` : 'Evaluating...'}
+                                                                                </span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                );
+                                                            })() : (
+                                                                <span style={{ fontSize: '0.7rem', color: 'var(--db-text-muted)', fontStyle: 'italic' }}>Not competing in any tournaments.</span>
+                                                            )}
+
+                                                            {/* On-Chain Stakes */}
+                                                            {(() => {
+                                                                const stakes = agent.pool_stakes || [];
+                                                                if (stakes.length === 0) return null;
+                                                                const bestStake = stakes.reduce((best: any, s: any) => {
+                                                                    if (!best) return s;
+                                                                    if (s.verified_onchain && !best.verified_onchain) return s;
+                                                                    if (!s.verified_onchain && best.verified_onchain) return best;
+                                                                    if (s.onchain_tx && !best.onchain_tx) return s;
+                                                                    if (!s.onchain_tx && best.onchain_tx) return best;
+                                                                    return Number(s.stake_amount) > Number(best.stake_amount) ? s : best;
+                                                                }, null);
+                                                                if (!bestStake) return null;
+                                                                const isVerified = bestStake.verified_onchain || !!bestStake.onchain_tx;
+                                                                return (
+                                                                    <div style={{
+                                                                        background: isVerified ? 'rgba(16,185,129,0.05)' : 'rgba(245,158,11,0.05)',
+                                                                        border: `1px solid ${isVerified ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                                                                        borderRadius: '8px', padding: '0.6rem',
+                                                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                        marginTop: '0.25rem',
+                                                                        minWidth: 0
+                                                                    }}>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1, marginRight: '8px' }}>
+                                                                            <span style={{ fontSize: '0.6rem', color: isVerified ? '#10b981' : '#f59e0b', textTransform: 'uppercase', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                                                                {isVerified ? '✅' : '🔗'} On-Chain Stake
+                                                                                {isVerified && (
+                                                                                    <span style={{
+                                                                                        fontSize: '0.5rem', padding: '1px 4px',
+                                                                                        borderRadius: '3px', background: 'rgba(16,185,129,0.15)',
+                                                                                        color: '#10b981', fontWeight: 800,
+                                                                                    }}>VERIFIED</span>
+                                                                                )}
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.75rem', color: 'var(--db-text)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                                                                {Number(bestStake.stake_amount).toFixed(4)} SOL Staked
+                                                                            </span>
+                                                                        </div>
+                                                                        <div style={{ flexShrink: 0 }}>
+                                                                            {bestStake.onchain_tx ? (
+                                                                                <a 
+                                                                                    href={`https://solscan.io/tx/${bestStake.onchain_tx}?cluster=devnet`}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    style={{
+                                                                                        fontSize: '0.65rem', color: '#10b981', textDecoration: 'none',
+                                                                                        display: 'flex', alignItems: 'center', gap: '4px',
+                                                                                        padding: '5px 10px', background: 'rgba(16,185,129,0.1)', borderRadius: '6px',
+                                                                                        fontWeight: 600, border: '1px solid rgba(16,185,129,0.2)', transition: 'all 0.2s'
+                                                                                    }}
+                                                                                >
+                                                                                    View Stake ↗
+                                                                                </a>
+                                                                            ) : (
+                                                                                <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)' }}>Pending On-Chain</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
+
+                                                            {/* On-Chain Claims */}
+                                                            {agent.pool_winners && agent.pool_winners.length > 0 && (
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                                                    {agent.pool_winners.map((winner, idx) => {
+                                                                        const comp = agent.competitions?.find((c: any) => c.competition_id === winner.competition_id);
+                                                                        return (
+                                                                            <div key={winner.id || idx} style={{
+                                                                                background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(245,158,11,0.04) 100%)', 
+                                                                                border: '1px solid rgba(251,191,36,0.25)',
+                                                                                borderRadius: '8px', padding: '0.6rem',
+                                                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                                                boxShadow: '0 2px 8px rgba(251,191,36,0.05)',
+                                                                                minWidth: 0
+                                                                            }}>
+                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1, marginRight: '8px' }}>
+                                                                                    <span style={{ fontSize: '0.6rem', color: '#fbbf24', textTransform: 'uppercase', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                                                                                        <span>{winner.rank === 1 ? '🥇' : winner.rank === 2 ? '🥈' : winner.rank === 3 ? '🥉' : '🏆'}</span> PRIZE WON: {comp?.sector || 'COMPETITION'}
+                                                                                    </span>
+                                                                                    <span style={{ fontSize: '0.78rem', color: 'var(--db-text)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                                                                                        +{Number(winner.prize_amount).toFixed(4)} SOL
+                                                                                    </span>
+                                                                                    {comp?.title && (
+                                                                                        <span style={{ fontSize: '0.6rem', color: 'var(--db-text-muted)', fontWeight: 500, marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                            {comp.title}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                
+                                                                                <div style={{ flexShrink: 0 }}>
+                                                                                    {winner.disburse_tx ? (
+                                                                                        <a 
+                                                                                            href={`https://solscan.io/tx/${winner.disburse_tx}?cluster=devnet`}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            style={{
+                                                                                                fontSize: '0.65rem', color: '#fbbf24', textDecoration: 'none',
+                                                                                                display: 'flex', alignItems: 'center', gap: '4px',
+                                                                                                padding: '5px 10px', background: 'rgba(251,191,36,0.12)', borderRadius: '6px',
+                                                                                                fontWeight: 600, border: '1px solid rgba(251,191,36,0.2)', transition: 'all 0.2s'
+                                                                                            }}
+                                                                                        >
+                                                                                            View Payout TX ↗
+                                                                                        </a>
+                                                                                    ) : !winner.claimed && winner.id ? (
+                                                                                        <button 
+                                                                                            onClick={(e) => handleClaim(winner.id, e)}
+                                                                                            disabled={claimingId === winner.id}
+                                                                                            style={{
+                                                                                                fontSize: '0.65rem', color: '#fff', textDecoration: 'none',
+                                                                                                display: 'flex', alignItems: 'center', gap: '4px',
+                                                                                                padding: '5px 12px', background: '#10b981', borderRadius: '6px',
+                                                                                                fontWeight: 600, transition: 'all 0.2s', border: 'none', cursor: 'pointer',
+                                                                                                boxShadow: '0 2px 6px rgba(16,185,129,0.2)'
+                                                                                            }}
+                                                                                        >
+                                                                                            {claimingId === winner.id ? 'Claiming...' : 'Claim Reward 💰'}
+                                                                                        </button>
+                                                                                    ) : null}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Latest Reasoning */}
+                                                            {agent.latest_reasoning && (
+                                                                <div style={{ 
+                                                                    padding: '8px 10px', borderRadius: '8px', 
+                                                                    background: 'rgba(0,0,0,0.05)', border: '1px solid var(--db-border)',
+                                                                    fontSize: '0.7rem', color: 'var(--db-text-muted)',
+                                                                    maxHeight: '60px', overflowY: 'auto'
+                                                                }}>
+                                                                    <strong style={{ color: 'var(--db-text)' }}>Latest Reasoning: </strong>
+                                                                    {agent.latest_reasoning}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Action Controls */}
+                                                            <div style={{ 
+                                                                display: 'flex', 
+                                                                justifyContent: 'flex-end', 
+                                                                gap: '0.5rem', 
+                                                                marginTop: '0.5rem', 
+                                                                paddingTop: '0.75rem', 
+                                                                borderTop: '1px solid var(--db-border)' 
+                                                            }}>
+                                                                {agent.status === 'active' && (
+                                                                    <>
+                                                                        <button 
+                                                                            onClick={() => pauseForecaster(agent.id)}
+                                                                            style={{
+                                                                                padding: '5px 12px', borderRadius: '8px',
+                                                                                border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.1)',
+                                                                                color: '#f59e0b', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                                display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                            }}
+                                                                        >
+                                                                            ⏸ Pause
+                                                                        </button>
+                                                                        <button 
+                                                                            onClick={() => stopForecaster(agent.id)}
+                                                                            style={{
+                                                                                padding: '5px 12px', borderRadius: '8px',
+                                                                                border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
+                                                                                color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                                display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                            }}
+                                                                        >
+                                                                            🛑 Stop
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                {agent.status === 'paused' && (
+                                                                    <button 
+                                                                        onClick={() => stopForecaster(agent.id)}
+                                                                        style={{
+                                                                            padding: '5px 12px', borderRadius: '8px',
+                                                                            border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.1)',
+                                                                            color: '#ef4444', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                            display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                        }}
+                                                                    >
+                                                                        🛑 Stop
+                                                                    </button>
+                                                                )}
+                                                                {agent.status === 'terminated' && (
+                                                                    <button 
+                                                                        onClick={() => deleteForecaster(agent.id)}
+                                                                        style={{
+                                                                            padding: '5px 12px', borderRadius: '8px',
+                                                                            border: '1px solid var(--db-border)', background: 'rgba(148,163,184,0.06)',
+                                                                            color: 'var(--db-text-muted)', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                                                                            display: 'flex', alignItems: 'center', gap: '3px', transition: 'all 0.2s'
+                                                                        }}
+                                                                    >
+                                                                        🗑 Delete
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             );
                                         })}
@@ -844,6 +933,117 @@ function DashboardView() {
                     </div>
                 )}
             </div>
+
+            {/* Resume Agent Category Selection Modal */}
+            {resumeAgent && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    backdropFilter: 'blur(8px)',
+                    zIndex: 999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '1.5rem',
+                    animation: 'dbFadeIn 0.2s ease',
+                }}>
+                    <div style={{
+                        background: '#0f172a',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '24px',
+                        width: '100%',
+                        maxWidth: '420px',
+                        padding: '1.75rem',
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                        color: '#fff',
+                    }}>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', textAlign: 'center' }}>
+                            Deploy {resumeAgent.name}
+                        </h3>
+                        <p style={{ fontSize: '0.825rem', color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem', textAlign: 'center', lineHeight: '1.4' }}>
+                            Select a category to deploy your AI agent and set a new stake.
+                        </p>
+
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, 1fr)',
+                            gap: '0.75rem',
+                            marginBottom: '1.5rem',
+                        }}>
+                            {[
+                                { id: 'sports', name: 'Sports', icon: '🏟️' },
+                                { id: 'finance', name: 'Finance', icon: '💹' },
+                                { id: 'crypto', name: 'Crypto', icon: '₿' },
+                                { id: 'tech', name: 'Technology', icon: '💻' },
+                                { id: 'economy', name: 'Economy', icon: '🏦' },
+                                { id: 'science', name: 'Science', icon: '🔬' },
+                                { id: 'politics', name: 'Politics', icon: '🏛️' },
+                            ].map((cat) => (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => {
+                                        window.location.href = `/?sector=${cat.id}&resumeAgentName=${encodeURIComponent(resumeAgent.name)}`;
+                                    }}
+                                    style={{
+                                        padding: '1rem 0.75rem',
+                                        borderRadius: '16px',
+                                        border: '1px solid rgba(255,255,255,0.08)',
+                                        background: 'rgba(255,255,255,0.02)',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 600,
+                                        textAlign: 'center',
+                                        transition: 'all 0.2s',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+                                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
+                                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                                    }}
+                                >
+                                    <span style={{ fontSize: '1.5rem' }}>{cat.icon}</span>
+                                    <span>{cat.name}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={() => setResumeAgent(null)}
+                            style={{
+                                width: '100%',
+                                padding: '0.75rem',
+                                borderRadius: '12px',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                background: 'transparent',
+                                color: 'rgba(255,255,255,0.6)',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.color = '#fff';
+                                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
+                                e.currentTarget.style.background = 'transparent';
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Global MobileBottomNav */}
             <MobileBottomNav onOpenMenu={() => setMenuOpen(true)} />

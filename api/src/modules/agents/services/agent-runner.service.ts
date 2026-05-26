@@ -139,92 +139,50 @@ export class AgentRunnerService {
             .eq('status', 'active');
 
         if (!entries || entries.length === 0) {
-            const lastCheck = this.lastAutoEnrollCheckTimes.get(agent.id) || 0;
-            if (Date.now() - lastCheck < 5 * 60 * 1000) {
-                // Skip check during 5-minute cooldown
-                return;
-            }
-            this.lastAutoEnrollCheckTimes.set(agent.id, Date.now());
+            this.logger.log(`⏳ Agent ${agent.id} has no active competitions. Setting status to paused.`);
+            await supabase
+                .from('agents')
+                .update({ status: 'paused' })
+                .eq('id', agent.id);
+            return;
+        }
 
-            // Check if agent has EVER joined any competitions
-            const { data: allEntries } = await supabase
-                .from('agent_competition_entries')
-                .select('id, status')
-                .eq('agent_id', agent.id)
-                .limit(1);
+        // Fetch verified on-chain stakes for this agent
+        const { data: stakes } = await supabase
+            .from('pool_stakes')
+            .select('competition_id')
+            .eq('agent_id', agent.id)
+            .eq('status', 'active')
+            .eq('verified_onchain', true);
 
-            if (allEntries && allEntries.length > 0) {
-                // Agent has competed before but all entries are completed/terminated.
-                // DO NOT auto-terminate — the agent will be auto-enrolled into new
-                // competitions when settleAndReplenish creates replacements.
-                // This prevents the "preds stack" bug where agents permanently die
-                // after their first competition round ends.
-                this.logger.debug(`⏳ Agent ${agent.id} has no active competitions. Waiting for auto-enrollment into next round.`);
+        const stakedCompIds = new Set<string>((stakes || []).map((s: any) => s.competition_id));
 
-                // Proactive: try to auto-enroll into any active competitions for the same sectors
-                try {
-                    const { data: historicalSectors } = await supabase
-                        .from('agent_competition_entries')
-                        .select('competitions(sector)')
-                        .eq('agent_id', agent.id)
-                        .limit(10);
-
-                    const sectors = new Set<string>();
-                    for (const entry of (historicalSectors || [])) {
-                        const sector = (entry as any).competitions?.sector;
-                        if (sector) sectors.add(sector);
-                    }
-
-                    if (sectors.size > 0) {
-                        // Find active competitions in those sectors that this agent isn't in yet
-                        for (const sector of sectors) {
-                            const { data: activeComps } = await supabase
-                                .from('competitions')
-                                .select('id')
-                                .in('status', ['active', 'live'])
-                                .eq('sector', sector)
-                                .gt('competition_end', new Date().toISOString())
-                                .limit(1);
-
-                            if (activeComps && activeComps.length > 0) {
-                                const compId = activeComps[0].id;
-                                // Check not already enrolled
-                                const { count } = await supabase
-                                    .from('agent_competition_entries')
-                                    .select('id', { count: 'exact', head: true })
-                                    .eq('agent_id', agent.id)
-                                    .eq('competition_id', compId);
-
-                                if (!count || count === 0) {
-                                    const { error: enrollErr } = await supabase
-                                        .from('agent_competition_entries')
-                                        .insert({
-                                            agent_id: agent.id,
-                                            competition_id: compId,
-                                            user_id: agent.user_id,
-                                            status: 'active',
-                                            prediction_count: 0,
-                                            rank_trend: 0,
-                                        });
-                                    if (!enrollErr) {
-                                        this.logger.log(`🔄 Auto-enrolled agent ${agent.id} into competition ${compId} [${sector}]`);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (enrollErr: any) {
-                    this.logger.debug(`Auto-enrollment check failed for agent ${agent.id}: ${enrollErr.message}`);
-                }
+        // Filter entries to only those with a verified stake
+        const validEntries: any[] = [];
+        for (const entry of entries) {
+            if (stakedCompIds.has(entry.competition_id)) {
+                validEntries.push(entry);
             } else {
-                // Orphan agent with ZERO entries — no auto-join. Log and skip.
-                this.logger.debug(`⏭ Agent ${agent.id} has no competition entries. Skipping (agents must be deployed via frontend).`);
+                this.logger.warn(`⚠️ Entry for agent ${agent.id} in competition ${entry.competition_id} has no verified stake. Deactivating entry.`);
+                await supabase
+                    .from('agent_competition_entries')
+                    .update({ status: 'pending' })
+                    .eq('agent_id', agent.id)
+                    .eq('competition_id', entry.competition_id);
             }
+        }
+
+        if (validEntries.length === 0) {
+            this.logger.log(`⏳ Agent ${agent.id} has no active competitions with verified stakes. Setting status to paused.`);
+            await supabase
+                .from('agents')
+                .update({ status: 'paused' })
+                .eq('id', agent.id);
             return;
         }
 
         // Pre-fetch all competition models and predictions to avert N+1 loops
-        const activeCompIds = entries.map((e: any) => e.competition_id);
+        const activeCompIds = validEntries.map((e: any) => e.competition_id);
         
         let compsMap = new Map<string, any>();
 
@@ -241,7 +199,7 @@ export class AgentRunnerService {
         }
 
         // Shuffle entries to ensure fairness
-        const shuffledEntries = [...entries].sort(() => 0.5 - Math.random());
+        const shuffledEntries = [...validEntries].sort(() => 0.5 - Math.random());
         
         let predictionMade = false;
 
@@ -290,6 +248,21 @@ export class AgentRunnerService {
                 }
                 // On failure, do NOT set predictionMade — let the agent try another competition this tick
             }
+        }
+
+        // Check if there are any remaining active entries for this agent
+        const { count } = await supabase
+            .from('agent_competition_entries')
+            .select('id', { count: 'exact', head: true })
+            .eq('agent_id', agent.id)
+            .eq('status', 'active');
+
+        if (!count || count === 0) {
+            this.logger.log(`⏳ Agent ${agent.id} has no active competitions remaining. Setting status to paused.`);
+            await supabase
+                .from('agents')
+                .update({ status: 'paused' })
+                .eq('id', agent.id);
         }
     }
 

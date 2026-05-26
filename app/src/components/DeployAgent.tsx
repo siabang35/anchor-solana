@@ -200,6 +200,17 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     useEffect(() => { setMarketIds([]); setSelectedOutcome(0); }, [subCategoryId]);
     useEffect(() => { setSelectedOutcome(0); }, [marketIds]);
 
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const resumeAgentName = params.get('resumeAgentName');
+            if (resumeAgentName) {
+                setAgentName(decodeURIComponent(resumeAgentName));
+                setIsMobileDrawerOpen(true);
+            }
+        }
+    }, []);
+
     // Fetch agent types and quota from backend
     useEffect(() => {
         const fetchMeta = async () => {

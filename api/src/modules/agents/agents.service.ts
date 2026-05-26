@@ -213,7 +213,7 @@ export class AgentsService {
             throw new BadRequestException('Cannot deploy forecaster agent to more than 3 competitions at once.');
         }
 
-        const initialStatus = (dto.stake_amount && dto.stake_amount > 0) ? 'pending' : 'active';
+        const initialStatus = 'pending';
 
         const { data: agent, error: insertError } = await supabase
             .from('agents')
@@ -357,6 +357,31 @@ export class AgentsService {
         const userId = await this.resolveUserId(rawUserId);
         if (!userId) throw new UnauthorizedException('Missing User ID');
         const supabase = this.supabaseService.getAdminClient();
+
+        if (newStatus === 'active') {
+            // Check if this agent has at least one active competition entry with a verified stake
+            const { data: entries } = await supabase
+                .from('agent_competition_entries')
+                .select('competition_id')
+                .eq('agent_id', agentId)
+                .eq('status', 'active');
+
+            if (!entries || entries.length === 0) {
+                throw new BadRequestException('Cannot activate agent: no active competition entries found.');
+            }
+
+            const { data: stakes } = await supabase
+                .from('pool_stakes')
+                .select('id')
+                .eq('agent_id', agentId)
+                .in('competition_id', entries.map((e: any) => e.competition_id))
+                .eq('status', 'active')
+                .eq('verified_onchain', true);
+
+            if (!stakes || stakes.length === 0) {
+                throw new BadRequestException('Cannot activate agent: no verified stakes found for active competitions.');
+            }
+        }
 
         const { data, error } = await supabase
             .from('agents')
@@ -926,10 +951,11 @@ export class AgentsService {
                 selectStr = '*, agents(id, name, user_id, model, created_at), competitions!inner(id, sector, leaderboard_score_config(min_predictions))';
             }
 
+            const entryStatuses = competitionId ? ['active', 'paused'] : ['completed', 'evaluated', 'terminated'];
             let query = supabase
                 .from('agent_competition_entries')
                 .select(selectStr)
-                .in('status', ['active', 'paused']);
+                .in('status', entryStatuses);
 
             if (competitionId) {
                 query = query.eq('competition_id', competitionId);

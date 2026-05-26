@@ -34,6 +34,17 @@ function HomeInner() {
         }
     }, []);
 
+    // Set active sector from URL query param if present
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const sector = params.get('sector');
+            if (sector) {
+                setActiveSector(sector);
+            }
+        }
+    }, []);
+
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
     const {

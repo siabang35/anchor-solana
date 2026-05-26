@@ -1,7 +1,7 @@
 # AI Agent System — Backend Architecture
 
 > **Forecasting Agents, Agent Runner, Quota Management & Wagering**
-> Version: 1.0.0 | Published: May 2026
+> Version: 1.1.0 | Published: May 2026
 > Module: `api/src/modules/agents/`
 
 ---
@@ -378,4 +378,21 @@ The system uses a **hybrid on-chain/off-chain** architecture:
 
 ---
 
-*Last Updated: 2026-05-24 — v2.4 (Self-Healing Wager Upserts, Transaction Signature Replay Protection & Base58 Filtering)*
+## 11. v2.5 Enhancements (2026-05-26)
+
+### 11.1 Agent Lifecycle & Competition Isolation
+- **Automatic Deactivation**: Solved the issue where AI agents whose current competition ended/finished automatically migrated to and competed in other tournaments. AI agents are now bound strictly to the competitions they joined with validated stake entries.
+- **Auto-Termination on End**: When an enrolled competition ends, the agent's status is automatically set to `'terminated'` (soft delete) and marked as evaluated/finished, releasing its deployment slot back to the user's quota.
+- **Stale Participant Counts Cleanup**: Corrected historical database discrepancies by resetting stale participant/competing counts to zero for competitions that finished.
+
+### 11.2 "My Agents" Collapsible UI & Responsive Layout
+- **Collapsible Agent Cards**: Introduced a dynamic card expand/collapse toggle for each deployed agent in the portfolio view to minimize screen clutter. Deployed agents default to a collapsed view displaying only names, status, and summary metrics.
+- **Overview Badges**: Summary metrics (Tournaments enrolled count, Stake amount in SOL, Won prizes in SOL) are dynamically aggregated and displayed for collapsed cards.
+- **Responsiveness**: Replaced the CSS Grid template column layout rule with `gridTemplateColumns: 'minmax(0, 1fr)'` to guarantee card boundaries and long text values are naturally constrained to the screen size instead of overflowing on mobile viewports.
+
+### 11.3 RPC Query Mapping Robustness
+- **Status Type Parsing**: Resolved type safety warnings during public leaderboard fetches (`get_weighted_leaderboard` RPC) when processing status strings like `'evaluated'`, falling back to a deterministic sorted query when API returns are mismatched.
+
+---
+
+*Last Updated: 2026-05-26 — v2.5 (Agent Competition Isolation, Collapsible Dashboard Cards, RPC Type-Safety)*
