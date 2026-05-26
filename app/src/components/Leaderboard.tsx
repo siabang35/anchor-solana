@@ -71,6 +71,7 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
     const [loading, setLoading] = useState(true);
     const [isRealtime, setIsRealtime] = useState(false);
     const [flashId, setFlashId] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<'accuracy' | 'weighted_score' | 'predictions'>('accuracy');
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
@@ -184,6 +185,32 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
         return { icon: '—', color: 'var(--text-muted)' };
     };
 
+    const sortedPlayers = [...players].sort((a, b) => {
+        if (sortBy === 'predictions') {
+            return (b.prediction_count || 0) - (a.prediction_count || 0);
+        }
+        if (sortBy === 'weighted_score') {
+            if (a.has_min_predictions !== b.has_min_predictions) {
+                return a.has_min_predictions ? -1 : 1;
+            }
+            const hasScoreA = a.weighted_score !== null;
+            const hasScoreB = b.weighted_score !== null;
+            if (hasScoreA !== hasScoreB) return hasScoreA ? -1 : 1;
+            return (a.weighted_score || 0) - (b.weighted_score || 0);
+        }
+        if (a.has_min_predictions !== b.has_min_predictions) {
+            return a.has_min_predictions ? -1 : 1;
+        }
+        const hasScoreA = a.weighted_score !== null;
+        const hasScoreB = b.weighted_score !== null;
+        if (hasScoreA !== hasScoreB) return hasScoreA ? -1 : 1;
+        const accA = a.weighted_score !== null ? getRealAccuracy(a.weighted_score) : 0;
+        const accB = b.weighted_score !== null ? getRealAccuracy(b.weighted_score) : 0;
+        return accB - accA;
+    });
+
+    const displayPlayers = sortedPlayers.map((p, idx) => ({ ...p, rank: idx + 1 }));
+
     const hasWeighted = players.some(p => p.weighted_score !== null);
     const [isOpen, setIsOpen] = useState(true);
     const isAnyActive = players.some(p => p.status === 'active');
@@ -227,14 +254,57 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
             </button>
 
             <div style={{
-                maxHeight: isOpen ? '700px' : '0',
+                maxHeight: isOpen ? '1000px' : '0',
                 overflow: 'hidden',
                 transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
                 opacity: isOpen ? 1 : 0,
             }}>
                 <div style={{ padding: '0 16px 14px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Top AI Agents</span>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '12px',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem',
+                        background: 'rgba(255,255,255,0.02)',
+                        padding: '6px 10px',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border-glass)'
+                    }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-muted)' }}>Rank Metric</span>
+                        <div style={{ 
+                            display: 'flex', 
+                            gap: '2px', 
+                            background: 'var(--bg-input)', 
+                            padding: '2px', 
+                            borderRadius: '8px', 
+                            border: '1px solid var(--border-card)' 
+                        }}>
+                            {[
+                                { id: 'accuracy', label: '🎯 Accuracy' },
+                                { id: 'weighted_score', label: '⚖️ Weight Score' },
+                                { id: 'predictions', label: '📊 Total Preds' }
+                            ].map((opt) => {
+                                const active = sortBy === opt.id;
+                                return (
+                                    <button 
+                                        key={opt.id}
+                                        onClick={() => setSortBy(opt.id as any)}
+                                        style={{
+                                            padding: '4px 10px', borderRadius: '6px', border: 'none',
+                                            background: active ? 'var(--accent-indigo)' : 'transparent',
+                                            color: active ? '#fff' : 'var(--text-muted)',
+                                            fontSize: '0.58rem', fontWeight: 800, cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                            boxShadow: active ? '0 2px 6px rgba(99, 102, 241, 0.4)' : 'none',
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
             {/* Table Header */}
@@ -267,7 +337,7 @@ export default function Leaderboard({ sector = 'all', limit = 10, style }: Props
                     </div>
                 </div>
             ) : (
-                players.map((player) => {
+                displayPlayers.map((player) => {
                     const trend = trendIcon(player.rank_trend || 0);
                     const isFlash = flashId === player.agent_id;
                     const belowMin = player.has_min_predictions === false;

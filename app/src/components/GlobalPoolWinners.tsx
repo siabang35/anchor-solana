@@ -158,7 +158,14 @@ export default function GlobalPoolWinners({ limit = 4 }: Props) {
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                    {winners.slice(0, limit).map((winner, i) => {
+                                    {[...winners].sort((a, b) => {
+                                        const prizeA = Number(a.total_prize_earned || a.prize_amount || 0);
+                                        const prizeB = Number(b.total_prize_earned || b.prize_amount || 0);
+                                        if (prizeB !== prizeA) return prizeB - prizeA;
+                                        const accA = a.global_accuracy || a.final_accuracy || 0;
+                                        const accB = b.global_accuracy || b.final_accuracy || 0;
+                                        return accB - accA;
+                                    }).slice(0, limit).map((winner, i) => {
                                         const cfg = RANK_CONFIG[i] || RANK_CONFIG[3];
                                         const accuracy = winner.global_accuracy || winner.final_accuracy || 0;
                                         return (
@@ -250,7 +257,7 @@ export default function GlobalPoolWinners({ limit = 4 }: Props) {
                             )}
                         </div>
 
-                        {/* Footer with Rules & Calculations */}
+                        {/* Footer with Rewards & Settlement Rules */}
                         <div style={{
                             marginTop: '0.8rem', padding: '0.6rem 0.75rem',
                             borderRadius: '10px',
@@ -259,26 +266,24 @@ export default function GlobalPoolWinners({ limit = 4 }: Props) {
                             textAlign: 'left',
                         }}>
                             <div style={{ fontSize: '0.55rem', color: '#818cf8', fontWeight: 800, marginBottom: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                                🏆 Global Leaderboard Eligibility
+                                🎁 Rewards & Settlement Rules
                             </div>
                             <p style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: 1.4 }}>
-                                Agents must meet the minimum prediction requirements per competition to qualify for global rankings:
+                                Prize pools are settled and distributed transparently on the Solana devnet:
                             </p>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 10px', fontSize: '0.6rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', marginBottom: '6px' }}>
-                                <div>⏱️ 2h: <strong style={{ color: '#10b981' }}>min 15 preds</strong></div>
-                                <div>⏱️ 7h: <strong style={{ color: '#10b981' }}>min 20 preds</strong></div>
-                                <div>⏱️ 12h: <strong style={{ color: '#10b981' }}>min 30 preds</strong></div>
-                                <div>⏱️ 24h: <strong style={{ color: '#10b981' }}>min 40 preds</strong></div>
+                                <div>💰 Platform Fee: <strong style={{ color: '#10b981' }}>2% Cut</strong></div>
+                                <div>🥇 1st Place Share: <strong style={{ color: '#818cf8' }}>50%</strong></div>
+                                <div>🥈 2nd Place Share: <strong style={{ color: '#818cf8' }}>30%</strong></div>
+                                <div>🥉 3rd Place Share: <strong style={{ color: '#818cf8' }}>20%</strong></div>
                             </div>
                             <div style={{ borderTop: '1px dashed var(--border-glass)', paddingTop: '6px' }}>
                                 <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '3px' }}>
-                                    EXPECTED PREDICTIONS (1 HOUR / 30 MINS BEFORE END):
+                                    SECURITY & CLAIM PROTOCOLS:
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '0.58rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                    <div>⚡ 2h horizon: ~240 / ~120 preds</div>
-                                    <div>⚡ 7h horizon: ~120 / ~60 preds</div>
-                                    <div>⚡ 12h horizon: ~12 / ~6 preds</div>
-                                    <div>⚡ 24h horizon: ~5 / ~2 preds</div>
+                                <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                                    • Concurrency lock and anti-double claim protection are active.<br />
+                                    • Winner wallets must match the registered agent owner to successfully claim.
                                 </div>
                             </div>
                             <div style={{ borderTop: '1px solid var(--border-glass)', marginTop: '6px', paddingTop: '6px', textAlign: 'center' }}>

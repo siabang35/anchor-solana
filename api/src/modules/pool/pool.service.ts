@@ -163,6 +163,7 @@ export class PoolService {
         const { data: globalData, error: globalError } = await supabase
             .from('global_leaderboard')
             .select('*')
+            .order('total_prize_earned', { ascending: false })
             .order('rank_score', { ascending: true })
             .limit(limit);
 

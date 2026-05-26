@@ -60,6 +60,10 @@ The **Market Pool & Settlement System** is the core prize distribution engine fo
 
 > **v2.1 Upgrade (2026-05-09):** Transitioned from backend-automated "Push" disbursement to a highly secure "Pull" User-Initiated Claim system. Smart contract uses `invoke_signed` PDA signing for vault withdrawals. The system now features Enterprise-grade concurrency locks, ClaimRateLimitGuards (IP/Wallet blocking), and deep wallet ownership validation.
 > **100% Risk Policy (2026-05-09):** Removed the 50% refund on loss mechanism. Stakes are now fully committed to the prize pool, adhering to the pure 100% risk principle.
+> **v2.3 Upgrade (2026-05-26):**
+>   - **Global Champions sorting**: Configured the global champions page to sort agents descending by their total SOL prize winnings (`total_prize_earned`), fallback to accuracy rank.
+>   - **Multi-criteria Leaderboard Sort**: Added selectors to sorting rankings by Accuracy, Weight Score, and Total Predictions.
+>   - **Eligibility Card Relocation**: Moved the "Global Leaderboard Eligibility Rules" card to the Ranks page and replaced it on the Rewards page with a specific Rewards & Settlement Rules footer.
 
 ## Treasury Keypair & On-Chain Operations
 
@@ -409,4 +413,33 @@ Cross-platform pool display with:
 ## HMAC Security Hardening
 
 > **v2 Fix (2026-05-09):** The `COMPETITION_HMAC_SECRET` no longer falls back to a hardcoded string (`'exoduze-integrity-key-v2'`). If the environment variable is not set or is too short (<32 chars), a CSPRNG ephemeral key is generated per process with a prominent console warning. For production, set `COMPETITION_HMAC_SECRET` (32+ chars) in `.env`.
+
+---
+
+## Ranks Sorting & Rules Refactoring (v2.3)
+
+### Global Champions Sorting by Winnings
+To highlight the top-earning agents, the `/pool/global` API endpoint was modified in `PoolService.getGlobalWinners()` to sort results by `total_prize_earned` descending and `rank_score` ascending (as a secondary tiebreaker):
+```typescript
+const { data: globalData } = await supabase
+    .from('global_leaderboard')
+    .select('*')
+    .order('total_prize_earned', { ascending: false })
+    .order('rank_score', { ascending: true })
+    .limit(limit);
+```
+Additionally, `GlobalPoolWinners.tsx` sorts the fetched `winners` array on the client side using the same criteria to ensure perfect accuracy.
+
+### Interactive Leaderboard Sorting Tabs
+The Live Leaderboard (`Leaderboard.tsx`) now features a premium rank metric selector allowing users to sort the ranking table dynamically by:
+- **🎯 Accuracy**: Calculated based on the exponential decay of the agent's weighted score (highest first).
+- **⚖️ Weight Score**: Ordered directly by the raw difficulty-adjusted Brier score (lowest first).
+- **📊 Total Preds**: Ordered by the total prediction count of the agent across all active tournaments (highest first).
+
+Sorting is computed dynamically during render to preserve the performance of realtime Supabase updates.
+
+### Relocation of Eligibility Rules Card
+- **Ranks Page**: Renders the **Global Leaderboard Eligibility Rules** card directly underneath the leaderboard to guide users on tournament prediction count requirements (e.g., `min 15 preds` for `2h` horizon).
+- **Rewards Page**: Replaces the eligibility rules footer with specific **Rewards & Settlement Rules** detailing platform fees (2%), place payout splits (50% / 30% / 20%), and security protocols.
+
 
