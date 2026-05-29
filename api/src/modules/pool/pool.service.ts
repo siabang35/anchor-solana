@@ -408,6 +408,24 @@ export class PoolService {
                 throw new BadRequestException('Prize amount exceeds safety limit. Contact support.');
             }
 
+            // ── Layer 6.5: Daily Velocity Limit (Clamping) ──
+            const dailyLimitSol = Number(this.configService.get<string>('SOLANA_DAILY_WITHDRAW_LIMIT') || '50');
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { data: recentClaims, error: claimsError } = await supabase
+                .from('pool_winners')
+                .select('prize_amount')
+                .eq('claimed', true)
+                .gte('claimed_at', twentyFourHoursAgo);
+
+            if (!claimsError && recentClaims) {
+                const totalRecentClaimed = recentClaims.reduce((sum, item) => sum + Number(item.prize_amount || 0), 0);
+                if (totalRecentClaimed + prizeAmount > dailyLimitSol) {
+                    this.logger.error(`🚨 DAILY VELOCITY LIMIT EXCEEDED: Recent 24h claims total ${totalRecentClaimed} SOL. Current claim: ${prizeAmount} SOL. Limit: ${dailyLimitSol} SOL.`);
+                    await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'daily_limit_exceeded', req);
+                    throw new BadRequestException('Daily treasury payout limit reached. Please try again tomorrow or contact support.');
+                }
+            }
+
             const prizeLamports = Math.floor(prizeAmount * LAMPORTS_PER_SOL);
 
             // ── Layer 7: Pre-claim Database Lock (anti double-spend) ──
@@ -514,6 +532,11 @@ export class PoolService {
                 .from('competition_pools')
                 .update({ onchain_disburse_txs: existingTxs })
                 .eq('competition_id', winner.competition_id);
+
+            // Trigger background sweep check to Cold Wallet (non-blocking)
+            this.sweepExcessToColdWallet().catch(err => {
+                this.logger.warn(`Background cold sweep check error: ${err.message}`);
+            });
 
             return { success: true, tx: txSignature, amount: prizeAmount };
 
@@ -675,6 +698,62 @@ export class PoolService {
 
         this.logger.error(`❌ All ${MAX_RETRIES} transfer attempts failed for ${recipientWallet.slice(0, 12)}...`);
         return null;
+    }
+
+    /**
+     * Periodically or post-claim sweep excess SOL from Treasury Hot Wallet to Cold Wallet.
+     * Keeps exactly HOT_WALLET_RESERVE_SOL (default: 5) in the Hot Wallet,
+     * and sweeps any excess above HOT_WALLET_MAX_BALANCE_SOL (default: 20) to the Cold Wallet.
+     */
+    private async sweepExcessToColdWallet(): Promise<void> {
+        const coldWalletPubkeyStr = this.configService.get<string>('SOLANA_COLD_WALLET_PUBKEY');
+        if (!coldWalletPubkeyStr) {
+            this.logger.debug('Sweep skipped: SOLANA_COLD_WALLET_PUBKEY is not configured.');
+            return;
+        }
+
+        const treasuryKeyEnv = this.configService.get<string>('SOLANA_TREASURY_PRIVATE_KEY');
+        if (!treasuryKeyEnv) return;
+
+        let treasuryKeypair: Keypair;
+        try {
+            treasuryKeypair = Keypair.fromSecretKey(bs58.decode(treasuryKeyEnv));
+        } catch {
+            return;
+        }
+
+        try {
+            const balance = await this.connection.getBalance(treasuryKeypair.publicKey);
+            const hotWalletReserveLamports = 5 * LAMPORTS_PER_SOL; // Keep 5 SOL
+            const hotWalletMaxLamports = 20 * LAMPORTS_PER_SOL; // Trigger sweep above 20 SOL
+
+            if (balance > hotWalletMaxLamports) {
+                const sweepAmount = balance - hotWalletReserveLamports - 10000; // Deduct 10k lamports fee
+                if (sweepAmount <= 0) return;
+
+                this.logger.log(`🧹 High Treasury balance detected: ${(balance / LAMPORTS_PER_SOL).toFixed(4)} SOL. Sweeping ${(sweepAmount / LAMPORTS_PER_SOL).toFixed(4)} SOL to Cold Wallet: ${coldWalletPubkeyStr}`);
+                
+                const coldWalletPubkey = new PublicKey(coldWalletPubkeyStr);
+                const tx = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: treasuryKeypair.publicKey,
+                        toPubkey: coldWalletPubkey,
+                        lamports: sweepAmount,
+                    })
+                );
+
+                const signature = await sendAndConfirmTransaction(
+                    this.connection,
+                    tx,
+                    [treasuryKeypair],
+                    { commitment: 'confirmed' }
+                );
+
+                this.logger.log(`✅ Sweep transaction confirmed: ${signature}`);
+            }
+        } catch (err: any) {
+            this.logger.error(`❌ Sweep to Cold Wallet failed: ${err.message}`);
+        }
     }
 
     /**
