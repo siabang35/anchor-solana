@@ -226,6 +226,11 @@ To secure the stake-to-treasury flow and resolve the payout deficit, we introduc
   - **Recency Enforcement**: Rejects any transaction older than 10 minutes to prevent replay of old transactions.
   - **Per-Wallet Rate Limiting**: Limit of max 5 verification attempts per 60 seconds per wallet (throttling guard).
 
+### 9.4 Mainnet-Grade Treasury Hardening: Velocity Clamping & Automated Cold Sweep (v2.7)
+To prepare the platform for mainnet deployment and prevent catastrophic treasury-drain exploits:
+- **Daily Withdrawal Velocity Clamping**: Limits total disbursements from the Treasury within any rolling 24-hour window to a safe threshold (default: `50 SOL`, configurable via `SOLANA_DAILY_WITHDRAW_LIMIT`). If the sum of recent claims plus the current claim exceeds the limit, it throws a `BadRequestException` and blocks the transaction.
+- **Automated Sweep to Cold Wallet**: Checks the Hot Treasury wallet balance after each successful claim. If the balance exceeds `20 SOL`, the backend automatically sweeps the excess above `5 SOL` (reserve) to a secure cold wallet or multi-sig address configured in `SOLANA_COLD_WALLET_PUBKEY`. This minimizes the funds vulnerable on the server.
+
 ---
 
-*Last Updated: 2026-05-29 — v2.6 (Treasury-Redirected Staking & TreasuryGuard On-Chain Verification)*
+*Last Updated: 2026-05-29 — v2.7 (Mainnet-Grade Treasury Hardening: Velocity Clamping & Automated Cold Sweep)*

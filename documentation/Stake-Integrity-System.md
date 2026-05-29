@@ -268,4 +268,13 @@ To address the breakdown in the staking-to-treasury data flow and resolve payout
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-29 — TreasuryGuard On-Chain Verification, Direct Treasury Transfers.*
+## 11. v2.5 Enhancements (2026-05-29)
+
+### 11.1 Treasury Hardening (Velocity Clamping & Automated Cold Sweep)
+To prevent exploits and secure platform assets for mainnet:
+- **Daily Withdrawal Velocity Clamping**: Limits total disbursements from the Treasury within any rolling 24-hour window to a safe threshold (default: `50 SOL`, configurable via `SOLANA_DAILY_WITHDRAW_LIMIT`). If the sum of recent claims plus the current claim exceeds the limit, it throws a `BadRequestException` and blocks the transaction.
+- **Automated Sweep to Cold Wallet**: Checks the Hot Treasury wallet balance after each successful claim. If the balance exceeds `20 SOL`, the backend automatically sweeps the excess above `5 SOL` (reserve) to a secure cold wallet or multi-sig address configured in `SOLANA_COLD_WALLET_PUBKEY`. This minimizes the funds vulnerable on the server.
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-29 — TreasuryGuard On-Chain Verification, Direct Treasury Transfers, Payout Velocity Clamping, Automated Cold Sweep.*

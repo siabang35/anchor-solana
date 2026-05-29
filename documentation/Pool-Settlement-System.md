@@ -457,4 +457,15 @@ To prevent spoofing, logical exploits, and invalid wagers, all transactions subm
 6. **Rate Limiting**: Throttles verification attempts per wallet to 5 per 60 seconds.
 7. **Replay Cache**: Caches verified signatures in-memory and in the database to prevent duplicate submissions.
 
+## Treasury Hardening & Payout Safeguards (v2.5)
+
+### Daily Payout Velocity Clamping
+To prevent draining of the platform's Hot Wallet in case of a logical exploit, the backend enforces a rolling 24-hour payout cap (default: `50 SOL`, configurable via `SOLANA_DAILY_WITHDRAW_LIMIT`). The system queries all successfully processed claims within the last 24 hours from `pool_winners` and rejects the current request if it would exceed this limit.
+
+### Automated Cold Wallet Sweep (Spillover Protocol)
+To minimize the exposure of funds in the Hot Wallet, an automated sweep check runs in the background of each successful prize claim:
+1. **Balance Check**: Query the balance of the Platform Hot Wallet (`SOLANA_TREASURY_PRIVATE_KEY` EOA).
+2. **Threshold Trigger**: If the balance exceeds `20 SOL`, calculate the excess above a `5 SOL` reserve.
+3. **Sweep Transaction**: Construct and execute an on-chain Solana transfer sending the excess directly to the secure cold wallet or multi-sig address configured in `SOLANA_COLD_WALLET_PUBKEY`.
+
 
