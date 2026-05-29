@@ -253,4 +253,19 @@ To prevent malicious players from submitting the same valid transaction signatur
 
 ---
 
-*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-24 — Self-Healing Entries, Transaction Format Validation, Anti-Replay Guards.*
+## 10. v2.4 Enhancements (2026-05-29)
+
+### 10.1 Treasury-Redirected Staking & TreasuryGuard On-Chain Verification
+To address the breakdown in the staking-to-treasury data flow and resolve payout deficits, we implemented the **TreasuryGuard Service** to handle on-chain verification of stakes:
+- **Direct Treasury Transfers**: Staking transactions from the frontend are now sent directly to the Platform Treasury Public Key (`F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`), aligning custody with the keypair used for payouts.
+- **On-Chain Verify Pipeline**: The backend `/agents/wager` route performs the following real-time verification before recording wagers:
+  - **Transaction Confirmation**: Verifies the signature actually exists on Solana Devnet and has reached confirmed/finalized state.
+  - **Recipient Match**: Confirms the recipient of the transfer instruction is exactly the designated platform Treasury wallet.
+  - **Sender Match**: Confirms the sender matches the user's requesting wallet address (impersonation guard).
+  - **Amount Validation**: Enforces the transferred amount matches the expected wager_amount with a strict 0.5% tolerance.
+  - **Recency Enforcement**: Rejects any transaction older than 10 minutes to prevent replay of old transactions.
+  - **Per-Wallet Rate Limiting**: Limit of max 5 verification attempts per 60 seconds per wallet (throttling guard).
+
+---
+
+*Engineered for trustless execution on Solana Devnet. Last updated: 2026-05-29 — TreasuryGuard On-Chain Verification, Direct Treasury Transfers.*

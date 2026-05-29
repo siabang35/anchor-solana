@@ -442,4 +442,19 @@ Sorting is computed dynamically during render to preserve the performance of rea
 - **Ranks Page**: Renders the **Global Leaderboard Eligibility Rules** card directly underneath the leaderboard to guide users on tournament prediction count requirements (e.g., `min 15 preds` for `2h` horizon).
 - **Rewards Page**: Replaces the eligibility rules footer with specific **Rewards & Settlement Rules** detailing platform fees (2%), place payout splits (50% / 30% / 20%), and security protocols.
 
+## TreasuryGuard Staking & Payout Resolution (v2.4)
+
+### Treasury-Redirected Staking Flow
+Staking SOL is now routed directly to the public key of the Treasury EOA (`F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`) instead of a client-derived PDA vault. This ensures the payout wallet actually receives and holds the stake funds, allowing the backend `claimPrize` / `sendPrizeTransfer` methods (which pay winners out of the Treasury Keypair) to succeed with sufficient funds.
+
+### TreasuryGuard Verification Pipeline
+To prevent spoofing, logical exploits, and invalid wagers, all transactions submitted via `/agents/wager` are passed through the **TreasuryGuard Service** to perform the following:
+1. **On-Chain Confirmation**: Verifies the signature exists and is confirmed/finalized on Solana Devnet.
+2. **Recipient Match**: Validates that the recipient of the SOL transfer was indeed the designated Platform Treasury.
+3. **Sender Match**: Validates that the sender of the SOL matches the user's requesting wallet address.
+4. **Amount Verification**: Confirms the lamports sent on-chain match the expected database `wager_amount` within a strict 0.5% tolerance.
+5. **Recency Check**: Rejects any transaction older than 10 minutes to prevent replay of old transactions.
+6. **Rate Limiting**: Throttles verification attempts per wallet to 5 per 60 seconds.
+7. **Replay Cache**: Caches verified signatures in-memory and in the database to prevent duplicate submissions.
+
 

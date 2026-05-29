@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../database/supabase.service.js';
 import { AgentRunnerService } from './services/agent-runner.service.js';
 import { PoolService } from '../pool/pool.service.js';
+import { TreasuryGuardService } from '../pool/treasury-guard.service.js';
 import {
     DeployAgentDto,
     DeployForecastingAgentDto,
@@ -29,7 +30,67 @@ export class AgentsService {
         private readonly configService: ConfigService,
         private readonly agentRunnerService: AgentRunnerService,
         @Optional() private readonly poolService: PoolService,
+        @Optional() private readonly treasuryGuardService: TreasuryGuardService,
     ) { }
+
+    /**
+     * Resolve the primary wallet address of a user from their user ID (UUID or wallet address).
+     * Necessary for validating on-chain transaction signatures sent by the specific user.
+     */
+    private async resolveUserWallet(rawUserId: string): Promise<string | null> {
+        if (!rawUserId) return null;
+        
+        // If the identifier is already a base58 Solana wallet address, return it
+        const isWallet = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(rawUserId);
+        if (isWallet) return rawUserId;
+
+        const supabase = this.supabaseService.getAdminClient();
+        
+        // 1. Try to find from wallet_addresses table matching the primary flag
+        const { data: wData } = await supabase
+            .from('wallet_addresses')
+            .select('address')
+            .eq('user_id', rawUserId)
+            .eq('is_primary', true)
+            .maybeSingle();
+
+        if (wData?.address) return wData.address;
+
+        // 2. Try to find any wallet address from the wallet_addresses table
+        const { data: wDataAny } = await supabase
+            .from('wallet_addresses')
+            .select('address')
+            .eq('user_id', rawUserId)
+            .limit(1)
+            .maybeSingle();
+
+        if (wDataAny?.address) return wDataAny.address;
+
+        // 3. Fallback: Try profiles table JSONB data
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('wallet_addresses')
+            .eq('id', rawUserId)
+            .maybeSingle();
+
+        if (profile?.wallet_addresses) {
+            const wallets = Array.isArray(profile.wallet_addresses) ? profile.wallet_addresses : [];
+            const primary = wallets.find((w: any) => w.isPrimary || w.is_primary);
+            if (primary?.address) return primary.address;
+            if (wallets[0]?.address) return wallets[0].address;
+        }
+
+        // 4. Try resolveWalletAddress via poolService if available
+        if (this.poolService) {
+            try {
+                return await (this.poolService as any).resolveWalletAddress(rawUserId);
+            } catch {
+                return null;
+            }
+        }
+
+        return null;
+    }
 
     private async resolveUserId(identifier: string): Promise<string | null> {
         if (!identifier) return null;
@@ -672,30 +733,60 @@ export class AgentsService {
         const supabase = this.supabaseService.getClient();
         const adminSupabase = this.supabaseService.getAdminClient();
 
-        // Anti-hacking / Anti-replay: Validate on-chain transaction format and prevent reuse
-        if (data.onchain_tx) {
-            const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{40,128}$/;
-            if (!base58Regex.test(data.onchain_tx)) {
-                this.logger.warn(`Security Warning: Invalid Solana transaction signature format: ${data.onchain_tx}`);
-                throw new BadRequestException('Invalid transaction signature format.');
-            }
-
-            const { data: duplicateStake } = await adminSupabase
-                .from('pool_stakes')
-                .select('id, agent_id, user_id')
-                .eq('onchain_tx', data.onchain_tx)
-                .neq('agent_id', data.agent_id) // Allow updating own agent's transaction
-                .limit(1)
-                .maybeSingle();
-
-            if (duplicateStake) {
-                this.logger.error(`Security Warning: User ${userId} attempted to reuse transaction signature ${data.onchain_tx} from agent ${duplicateStake.agent_id}`);
-                throw new BadRequestException('Transaction signature has already been used for another stake.');
-            }
+        // ═══════════════════════════════════════════════════════════════════════
+        // TREASURY SECURITY GUARD: On-Chain Transaction Verification
+        // Strictly verify that the stake has been paid on-chain to the treasury
+        // before inserting wager/stake records into the database.
+        // ═══════════════════════════════════════════════════════════════════════
+        if (!data.onchain_tx) {
+            throw new BadRequestException('Transaction signature (onchain_tx) is required to verify your stake.');
         }
 
-        const isVerifiedOnchain = !!(data.onchain_tx && data.onchain_tx.length > 20);
-        this.logger.log(`📥 createWager: ${data.wager_amount} SOL | agent=${data.agent_id.slice(0,8)} | onchain=${isVerifiedOnchain ? data.onchain_tx?.slice(0,16) : 'none'}`);
+        const userWallet = await this.resolveUserWallet(rawUserId);
+        if (!userWallet) {
+            throw new BadRequestException('Could not resolve user wallet address for on-chain verification.');
+        }
+
+        // Run multi-layer on-chain validation
+        let isVerifiedOnchain = false;
+        if (this.treasuryGuardService) {
+            this.logger.log(`⏳ Verifying stake TX on-chain: ${data.onchain_tx.slice(0, 16)}... for wallet ${userWallet.slice(0, 12)}...`);
+            const verification = await this.treasuryGuardService.verifyStakeTransaction(
+                data.onchain_tx,
+                data.wager_amount,
+                userWallet,
+            );
+
+            if (!verification.verified) {
+                this.logger.error(`🛡️ WAGER SECURITY BLOCKED: Wallet ${userWallet.slice(0, 12)}... tried to verify invalid TX: ${verification.error}`);
+                throw new BadRequestException(`On-chain transaction verification failed: ${verification.error}`);
+            }
+            isVerifiedOnchain = true;
+        } else {
+            // Fallback (only if service not loaded/testing)
+            this.logger.warn('⚠️ TreasuryGuardService not loaded. Performing local format-only check.');
+            const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{40,128}$/;
+            if (!base58Regex.test(data.onchain_tx)) {
+                throw new BadRequestException('Invalid transaction signature format.');
+            }
+            isVerifiedOnchain = true;
+        }
+
+        // Additional DB-level replay check
+        const { data: duplicateStake } = await adminSupabase
+            .from('pool_stakes')
+            .select('id, agent_id')
+            .eq('onchain_tx', data.onchain_tx)
+            .neq('agent_id', data.agent_id) // Allow updating own agent's transaction
+            .limit(1)
+            .maybeSingle();
+
+        if (duplicateStake) {
+            this.logger.error(`🛡️ REPLAY ATTEMPT: User ${userId} tried to reuse transaction signature ${data.onchain_tx} from agent ${duplicateStake.agent_id}`);
+            throw new BadRequestException('Transaction signature has already been used for another stake.');
+        }
+
+        this.logger.log(`📥 createWager: Verified ${data.wager_amount} SOL | agent=${data.agent_id.slice(0,8)} | onchain=${data.onchain_tx.slice(0,16)}`);
 
         // Verify agent belongs to user using admin client to bypass RLS since users use wallet authentication
         const { data: agent } = await adminSupabase

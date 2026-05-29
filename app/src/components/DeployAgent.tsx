@@ -15,10 +15,25 @@ import {
     MarketTemplate,
 } from '@/lib/dummy-data';
 
-// Devnet pool vault address — program-derived PDA
+// ═══════════════════════════════════════════════════════════════════════
+// TREASURY SECURITY: Stakes are sent to the Treasury wallet (not PDA).
+// The backend disburses prize claims from this same Treasury keypair.
+// PDA derivation is retained for on-chain audit reference only.
+// ═══════════════════════════════════════════════════════════════════════
 const DEVNET_CONNECTION = new Connection(clusterApiUrl('devnet'), 'confirmed');
 const PROGRAM_ID = new PublicKey('56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7');
 const POOL_VAULT_SEED = Buffer.from('pool_vault');
+
+// Treasury wallet — stakes fund this wallet, claims disburse from it
+// MUST match the pubkey derived from SOLANA_TREASURY_PRIVATE_KEY in the backend
+const TREASURY_PUBKEY = new PublicKey(
+    process.env.NEXT_PUBLIC_TREASURY_PUBKEY || 'F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE'
+);
+
+// Anti-exploit: stake limits (must match backend pool config)
+const MIN_STAKE_SOL = 0.1;
+const MAX_STAKE_SOL = 5.0;
+const TX_FEE_BUFFER_LAMPORTS = 10_000; // 10k lamports for TX fee headroom
 
 interface AgentType {
     id: string;
@@ -272,25 +287,38 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 throw new Error('Wallet not connected or transaction helper not available.');
             }
 
+            // ═══ ANTI-EXPLOIT: Strict input sanitization ═══
             const normalizedStake = stakeAmount.toString().replace(',', '.');
             const stakeSOL = parseFloat(normalizedStake) || 0;
             
-            if (stakeSOL < 0.1) {
-                throw new Error('Minimum stake amount is 0.1 SOL.');
+            if (!isFinite(stakeSOL) || stakeSOL < MIN_STAKE_SOL) {
+                throw new Error(`Minimum stake amount is ${MIN_STAKE_SOL} SOL.`);
+            }
+            if (stakeSOL > MAX_STAKE_SOL) {
+                throw new Error(`Maximum stake amount is ${MAX_STAKE_SOL} SOL (anti-whale protection).`);
             }
 
             const stakeLamports = Math.floor(stakeSOL * LAMPORTS_PER_SOL);
-            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Checking wallet balance for ${stakeSOL} SOL...` }]);
-
-            // Fetch actual on-chain balance
-            const balance = await DEVNET_CONNECTION.getBalance(publicKey);
-            const balanceSOL = balance / LAMPORTS_PER_SOL;
-
-            if (balance < stakeLamports + 5000) { // 5000 lamports for transaction fee
-                throw new Error(`Insufficient Devnet SOL. You have ${balanceSOL.toFixed(4)} SOL, but need at least ${stakeSOL} SOL + transaction fee.`);
+            if (stakeLamports <= 0) {
+                throw new Error('Invalid stake amount.');
             }
 
-            // Step 1 & 2: Verify & Reserve (Register agent in database before staking)
+            setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Checking wallet balance for ${stakeSOL} SOL...` }]);
+
+            // ═══ ANTI-EXPLOIT: Pre-flight balance check ═══
+            const balance = await DEVNET_CONNECTION.getBalance(publicKey);
+            const balanceSOL = balance / LAMPORTS_PER_SOL;
+            const requiredLamports = stakeLamports + TX_FEE_BUFFER_LAMPORTS;
+
+            if (balance < requiredLamports) {
+                throw new Error(
+                    `Insufficient Devnet SOL. You have ${balanceSOL.toFixed(4)} SOL, ` +
+                    `but need at least ${(requiredLamports / LAMPORTS_PER_SOL).toFixed(4)} SOL (stake + TX fee).`
+                );
+            }
+
+            // Step 1 & 2: Verify & Reserve (Register agent in database BEFORE staking)
+            // If this fails, no SOL leaves the user's wallet — critical for stake integrity.
             setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🔗 Pre-registering agent with backend database...' }]);
 
             const body = {
@@ -310,7 +338,6 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     body: JSON.stringify(body),
                 });
             } catch (apiErr: any) {
-                // Fails BEFORE any Solana transaction! Crucial for Stake Integrity.
                 throw new Error(`Agent pre-registration failed: ${apiErr?.message || 'Database rejected request.'}`);
             }
 
@@ -321,24 +348,26 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
 
             setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `🆔 Reserved Agent ID: ${activeAgent.id}` }]);
 
-            // Derive pool vault PDA for the competition
-            const marketSeed = Buffer.from(marketIds[0].replace(/-/g, '').slice(0, 32), 'hex');
-            const [poolVaultPDA] = PublicKey.findProgramAddressSync(
-                [POOL_VAULT_SEED, marketSeed],
-                PROGRAM_ID,
-            );
-
+            // ═══════════════════════════════════════════════════════════════
+            // TREASURY TRANSFER: Send stake SOL → Treasury wallet
+            // The backend's sendPrizeTransfer() pays claims from this same
+            // Treasury keypair, so funds MUST arrive here for claims to work.
+            //
+            // PDA derivation is retained as audit reference — the on-chain
+            // pool vault PDA tracks competition-level accounting in the
+            // smart contract, but actual custody is via Treasury.
+            // ═══════════════════════════════════════════════════════════════
             setLogs(prev => [
                 ...prev, 
-                { timestamp: Date.now(), type: 'info', message: `🔑 Derived Pool Vault PDA: ${poolVaultPDA.toBase58().slice(0, 12)}...` },
-                { timestamp: Date.now(), type: 'info', message: `✍️ Please approve the transaction in your wallet...` }
+                { timestamp: Date.now(), type: 'info', message: `🏦 Treasury: ${TREASURY_PUBKEY.toBase58().slice(0, 12)}...` },
+                { timestamp: Date.now(), type: 'info', message: `✍️ Please approve the ${stakeSOL} SOL stake in your wallet...` }
             ]);
 
-            // Construct transaction
+            // Construct transaction — SOL goes to Treasury for prize pool funding
             const tx = new Transaction().add(
                 SystemProgram.transfer({
                     fromPubkey: publicKey,
-                    toPubkey: poolVaultPDA,
+                    toPubkey: TREASURY_PUBKEY,
                     lamports: stakeLamports,
                 })
             );

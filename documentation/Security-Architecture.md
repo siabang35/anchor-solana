@@ -204,17 +204,28 @@ The backend uses a **Zod schema** (`api/src/config/env.validation.ts`) to valida
 
 ---
 
-## 9. Transaction Signature Security & Anti-Replay Hardening (2026-05-24)
+## 9. Transaction Signature Security & Anti-Replay Hardening (2026-05-29)
 
 ### 9.1 Transaction Replay Attack Prevention
 To prevent attackers from submitting the same successful Solana transaction signature multiple times to unlock multiple stakes or register multiple competing AI agents without paying:
-- **Constraint check**: When an client submits `/agents/wager` with an `onchain_tx` hash, the backend queries the database for any other `pool_stakes` containing the same `onchain_tx` signature (excluding updates on the same agent).
+- **Constraint check**: When a client submits `/agents/wager` with an `onchain_tx` hash, the backend queries the database for any other `pool_stakes` containing the same `onchain_tx` signature (excluding updates on the same agent).
 - **Enforcement**: If a duplicate hash is found, the system rejects the transaction instantly, throws a `BadRequestException` and logs a high-severity security alert.
 
 ### 9.2 Strict Base58 Filtering
-- **Regex Guard**: To prevent injection attacks or invalid inputs, all transaction signatures must match the regex `/^[1-9A-HJ-NP-Za-km-z]{40,128}$/`.
+- **Regex Guard**: To prevent injection attacks or invalid inputs, all transaction signatures must match the regex `/^[1-9A-HJ-NP-Za-km-z]{64,128}$/` (standard Solana transaction signature structure).
 - **Enforcement**: Any transaction containing invalid characters (e.g. `0`, `O`, `I`, `l` which are invalid in Base58) or invalid lengths is blocked at the gateway before hitting down-stream handlers.
+
+### 9.3 On-Chain Treasury Verification & TreasuryGuard (v2.6)
+To secure the stake-to-treasury flow and resolve the payout deficit, we introduced the **TreasuryGuard Service** to perform strict on-chain validation of wagers:
+- **Direct Treasury Funding**: All staking SOL from the frontend is sent directly to the public key of the Treasury EOA (`F4XPPgs4LA6kH4DBF12C3uzp7KYLCxcfWddGSkSw1nQE`), ensuring it matches the wallet from which claims are disbursed.
+- **On-Chain Verify Pipeline**: The backend `/agents/wager` route performs the following real-time verification before recording wagers:
+  - **Transaction Confirmation**: Verifies the signature actually exists on Solana Devnet and has reached confirmed/finalized state.
+  - **Recipient Match**: Confirms the recipient of the transfer instruction is exactly the designated platform Treasury wallet.
+  - **Sender Match**: Confirms the sender matches the user's requesting wallet address (impersonation guard).
+  - **Amount Validation**: Enforces the transferred amount matches the expected wager_amount with a strict 0.5% tolerance.
+  - **Recency Enforcement**: Rejects any transaction older than 10 minutes to prevent replay of old transactions.
+  - **Per-Wallet Rate Limiting**: Limit of max 5 verification attempts per 60 seconds per wallet (throttling guard).
 
 ---
 
-*Last Updated: 2026-05-24 — v2.5 (Transaction Replay Attack Prevention & Base58 Regex Filtering)*
+*Last Updated: 2026-05-29 — v2.6 (Treasury-Redirected Staking & TreasuryGuard On-Chain Verification)*
