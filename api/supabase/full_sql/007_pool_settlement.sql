@@ -99,6 +99,8 @@ CREATE TABLE IF NOT EXISTS public.pool_winners (
     claimed               BOOLEAN NOT NULL DEFAULT false,
     claimed_at            TIMESTAMPTZ,
     claim_tx              VARCHAR(128),
+    disburse_tx           VARCHAR(128),
+    winner_wallet         VARCHAR(64),
     settlement_snapshot   JSONB,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT unique_winner_rank UNIQUE (competition_id, rank)
