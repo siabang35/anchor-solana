@@ -193,9 +193,14 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
     const sorted = useMemo(() => {
         const now = Date.now();
         return [...competitions]
-            // Filter out ended competitions — they get auto-replaced by the backend
             .filter(c => {
                 const end = new Date(c.competition_end).getTime();
+                const isWorldCup = c.title.toLowerCase().includes('world cup') || c.title.toLowerCase().includes('fifa') || c.tags?.includes('football');
+                if (isWorldCup) {
+                    // For World Cup simulation competitions, keep them visible for 24 hours after they end/settle
+                    const twentyFourHoursAfterEnd = end + (24 * 60 * 60 * 1000);
+                    return twentyFourHoursAfterEnd > now;
+                }
                 return end > now; // Only show competitions that haven't expired
             })
             .sort((a, b) => {
@@ -410,28 +415,31 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                         </h3>
                         {liveCount > 0 && (
                             <span style={{
-                                fontSize: '0.55rem', fontWeight: 700, padding: '2px 8px',
+                                fontSize: '0.55rem', fontWeight: 700, padding: '3px 10px',
                                 borderRadius: 'var(--radius-round)',
-                                background: 'rgba(16,185,129,0.15)', color: '#10b981',
+                                background: 'rgba(16,185,129,0.12)', color: '#10b981',
+                                border: '1px solid rgba(16,185,129,0.2)',
+                                animation: 'pulse 2s infinite',
                             }}>
-                                {liveCount} live now
+                                ● {liveCount} Live Now
                             </span>
                         )}
                     </div>
 
                     {compLoading && sorted.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem', animation: 'pulse 1.5s infinite' }}>⚽</div>
                             Loading competitions...
                         </div>
                     )}
 
                     {!compLoading && sorted.length === 0 && (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        <div style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                             No competitions yet for {meta.label}. They will be auto-created from live data feeds.
                         </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.85rem' }}>
                         {sorted.map((comp) => {
                             const status = getCompetitionStatus(comp);
                             const statusCfg = getStatusConfig(status);
@@ -441,6 +449,9 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                             const isSelected = comp.id === activeComp?.id;
                             const probLabels = comp.outcomes || ['Yes', 'No'];
                             const probs = comp.probabilities || [5000, 5000];
+                            const isSports = sector === 'sports';
+                            const hasTeams = comp.team_home && comp.team_away && comp.team_home !== 'TBD';
+                            const totalProb = probs.reduce((a: number, b: number) => a + b, 0) || 10000;
 
                             return (
                                 <article
@@ -449,94 +460,198 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                                     onClick={() => setSelectedCompId(comp.id)}
                                     style={{
                                         cursor: 'pointer',
-                                        border: isSelected ? `2px solid ${meta.color}` : '1px solid rgba(99,102,241,0.15)',
-                                        boxShadow: isSelected ? `0 0 20px ${meta.color}20` : 'none',
-                                        transform: isSelected ? 'scale(1.02)' : 'none',
-                                        transition: 'all 0.2s ease',
-                                        opacity: status === 'ended' ? 0.65 : 1,
+                                        borderRadius: '16px',
+                                        border: isSelected
+                                            ? `2px solid ${meta.color}`
+                                            : `1px solid ${status === 'live' ? 'rgba(16,185,129,0.2)' : 'var(--border-card)'}`,
+                                        boxShadow: isSelected
+                                            ? `0 0 24px ${meta.color}18, 0 8px 32px rgba(0,0,0,0.15)`
+                                            : status === 'live'
+                                                ? '0 0 20px rgba(16,185,129,0.06), 0 4px 20px rgba(0,0,0,0.1)'
+                                                : '0 2px 12px rgba(0,0,0,0.06)',
+                                        transform: isSelected ? 'translateY(-2px)' : 'none',
+                                        transition: 'all 0.3s cubic-bezier(0.4,0,0.2,1)',
+                                        opacity: status === 'ended' ? 0.6 : 1,
+                                        overflow: 'hidden',
+                                        position: 'relative' as const,
                                     }}
                                 >
-                                    <div className="feed-card__content">
-                                        {/* Header */}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                                            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                    {/* Top accent gradient */}
+                                    {status === 'live' && (
+                                        <div style={{
+                                            position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
+                                            background: `linear-gradient(90deg, #10b981, ${meta.color})`,
+                                        }} />
+                                    )}
+
+                                    <div className="feed-card__content" style={{ padding: '1rem 1.1rem' }}>
+                                        {/* Header row */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                            <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                                                 <span style={{
-                                                    fontSize: '0.45rem', fontWeight: 800, padding: '2px 6px',
-                                                    borderRadius: 'var(--radius-round)',
-                                                    background: `${meta.color}15`, color: meta.color,
+                                                    fontSize: '0.45rem', fontWeight: 800, padding: '2px 7px',
+                                                    borderRadius: '6px',
+                                                    background: `${meta.color}12`, color: meta.color,
+                                                    border: `1px solid ${meta.color}20`,
                                                 }}>
                                                     {horizon}
                                                 </span>
                                                 {isSelected && (
                                                     <span style={{
-                                                        fontSize: '0.45rem', fontWeight: 700, padding: '2px 6px',
-                                                        borderRadius: 'var(--radius-round)',
-                                                        background: 'rgba(99,102,241,0.15)', color: '#818cf8',
+                                                        fontSize: '0.45rem', fontWeight: 700, padding: '2px 7px',
+                                                        borderRadius: '6px',
+                                                        background: 'rgba(99,102,241,0.1)', color: '#818cf8',
+                                                        border: '1px solid rgba(99,102,241,0.15)',
                                                     }}>
-                                                        📊 Viewing Curve
+                                                        📊 Selected
                                                     </span>
                                                 )}
                                             </div>
                                             <span style={{
-                                                fontSize: '0.5rem', fontWeight: 700, padding: '2px 8px',
-                                                borderRadius: 'var(--radius-round)',
+                                                fontSize: '0.48rem', fontWeight: 700, padding: '3px 8px',
+                                                borderRadius: '6px',
                                                 background: statusCfg.bg, color: statusCfg.color,
-                                                animation: status === 'live' ? 'pulse 2s infinite' : 'none',
+                                                border: `1px solid ${statusCfg.color}25`,
+                                                display: 'flex', alignItems: 'center', gap: '4px',
                                             }}>
+                                                {status === 'live' && <span style={{
+                                                    width: '5px', height: '5px', borderRadius: '50%',
+                                                    background: statusCfg.color, display: 'inline-block',
+                                                    animation: 'pulse 1.5s infinite',
+                                                }} />}
                                                 {statusCfg.label}
                                             </span>
                                         </div>
 
-                                        {/* Title */}
-                                        <h3 className="feed-card__title" style={{ fontSize: '0.75rem', marginBottom: '0.3rem' }}>
-                                            {comp.title}
-                                        </h3>
-                                        {comp.description && (
-                                            <p className="feed-card__desc" style={{ fontSize: '0.6rem', marginBottom: '0.35rem' }}>
-                                                {comp.description}
-                                            </p>
+                                        {/* Sports team matchup display */}
+                                        {isSports && hasTeams ? (
+                                            <div style={{ marginBottom: '0.5rem' }}>
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                    padding: '0.5rem 0.4rem',
+                                                    borderRadius: '10px',
+                                                    background: 'var(--gradient-card)',
+                                                    border: '1px solid var(--border-card)',
+                                                }}>
+                                                    {/* Home team */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                                        {comp.image_url && (
+                                                            <img
+                                                                src={comp.image_url}
+                                                                alt={comp.team_home || ''}
+                                                                style={{
+                                                                    width: '24px', height: '16px', objectFit: 'cover',
+                                                                    borderRadius: '3px', border: '1px solid var(--border-glass)',
+                                                                }}
+                                                                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                                            />
+                                                        )}
+                                                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                            {comp.team_home}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* VS */}
+                                                    <span style={{
+                                                        fontSize: '0.6rem', fontWeight: 900, color: 'var(--text-muted)',
+                                                        padding: '0 0.5rem', letterSpacing: '0.05em',
+                                                    }}>
+                                                        VS
+                                                    </span>
+
+                                                    {/* Away team */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, justifyContent: 'flex-end' }}>
+                                                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                                            {comp.team_away}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {comp.description && (
+                                                    <p style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: 1.4 }}>
+                                                        {comp.description.length > 100 ? comp.description.slice(0, 100) + '…' : comp.description}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <h3 className="feed-card__title" style={{ fontSize: '0.75rem', marginBottom: '0.25rem', lineHeight: 1.3 }}>
+                                                    {comp.title}
+                                                </h3>
+                                                {comp.description && (
+                                                    <p className="feed-card__desc" style={{ fontSize: '0.55rem', marginBottom: '0.35rem', lineHeight: 1.4 }}>
+                                                        {comp.description.length > 100 ? comp.description.slice(0, 100) + '…' : comp.description}
+                                                    </p>
+                                                )}
+                                            </>
                                         )}
 
                                         {/* Progress bar */}
                                         {status === 'live' && (
-                                            <div style={{ margin: '0.3rem 0', height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.08)', overflow: 'hidden' }}>
+                                            <div style={{ margin: '0.35rem 0', height: '3px', borderRadius: '2px', background: 'rgba(99,102,241,0.06)', overflow: 'hidden' }}>
                                                 <div style={{
                                                     height: '100%', width: `${progress}%`, borderRadius: '2px',
-                                                    background: `linear-gradient(90deg, ${meta.color}, ${meta.color}99)`,
+                                                    background: `linear-gradient(90deg, ${meta.color}, ${meta.color}88)`,
                                                     transition: 'width 1s ease',
+                                                    boxShadow: `0 0 6px ${meta.color}40`,
                                                 }} />
                                             </div>
                                         )}
 
-                                        {/* Probabilities */}
+                                        {/* Probability bars */}
                                         <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                                            {probLabels.map((label, i) => (
-                                                <div key={i} style={{
-                                                    flex: 1, minWidth: 60, textAlign: 'center', padding: '0.25rem 0.3rem',
-                                                    borderRadius: 'var(--radius-xs)',
-                                                    background: 'var(--gradient-card)', border: '1px solid var(--border-card)',
-                                                }}>
-                                                    <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</div>
-                                                    <div style={{
-                                                        fontSize: '0.8rem', fontWeight: 800, fontFamily: 'var(--font-mono)',
-                                                        color: i === 0 ? '#818cf8' : i === 1 ? '#f59e0b' : '#ef4444',
+                                            {probLabels.map((label: string, i: number) => {
+                                                const pctVal = ((probs[i] || 0) / 100);
+                                                const barPct = ((probs[i] || 0) / totalProb) * 100;
+                                                const probColors = ['#818cf8', '#f59e0b', '#ef4444', '#10b981'];
+                                                const c = probColors[i % probColors.length];
+                                                return (
+                                                    <div key={i} style={{
+                                                        flex: 1, minWidth: 60, padding: '0.3rem 0.35rem',
+                                                        borderRadius: '8px',
+                                                        background: 'var(--gradient-card)', border: '1px solid var(--border-card)',
                                                     }}>
-                                                        {((probs[i] || 0) / 100).toFixed(1)}%
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '3px' }}>
+                                                            <span style={{ fontSize: '0.42rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
+                                                            <span style={{
+                                                                fontSize: '0.72rem', fontWeight: 800, fontFamily: 'var(--font-mono)',
+                                                                color: c,
+                                                            }}>
+                                                                {pctVal.toFixed(1)}%
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ height: '3px', borderRadius: '2px', background: `${c}12`, overflow: 'hidden' }}>
+                                                            <div style={{
+                                                                height: '100%', width: `${barPct}%`, borderRadius: '2px',
+                                                                background: `linear-gradient(90deg, ${c}80, ${c})`,
+                                                                transition: 'width 0.6s ease',
+                                                            }} />
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
 
                                         {/* Footer */}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.35rem', fontSize: '0.55rem' }}>
-                                            <span style={{ color: 'var(--text-muted)' }}>
-                                                💰 {comp.prize_pool || 0} SOL · 👥 {comp.entry_count || 0}/{comp.max_entries || 100}
-                                            </span>
+                                        <div style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            marginTop: '0.45rem', fontSize: '0.52rem', flexWrap: 'wrap', gap: '0.25rem',
+                                        }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-muted)' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                    💰 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{Number(comp.prize_pool || 0).toFixed(2)}</span> SOL
+                                                </span>
+                                                <span style={{ opacity: 0.3 }}>|</span>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                                    👥 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{comp.entry_count || 0}</span>/{comp.max_entries || 100}
+                                                </span>
+                                            </div>
                                             <span style={{
-                                                fontWeight: 700,
+                                                fontWeight: 700, fontSize: '0.5rem',
+                                                padding: '2px 7px', borderRadius: '6px',
+                                                background: status === 'live' ? 'rgba(16,185,129,0.08)' : status === 'upcoming' ? 'rgba(245,158,11,0.08)' : 'transparent',
                                                 color: status === 'live' ? '#10b981' : status === 'upcoming' ? '#f59e0b' : '#6b7394',
                                             }}>
-                                                {status === 'live' ? `⏱ ${timeLeft}` : status === 'upcoming' ? `Starts ${timeLeft}` : '✓ Ended'}
+                                                {status === 'live' ? `⏱ ${timeLeft}` : status === 'upcoming' ? `⏳ ${timeLeft}` : '✓ Ended'}
                                             </span>
                                         </div>
                                     </div>

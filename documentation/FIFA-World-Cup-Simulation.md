@@ -6,12 +6,14 @@ This document outlines the architecture, database schema, backend orchestration,
 
 ## 1. Overview & Objectives
 
-To validate and showcase the platform's ability to handle high-frequency, real-time sports prediction markets, we simulated the final stages of the **FIFA World Cup 2026** (Semifinals & Grand Final). 
+To validate and showcase the platform's ability to handle high-frequency, real-time sports prediction markets, we simulated the final stages of the **FIFA World Cup 2026** (Semifinals & Grand Final).
 
 The simulation features:
 * **Interactive Live Bracket**: Real-time visualization of the tournament's progression.
 * **Autonomous Match Progression**: Matches transition from `scheduled` to `live` (with live-updating scores and match minutes) and finally to `finished`.
 * **Instant Pool Settlement**: Automatic resolution of corresponding prediction markets and staking pools immediately after a match concludes.
+* **Perpetual Auto-Reset Loop**: Once the Grand Final ends, the simulation runs a countdown and resets itself automatically, creating an infinite, self-sustaining 24-hour testbed.
+* **No Mockup Data (Real-time Staking)**: Pure dynamic participant counts and prize pools synchronized strictly through database triggers from real agent deployment and wagers.
 
 ---
 
@@ -20,7 +22,7 @@ The simulation features:
 ```mermaid
 graph TD
     DB_Seed[101_fifa_world_cup_simulation.sql] -->|Seeds initial| DB[(PostgreSQL Database)]
-    Orchestrator[SportsETLOrchestrator] -->|1. Seeds data after 1s| DB
+    Orchestrator[SportsETLOrchestrator] -->|1. Seeds data after 1s & resets after Grand Final| DB
     Orchestrator -->|2. Runs simulation ticks every 10s| DB
     Orchestrator -->|3. Resolves finished matches| DB
     Orchestrator -->|4. Triggers RPC settle_competition_pool| DB
@@ -35,33 +37,39 @@ The simulation state is persisted and driven by PostgreSQL:
 2. **Sports Events Table (`sports_events`)**: Stores details of simulated matches, including teams, scores, elapsed match time, and match status (`scheduled`, `live`, `finished`).
 3. **Competitions Linking (`used_competition_sources`)**: Maps simulated matches to forecast competitions, allowing the orchestrator to automatically resolve prediction pools.
 4. **Lifecycle Auto-Settle RPC (`auto_settle_expired_competitions()`)**: A database function that processes expired active competitions as a fallback.
+5. **Real-time Metrics Synchronization**: The SQL triggers (`update_pool_on_stake`) automatically keep `prize_pool` and `entry_count` updated dynamically based on real-time wagers and deployments, completely replacing hardcoded mockup values.
 
 ### B. Backend Layer (`NestJS`)
-1. **Match Timeline Engine (`SportsETLOrchestrator`)**:
+1. **Perpetual Simulation Loop (`SportsETLOrchestrator`)**:
    * **Initialization**: Automatically seeds or resets the simulation 1 second after application boot.
    * **State Management**: Evaluates the match status against real time:
      * **Semifinal 1 (France vs Spain)**: Starts at `T + 1 minute`. Lasts 3 minutes.
      * **Semifinal 2 (England vs Argentina)**: Starts at `T + 2 minutes`. Lasts 3 minutes.
      * **Grand Final (Winner SF1 vs Winner SF2)**: Starts at `T + 6 minutes`. Lasts 3 minutes.
      * During the active phase, scores update dynamically along with match minutes (scaled to map 3 real-world minutes to 90 game-world minutes).
+   * **Automatic Reset**: 30 seconds after the Grand Final is finished and resolved, the orchestrator triggers an admin reset by executing the SQL seed script. This re-starts the tournament bracket with schedules relative to `NOW()`.
    * **Pool Resolution**: Calls the `settle_competition_pool` database function once a match concludes.
 2. **Robust Real-time Messaging (`SportsMessagingService`)**:
    * Bridges database entities and live clients by emitting events over the local `EventEmitter`.
-   * Modified to be structure-agnostic: seamlessly processes both camelCase domain model classes and raw snake_case database records without throwing null-pointer/undefined exceptions on `startTime.toISOString()`.
+   * Seamlessly processes camelCase domain models and raw database records without throwing null-pointer exceptions on `startTime.toISOString()`.
 
 ### C. Frontend Layer (`Next.js / React`)
-* **Dedicated Component (`WorldCupBracket.tsx` & `WorldCupBracket.css`)**:
-  * **Premium Glassmorphism**: Tailored HSL dark-themed styling matching the ExoDuZe branding.
-  * **Interactive Highlights**: Dynamic glowing card outlines around the selected active competition.
-  * **Real-time Animations**: Pulsing live indicators, sliding/fading elements, and SVG connector paths connecting Semifinals to the Grand Final.
-  * **Fully Responsive**: Implemented using pure CSS grid layouts optimized for both mobile and desktop screens.
+* **Dynamic Home Page Integration**:
+  * The `WorldCupBracket` is rendered at the very top of the **Top Markets** view on the home page as well as the **Sports** category page.
+  * Subscribes to the Supabase Realtime channel `sports-events-realtime-bracket` to receive updates.
+  * Clicking on any match card in the bracket immediately updates the active preview competition, probability curve, data feed, and agent placement controls below it.
+* **Premium Glassmorphism Design (`WorldCupBracket.tsx` & `WorldCupBracket.css`)**:
+  * **Interactive Highlights**: Card outline glows and subtle transitions on active/selected items.
+  * **Real-time Animations**: Pulsing live indicators, sliding/fading elements, rotating ambient background glows, and glowing svg connectors with animated pulses.
+  * **24h UI Persistence**: Completed World Cup competitions are preserved in the active feed for a full 24-hour cycle before being hidden, preventing bracket cards from disappearing from view.
+  * **Responsive Design**: Implemented with CSS Grid layouts fully optimized for mobile devices and desktop views.
 
 ---
 
 ## 3. Configuration & Reseed Guide
 
 ### Resetting the Simulation
-To restart the simulation timeline (re-schedule matches to start in 1, 2, and 6 minutes from the current time), execute the seeding SQL file:
+To restart the simulation timeline manually (re-schedule matches relative to the current time), execute the seeding SQL file:
 ```bash
 # From the api directory
 node run_seed.js

@@ -88,7 +88,27 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
 
                 const { data, error: sbError } = await query;
                 if (sbError) throw sbError;
-                setCompetitions((data as Competition[]) || []);
+                
+                let merged = (data as Competition[]) || [];
+                
+                // Add World Cup ones if in sports category
+                if (!sector || sector === 'all' || sector === 'sports') {
+                    const { data: wcComps } = await supabase
+                        .from('competitions')
+                        .select('*')
+                        .in('id', [
+                            'a7d7f766-1c2c-4b5b-8c8d-444444444441',
+                            'a7d7f766-1c2c-4b5b-8c8d-444444444442',
+                            'a7d7f766-1c2c-4b5b-8c8d-444444444443'
+                        ]);
+                    const wcList = wcComps || [];
+                    for (const wc of wcList) {
+                        if (!merged.some(c => c.id === wc.id)) {
+                            merged.push(wc as any);
+                        }
+                    }
+                }
+                setCompetitions(merged);
             } catch (fallbackErr: any) {
                 setError(fallbackErr.message || 'Failed to load competitions');
             }
@@ -118,10 +138,11 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                 (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
                     if (payload.eventType === 'INSERT') {
                         const newComp = payload.new as unknown as Competition;
+                        const isWorldCup = newComp.title.toLowerCase().includes('world cup') || newComp.title.toLowerCase().includes('fifa') || newComp.tags?.includes('football');
                         // Only add if not expired and matches sector
                         const isExpired = new Date(newComp.competition_end).getTime() < Date.now();
-                        if (isExpired) return;
-                        if (newComp.status === 'settled' || newComp.status === 'cancelled') return;
+                        if (isExpired && !isWorldCup) return;
+                        if ((newComp.status === 'settled' || newComp.status === 'cancelled') && !isWorldCup) return;
                         if (!sector || sector === 'all' || newComp.sector === sector) {
                             setCompetitions((prev) => {
                                 // dedup and memory check
@@ -132,8 +153,9 @@ export function useCompetitions(sector?: string): UseCompetitionsResult {
                         }
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = payload.new as unknown as Competition;
-                        // Remove settled/cancelled competitions from the feed immediately
-                        if (updated.status === 'settled' || updated.status === 'cancelled') {
+                        const isWorldCup = updated.title.toLowerCase().includes('world cup') || updated.title.toLowerCase().includes('fifa') || updated.tags?.includes('football');
+                        // Remove settled/cancelled competitions from the feed immediately (unless they are World Cup ones)
+                        if ((updated.status === 'settled' || updated.status === 'cancelled') && !isWorldCup) {
                             setCompetitions((prev) => prev.filter((c) => c.id !== updated.id));
                         } else {
                             setCompetitions((prev) =>

@@ -161,7 +161,23 @@ export class SportsETLOrchestrator implements OnModuleInit {
         // Seed FIFA World Cup simulation matches on startup
         setTimeout(async () => {
             try {
-                await this.seedFIFAWorldCupSimulation();
+                const supabase = this.supabaseService.getAdminClient();
+                const { data: finalEvent } = await supabase
+                    .from('sports_events')
+                    .select('*')
+                    .eq('external_id', 'wc2026_final')
+                    .eq('source', DataSource.APIFOOTBALL)
+                    .single();
+
+                let forceReset = false;
+                if (finalEvent && finalEvent.status === 'finished') {
+                    const finishedTime = new Date(finalEvent.updated_at || finalEvent.start_time).getTime();
+                    // If it finished more than 24 hours ago, force reset
+                    if (Date.now() - finishedTime >= 24 * 60 * 60 * 1000) {
+                        forceReset = true;
+                    }
+                }
+                await this.seedFIFAWorldCupSimulation(forceReset);
             } catch (error) {
                 this.logger.error(`[FIFA World Cup Seed] Failed: ${(error as Error).message}`);
             }
@@ -1139,9 +1155,44 @@ export class SportsETLOrchestrator implements OnModuleInit {
      * Seed the FIFA World Cup 2026 Simulation League, Teams, and Events.
      * Starts the semi-finals 1-2 minutes from server start, and the final 6 minutes from start.
      */
-    private async seedFIFAWorldCupSimulation() {
+    private async seedFIFAWorldCupSimulation(force: boolean = false) {
         const supabase = this.supabaseService.getAdminClient();
-        this.logger.log('🏆 Seeding FIFA World Cup 2026 Simulation...');
+        this.logger.log(`🏆 Seeding FIFA World Cup 2026 Simulation (Force reset: ${force})...`);
+
+        const now = Date.now();
+
+        if (force) {
+            this.logger.log('🔄 Force option enabled: resetting simulation data by executing 101_fifa_world_cup_simulation.sql...');
+            try {
+                const databaseUrl = this.configService.get<string>('DATABASE_URL');
+                if (databaseUrl) {
+                    const pgModule = await import('pg');
+                    const pg = pgModule.default || pgModule;
+                    const cleanedUrl = databaseUrl.replace(/^"(.*)"$/, '$1').replace('#', '%23').replace('$', '%24');
+                    const client = new pg.Client({
+                        connectionString: cleanedUrl,
+                        ssl: {
+                            rejectUnauthorized: false
+                        }
+                    });
+                    await client.connect();
+                    const fs = await import('fs');
+                    const path = await import('path');
+                    const sqlPath = path.join(process.cwd(), 'supabase/full_sql/101_fifa_world_cup_simulation.sql');
+                    if (fs.existsSync(sqlPath)) {
+                        let sql = fs.readFileSync(sqlPath, 'utf8');
+                        await client.query(sql);
+                        this.logger.log('🏆 101_fifa_world_cup_simulation.sql executed successfully during force reset.');
+                    } else {
+                        this.logger.error(`SQL seed file not found at ${sqlPath}`);
+                    }
+                    await client.end();
+                }
+            } catch (err) {
+                this.logger.error(`Failed to execute SQL seed file: ${(err as Error).message}`);
+            }
+            return;
+        }
 
         // 1. Ensure FIFA World Cup League exists
         const { data: league, error: leagueErr } = await supabase
@@ -1208,7 +1259,6 @@ export class SportsETLOrchestrator implements OnModuleInit {
         const argentinaId = teams.find(t => t.name === 'Argentina')?.id;
 
         // 3. Ensure Events exist
-        const now = Date.now();
 
         const eventsToUpsert = [
             {
@@ -1299,6 +1349,18 @@ export class SportsETLOrchestrator implements OnModuleInit {
         if (error || !events || events.length === 0) return;
 
         const now = Date.now();
+
+        // Check if final event has been finished for over 30 seconds to trigger auto-reset
+        const finalEvent = events.find(e => e.external_id === 'wc2026_final');
+        if (finalEvent && finalEvent.status === 'finished') {
+            const finishedTime = new Date(finalEvent.updated_at || finalEvent.start_time).getTime();
+            const RESET_DELAY_MS = 30 * 1000; // 30 seconds delay before auto-reset
+            if (now - finishedTime >= RESET_DELAY_MS) {
+                this.logger.log('⏰ World Cup Final completed. Auto-resetting simulation for the next cycle...');
+                await this.seedFIFAWorldCupSimulation(true);
+                return;
+            }
+        }
 
         for (const event of events) {
             const startTime = new Date(event.start_time).getTime();

@@ -7,7 +7,7 @@ import { useOnChainMarket } from '@/hooks/useOnChainMarket';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useAgentPredictions } from '@/hooks/useAgentPredictions';
-import { apiFetch } from '@/lib/supabase';
+import { supabase, apiFetch } from '@/lib/supabase';
 
 
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
@@ -18,12 +18,59 @@ const AgentPosition = dynamic(() => import('@/components/AgentPosition'), { ssr:
 const DataFeeds = dynamic(() => import('@/components/DataFeeds'), { ssr: false });
 const DeployAgent = dynamic(() => import('@/components/DeployAgent'), { ssr: false });
 const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), { ssr: false });
+const WorldCupBracket = dynamic(() => import('@/components/WorldCupBracket'), { ssr: false });
 
 function HomeInner() {
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [activeSector, setActiveSector] = useState('top');
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [competitors, setCompetitors] = useState<any[]>([]);
+    const [events, setEvents] = useState<any[]>([]);
+
+    // Fetch real-time sports events for World Cup bracket
+    useEffect(() => {
+        if (activeSector !== 'top') return;
+
+        const fetchEvents = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('sports_events')
+                    .select('*, home_team:sports_teams(*), away_team:sports_teams(*)')
+                    .in('external_id', ['wc2026_sf1', 'wc2026_sf2', 'wc2026_final'])
+                    .eq('source', 'apifootball');
+                if (!error && data) {
+                    setEvents(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch sports events:', err);
+            }
+        };
+
+        fetchEvents();
+
+        const channel = supabase
+            .channel('sports-events-realtime-bracket-home')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'sports_events',
+                },
+                () => {
+                    fetchEvents();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [activeSector]);
+
+    const sf1 = useMemo(() => events.find(e => e.external_id === 'wc2026_sf1'), [events]);
+    const sf2 = useMemo(() => events.find(e => e.external_id === 'wc2026_sf2'), [events]);
+    const final = useMemo(() => events.find(e => e.external_id === 'wc2026_final'), [events]);
 
     // Restore selected competition from localStorage on mount
     useEffect(() => {
@@ -146,6 +193,17 @@ function HomeInner() {
 
                 {/* Content area — smooth transition on sector change */}
                 <div key={activeSector} className="sector-content-transition">
+                    {/* FIFA World Cup 2026 Bracket */}
+                    {activeSector === 'top' && (
+                        <WorldCupBracket
+                            sf1={sf1}
+                            sf2={sf2}
+                            final={final}
+                            activeCompId={activeCompetition?.id}
+                            onSelectComp={setSelectedCompId}
+                        />
+                    )}
+
                     {/* Live Probability Curve */}
                     <ProbabilityCurve
                         competition={activeCompetition}

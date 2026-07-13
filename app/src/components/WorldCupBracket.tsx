@@ -2,11 +2,6 @@
 import React from 'react';
 import './WorldCupBracket.css';
 
-interface TeamData {
-  name: string;
-  logo: string;
-}
-
 interface MatchEvent {
   external_id: string;
   status: string;
@@ -31,7 +26,7 @@ const SF1_ID = 'a7d7f766-1c2c-4b5b-8c8d-444444444441';
 const SF2_ID = 'a7d7f766-1c2c-4b5b-8c8d-444444444442';
 const FINAL_ID = 'a7d7f766-1c2c-4b5b-8c8d-444444444443';
 
-function getTeam(ev: MatchEvent | undefined, side: 'home' | 'away', fallbackName: string, fallbackFlag: string): TeamData {
+function getTeam(ev: MatchEvent | undefined, side: 'home' | 'away', fallbackName: string, fallbackFlag: string) {
   const teamObj = side === 'home' ? ev?.home_team : ev?.away_team;
   const metaName = side === 'home' ? ev?.metadata?.homeTeamName : ev?.metadata?.awayTeamName;
   return {
@@ -42,26 +37,17 @@ function getTeam(ev: MatchEvent | undefined, side: 'home' | 'away', fallbackName
 
 function StatusBadge({ ev }: { ev: MatchEvent | undefined }) {
   if (!ev || ev.status === 'scheduled') {
-    return <span className="wc-status upcoming">⏳ UPCOMING</span>;
+    return <span className="wc-badge wc-badge--upcoming">UPCOMING</span>;
   }
   if (ev.status === 'live') {
     return (
-      <span className="wc-status live">
-        <span className="wc-status-dot" />
+      <span className="wc-badge wc-badge--live">
+        <span className="wc-badge__dot" />
         LIVE {ev.elapsed_time}&apos;
       </span>
     );
   }
-  return <span className="wc-status finished">✓ FT</span>;
-}
-
-function ScoreDisplay({ ev, score }: { ev: MatchEvent | undefined; score: number }) {
-  const isActive = ev?.status === 'live' || ev?.status === 'finished';
-  return (
-    <span className={`wc-team-score ${isActive ? 'active' : 'idle'}`}>
-      {isActive ? score : '–'}
-    </span>
-  );
+  return <span className="wc-badge wc-badge--ft">FT</span>;
 }
 
 function MatchProgress({ ev }: { ev: MatchEvent | undefined }) {
@@ -69,7 +55,7 @@ function MatchProgress({ ev }: { ev: MatchEvent | undefined }) {
   const pct = ev.status === 'finished' ? 100 : Math.min(100, (ev.elapsed_time / 90) * 100);
   return (
     <div className="wc-progress">
-      <div className="wc-progress-fill" style={{ width: `${pct}%` }} />
+      <div className="wc-progress__fill" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -89,38 +75,64 @@ function SemifinalCard({ ev, label, activeCompId, compId, onSelect, homeDefault,
   const away = getTeam(ev, 'away', awayDefault, awayFlagFB);
   const isWinnerHome = ev?.status === 'finished' && ev.home_score > ev.away_score;
   const isWinnerAway = ev?.status === 'finished' && ev.away_score > ev.home_score;
+  const isLive = ev?.status === 'live';
+  const isActive = activeCompId === compId;
 
   return (
     <div
-      className={`wc-match ${activeCompId === compId ? 'active' : ''}`}
+      className={`wc-card ${isActive ? 'wc-card--active' : ''} ${isLive ? 'wc-card--live' : ''}`}
       onClick={() => onSelect(compId)}
+      role="button"
+      tabIndex={0}
     >
-      <div className="wc-match-header">
-        <span className="wc-match-label">{label}</span>
-        <StatusBadge ev={ev} />
-      </div>
+      {/* Glow layer */}
+      <div className="wc-card__glow" />
 
-      <div className={`wc-team-row ${isWinnerHome ? 'winner' : ''}`}>
-        <div className="wc-team-info">
-          <img className="wc-team-flag" src={home.logo} alt={home.name} />
-          <span className="wc-team-name">{home.name}</span>
+      <div className="wc-card__inner">
+        {/* Header */}
+        <div className="wc-card__header">
+          <span className="wc-card__round">{label}</span>
+          <StatusBadge ev={ev} />
         </div>
-        <ScoreDisplay ev={ev} score={ev?.home_score ?? 0} />
-      </div>
 
-      <div className={`wc-team-row ${isWinnerAway ? 'winner' : ''}`}>
-        <div className="wc-team-info">
-          <img className="wc-team-flag" src={away.logo} alt={away.name} />
-          <span className="wc-team-name">{away.name}</span>
+        {/* Teams */}
+        <div className="wc-card__teams">
+          <div className={`wc-team ${isWinnerHome ? 'wc-team--winner' : ''}`}>
+            <div className="wc-team__left">
+              <div className="wc-team__flag-wrap">
+                <img className="wc-team__flag" src={home.logo} alt={home.name} />
+              </div>
+              <span className="wc-team__name">{home.name}</span>
+            </div>
+            <span className={`wc-team__score ${ev?.status === 'live' || ev?.status === 'finished' ? 'wc-team__score--active' : ''}`}>
+              {ev?.status === 'live' || ev?.status === 'finished' ? ev.home_score : '–'}
+            </span>
+          </div>
+
+          <div className="wc-card__divider" />
+
+          <div className={`wc-team ${isWinnerAway ? 'wc-team--winner' : ''}`}>
+            <div className="wc-team__left">
+              <div className="wc-team__flag-wrap">
+                <img className="wc-team__flag" src={away.logo} alt={away.name} />
+              </div>
+              <span className="wc-team__name">{away.name}</span>
+            </div>
+            <span className={`wc-team__score ${ev?.status === 'live' || ev?.status === 'finished' ? 'wc-team__score--active' : ''}`}>
+              {ev?.status === 'live' || ev?.status === 'finished' ? ev.away_score : '–'}
+            </span>
+          </div>
         </div>
-        <ScoreDisplay ev={ev} score={ev?.away_score ?? 0} />
+
+        <MatchProgress ev={ev} />
+
+        {/* Footer */}
+        <div className="wc-card__footer">
+          <span className="wc-card__cta">
+            {isActive ? '📊 Viewing' : '🔍 Predict'}
+          </span>
+        </div>
       </div>
-
-      <MatchProgress ev={ev} />
-
-      {ev?.venue && (
-        <div className="wc-venue">📍 {ev.venue}</div>
-      )}
     </div>
   );
 }
@@ -128,26 +140,37 @@ function SemifinalCard({ ev, label, activeCompId, compId, onSelect, homeDefault,
 export default function WorldCupBracket({ sf1, sf2, final: finalEv, activeCompId, onSelectComp }: Props) {
   const fHome = getTeam(finalEv, 'home', 'Winner SF1', 'https://flagcdn.com/w320/un.png');
   const fAway = getTeam(finalEv, 'away', 'Winner SF2', 'https://flagcdn.com/w320/un.png');
+  const isLive = finalEv?.status === 'live';
+  const isFinished = finalEv?.status === 'finished';
+  const isActive = activeCompId === FINAL_ID;
 
   return (
-    <div className="wc-bracket">
+    <div className="wc-bracket" id="world-cup-bracket">
+      {/* Ambient background */}
+      <div className="wc-bracket__bg" />
+
       {/* Header */}
-      <div className="wc-header">
-        <h2 className="wc-title">
-          <span className="wc-title-icon">🏆</span>
-          FIFA World Cup 2026 Match Center
-        </h2>
-        <span className="wc-live-badge">
-          <span className="wc-live-dot" />
-          REAL-TIME SIMULATION
-        </span>
+      <div className="wc-bracket__header">
+        <div className="wc-bracket__title-group">
+          <span className="wc-bracket__trophy">🏆</span>
+          <div>
+            <h2 className="wc-bracket__title">FIFA World Cup 2026</h2>
+            <p className="wc-bracket__subtitle">AI Forecasting Match Center</p>
+          </div>
+        </div>
+        <div className="wc-bracket__badges">
+          <span className="wc-badge wc-badge--realtime">
+            <span className="wc-badge__dot" />
+            REAL-TIME
+          </span>
+        </div>
       </div>
 
-      {/* 5-column Grid: SF1 | connector | FINAL | connector | SF2 */}
-      <div className="wc-grid">
+      {/* Bracket Grid */}
+      <div className="wc-bracket__grid">
         {/* SF1 */}
         <SemifinalCard
-          ev={sf1} label="Semifinal 1" activeCompId={activeCompId} compId={SF1_ID}
+          ev={sf1} label="Semi-final 1" activeCompId={activeCompId} compId={SF1_ID}
           onSelect={onSelectComp} homeDefault="France" awayDefault="Spain"
           homeFlagFB="https://media.api-sports.io/football/teams/2.png"
           awayFlagFB="https://media.api-sports.io/football/teams/9.png"
@@ -155,58 +178,81 @@ export default function WorldCupBracket({ sf1, sf2, final: finalEv, activeCompId
 
         {/* Connector 1 */}
         <div className="wc-connector">
-          <div className="wc-connector-line" />
+          <div className="wc-connector__line">
+            <div className="wc-connector__pulse" />
+          </div>
         </div>
 
         {/* FINAL */}
         <div
-          className={`wc-final-card ${activeCompId === FINAL_ID ? 'active' : ''}`}
+          className={`wc-final ${isActive ? 'wc-final--active' : ''} ${isLive ? 'wc-final--live' : ''}`}
           onClick={() => onSelectComp(FINAL_ID)}
+          role="button"
+          tabIndex={0}
         >
-          <div className="wc-final-label">🏆 World Cup Grand Final</div>
+          <div className="wc-final__glow" />
+          <div className="wc-final__shimmer" />
 
-          <div className="wc-final-teams">
-            <div className="wc-final-team">
-              <img className="wc-final-flag" src={fHome.logo} alt={fHome.name} />
-              <span className="wc-final-team-name">{fHome.name}</span>
+          <div className="wc-final__inner">
+            <div className="wc-final__crown">🏆</div>
+            <div className="wc-final__label">GRAND FINAL</div>
+
+            <div className="wc-final__matchup">
+              {/* Home */}
+              <div className="wc-final__side">
+                <div className="wc-final__flag-wrap">
+                  <img className="wc-final__flag" src={fHome.logo} alt={fHome.name} />
+                </div>
+                <span className="wc-final__team-name">{fHome.name}</span>
+              </div>
+
+              {/* Score / VS */}
+              <div className="wc-final__center">
+                {isLive || isFinished ? (
+                  <>
+                    <span className="wc-final__score">
+                      {finalEv!.home_score} <span className="wc-final__score-sep">:</span> {finalEv!.away_score}
+                    </span>
+                    <span className={`wc-final__status-text ${isLive ? 'wc-final__status-text--live' : ''}`}>
+                      {isLive ? `⚡ ${finalEv!.elapsed_time}'` : '✓ Full Time'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="wc-final__vs">VS</span>
+                )}
+              </div>
+
+              {/* Away */}
+              <div className="wc-final__side">
+                <div className="wc-final__flag-wrap">
+                  <img className="wc-final__flag" src={fAway.logo} alt={fAway.name} />
+                </div>
+                <span className="wc-final__team-name">{fAway.name}</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-              {finalEv?.status === 'live' || finalEv?.status === 'finished' ? (
-                <>
-                  <span className="wc-final-score">{finalEv.home_score} – {finalEv.away_score}</span>
-                  <span className="wc-final-live">
-                    {finalEv.status === 'live' ? `LIVE ${finalEv.elapsed_time}'` : 'FULL TIME'}
-                  </span>
-                </>
-              ) : (
-                <span className="wc-vs">VS</span>
-              )}
-            </div>
+            <MatchProgress ev={finalEv} />
 
-            <div className="wc-final-team">
-              <img className="wc-final-flag" src={fAway.logo} alt={fAway.name} />
-              <span className="wc-final-team-name">{fAway.name}</span>
+            <div className="wc-final__bottom">
+              <span className="wc-final__pill">
+                {isLive ? '⚡ Live Match Center' :
+                 isFinished ? '🏆 Tournament Complete' :
+                 '⏳ Awaiting Semi-final Results'}
+              </span>
             </div>
           </div>
-
-          <MatchProgress ev={finalEv} />
-
-          <span className="wc-final-pill">
-            {finalEv?.status === 'live' ? '⚡ Match Center Live' :
-             finalEv?.status === 'finished' ? '🏆 Tournament Settled' :
-             '⏳ Starts after Semifinals · Prize: 35.0 SOL'}
-          </span>
         </div>
 
         {/* Connector 2 */}
         <div className="wc-connector">
-          <div className="wc-connector-line" />
+          <div className="wc-connector__line">
+            <div className="wc-connector__pulse" />
+          </div>
         </div>
 
         {/* SF2 */}
         <SemifinalCard
-          ev={sf2} label="Semifinal 2" activeCompId={activeCompId} compId={SF2_ID}
+          ev={sf2} label="Semi-final 2" activeCompId={activeCompId} compId={SF2_ID}
           onSelect={onSelectComp} homeDefault="England" awayDefault="Argentina"
           homeFlagFB="https://media.api-sports.io/football/teams/10.png"
           awayFlagFB="https://media.api-sports.io/football/teams/26.png"

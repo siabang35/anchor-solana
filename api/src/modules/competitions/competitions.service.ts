@@ -75,7 +75,27 @@ export class CompetitionsService {
             return [];
         }
 
-        return (data || []).map((c: any) => this.toResponseDto(c));
+        let merged = data || [];
+
+        // Always fetch the special World Cup simulation competitions so they are available in the bracket UI
+        if (!sector || sector === 'all' || sector === 'sports') {
+            const { data: wcComps } = await supabase
+                .from('competitions')
+                .select('*, leaderboard_score_config(min_predictions)')
+                .in('id', [
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444441',
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444442',
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444443'
+                ]);
+            const wcList = wcComps || [];
+            for (const wc of wcList) {
+                if (!merged.some(c => c.id === wc.id)) {
+                    merged.push(wc);
+                }
+            }
+        }
+
+        return merged.map((c: any) => this.toResponseDto(c));
     }
 
     /**
@@ -100,7 +120,27 @@ export class CompetitionsService {
             return [];
         }
 
-        return (data || []).map((c: any) => this.toResponseDto(c));
+        let merged = data || [];
+
+        // Always fetch the special World Cup simulation competitions so they are available in the bracket UI
+        if (sector === 'sports') {
+            const { data: wcComps } = await supabase
+                .from('competitions')
+                .select('*, leaderboard_score_config(min_predictions)')
+                .in('id', [
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444441',
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444442',
+                    'a7d7f766-1c2c-4b5b-8c8d-444444444443'
+                ]);
+            const wcList = wcComps || [];
+            for (const wc of wcList) {
+                if (!merged.some(c => c.id === wc.id)) {
+                    merged.push(wc);
+                }
+            }
+        }
+
+        return merged.map((c: any) => this.toResponseDto(c));
     }
 
     /**
