@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useCompetitions } from '@/hooks/useCompetitions';
 import { useOnChainMarket } from '@/hooks/useOnChainMarket';
@@ -21,11 +22,18 @@ const CompetitionTimer = dynamic(() => import('@/components/CompetitionTimer'), 
 const WorldCupBracket = dynamic(() => import('@/components/WorldCupBracket'), { ssr: false });
 
 function HomeInner() {
+    const router = useRouter();
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
     const [activeSector, setActiveSector] = useState('top');
     const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
     const [competitors, setCompetitors] = useState<any[]>([]);
     const [events, setEvents] = useState<any[]>([]);
+
+    const handleSelectWorldCupComp = useCallback((id: string) => {
+        localStorage.setItem('selected_competition_id', id);
+        localStorage.setItem('should_scroll_to_deploy', 'true');
+        router.push('/sports');
+    }, [router]);
 
     // Fetch real-time sports events for World Cup bracket
     useEffect(() => {
@@ -200,7 +208,7 @@ function HomeInner() {
                             sf2={sf2}
                             final={final}
                             activeCompId={activeCompetition?.id}
-                            onSelectComp={setSelectedCompId}
+                            onSelectComp={handleSelectWorldCupComp}
                         />
                     )}
 

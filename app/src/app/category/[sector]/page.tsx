@@ -125,6 +125,27 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
             setSelectedCompId(stored);
             localStorage.removeItem('selected_competition_id');
         }
+
+        const shouldScroll = localStorage.getItem('should_scroll_to_deploy');
+        if (shouldScroll === 'true') {
+            localStorage.removeItem('should_scroll_to_deploy');
+            const isMobile = window.matchMedia('(max-width: 900px)').matches;
+            setTimeout(() => {
+                if (isMobile) {
+                    // On mobile the desktop column is hidden — open the slide-out drawer
+                    window.dispatchEvent(new Event('open-deploy-drawer'));
+                } else {
+                    // On desktop scroll the inline deploy panel into view
+                    const target = document.querySelector('.deploy-desktop-column');
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const deployBox = target.querySelector('.glass-card') || target;
+                        deployBox.classList.add('pulse-highlight');
+                        setTimeout(() => deployBox.classList.remove('pulse-highlight'), 2500);
+                    }
+                }
+            }, 600);
+        }
     }, []);
 
     // Fetch real-time sports events for World Cup bracket
@@ -336,7 +357,24 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                         sf2={sf2}
                         final={final}
                         activeCompId={activeComp?.id}
-                        onSelectComp={setSelectedCompId}
+                        onSelectComp={(id) => {
+                            setSelectedCompId(id);
+                            const isMobile = window.matchMedia('(max-width: 900px)').matches;
+                            if (isMobile) {
+                                // Open the mobile deploy drawer after a short tick
+                                setTimeout(() => window.dispatchEvent(new Event('open-deploy-drawer')), 150);
+                            } else {
+                                setTimeout(() => {
+                                    const target = document.querySelector('.deploy-desktop-column');
+                                    if (target) {
+                                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        const deployBox = target.querySelector('.glass-card') || target;
+                                        deployBox.classList.add('pulse-highlight');
+                                        setTimeout(() => deployBox.classList.remove('pulse-highlight'), 2500);
+                                    }
+                                }, 100);
+                            }
+                        }}
                     />
                 )}
 

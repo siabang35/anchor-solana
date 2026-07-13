@@ -311,6 +311,21 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 setIsMobileDrawerOpen(true);
             }
         }
+
+        const handleOpenDrawer = () => {
+            setIsMobileDrawerOpen(true);
+            setViewTab('build');
+            // After the drawer slide-in animation completes, flash a highlight
+            setTimeout(() => {
+                const wrapper = document.querySelector('.deploy-agent-wrapper.mobile-open');
+                if (wrapper) {
+                    wrapper.classList.add('pulse-highlight');
+                    setTimeout(() => wrapper.classList.remove('pulse-highlight'), 2500);
+                }
+            }, 450);
+        };
+        window.addEventListener('open-deploy-drawer', handleOpenDrawer);
+        return () => window.removeEventListener('open-deploy-drawer', handleOpenDrawer);
     }, []);
 
     // Fetch agent types and quota from backend

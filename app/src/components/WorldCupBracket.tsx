@@ -129,7 +129,7 @@ function SemifinalCard({ ev, label, activeCompId, compId, onSelect, homeDefault,
         {/* Footer */}
         <div className="wc-card__footer">
           <span className="wc-card__cta">
-            {isActive ? '📊 Viewing' : '🔍 Predict'}
+            {isActive ? '⚡ Competing' : '🏆 Compete'}
           </span>
         </div>
       </div>
@@ -235,8 +235,10 @@ export default function WorldCupBracket({ sf1, sf2, final: finalEv, activeCompId
 
             <div className="wc-final__bottom">
               <span className="wc-final__pill">
-                {isLive ? '⚡ Live Match Center' :
+                {isActive ? '⚡ Competing' :
+                 isLive ? '⚡ Live Match Center' :
                  isFinished ? '🏆 Tournament Complete' :
+                 finalEv ? '🏆 Compete' :
                  '⏳ Awaiting Semi-final Results'}
               </span>
             </div>

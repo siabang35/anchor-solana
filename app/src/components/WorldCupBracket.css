@@ -344,17 +344,25 @@
 }
 
 .wc-card__cta {
-  font-size: 0.48rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.45);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  transition: color 0.3s;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 5px 18px;
+  border-radius: 20px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.08);
 }
 
 .wc-card:hover .wc-card__cta,
 .wc-card--active .wc-card__cta {
-  color: rgba(239, 68, 68, 0.8);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.7) 0%, rgba(245, 158, 11, 0.6) 100%);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
+  transform: scale(1.04);
 }
 
 /* ── Connector ───────────────────────────────── */
@@ -610,21 +618,30 @@
 
 .wc-final__pill {
   display: inline-block;
-  font-size: 0.5rem;
-  font-weight: 700;
-  padding: 5px 16px;
+  font-size: 0.52rem;
+  font-weight: 800;
+  padding: 6px 20px;
   border-radius: 24px;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   background: rgba(239, 68, 68, 0.08);
   color: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(239, 68, 68, 0.15);
-  transition: all 0.3s;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .wc-final:hover .wc-final__pill {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.25);
-  color: rgba(255, 255, 255, 0.8);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.65) 0%, rgba(245, 158, 11, 0.55) 100%);
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.2);
+  transform: scale(1.04);
+}
+
+.wc-final--active .wc-final__pill {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.7) 0%, rgba(245, 158, 11, 0.6) 100%);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.25);
 }
 
 /* ── Progress Bar ────────────────────────────── */
@@ -807,5 +824,58 @@
 
   .wc-final__inner {
     padding: 1.25rem 1rem;
+  }
+
+  /* Larger CTA tap targets on mobile */
+  .wc-card__cta {
+    font-size: 0.58rem;
+    padding: 7px 22px;
+  }
+
+  .wc-final__pill {
+    font-size: 0.56rem;
+    padding: 7px 24px;
+  }
+
+  /* Tap feedback on mobile — instant visual response */
+  .wc-card:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+
+  .wc-final:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
+  }
+
+  /* Disable hover transforms on touch devices */
+  .wc-card:hover {
+    transform: none;
+  }
+
+  .wc-final:hover {
+    transform: none;
+  }
+
+  .wc-card--active {
+    transform: none;
+  }
+
+  .wc-final--active {
+    transform: none;
+  }
+
+  /* Always show CTA as filled on mobile for discoverability */
+  .wc-card__cta {
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.18);
+  }
+
+  .wc-card--active .wc-card__cta {
+    color: #fff;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.7) 0%, rgba(245, 158, 11, 0.6) 100%);
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
   }
 }

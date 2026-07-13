@@ -3018,3 +3018,26 @@ body {
   }
 }
 
+/* ===== DEPLOY PANEL HIGHLIGHT ACTION ===== */
+.pulse-highlight {
+  animation: deployPulseHighlight 2s ease-in-out;
+  border-color: #8b5cf6 !important;
+}
+
+@keyframes deployPulseHighlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4);
+    transform: scale(1);
+  }
+  30% {
+    box-shadow: 0 0 0 15px rgba(139, 92, 246, 0);
+    transform: scale(1.02);
+  }
+  50% {
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
+  }
+}
+
