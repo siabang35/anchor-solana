@@ -4,6 +4,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../database/supabase.service.js';
+import { R2Service } from '../../database/r2.service.js';
 import {
     NotificationDto,
     NotificationsQueryDto,
@@ -26,7 +27,10 @@ import {
 export class NotificationsService {
     private readonly logger = new Logger(NotificationsService.name);
 
-    constructor(private readonly supabaseService: SupabaseService) { }
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly r2Service: R2Service,
+    ) { }
 
     // ========================================================================
     // GET NOTIFICATIONS
@@ -259,6 +263,30 @@ export class NotificationsService {
         } = {},
     ): Promise<string | null> {
         try {
+            let dbMetadata = options.metadata || {};
+            
+            // Offload metadata to Cloudflare R2 if it exceeds 10KB
+            const serializedMetadata = JSON.stringify(dbMetadata);
+            if (serializedMetadata.length > 10000 && this.r2Service.isActive()) {
+                try {
+                    const key = `notifications/${userId}/${Date.now()}_metadata.json`;
+                    this.logger.log(`Offloading large notification metadata (${serializedMetadata.length} chars) to Cloudflare R2: ${key}`);
+                    const r2Url = await this.r2Service.uploadObject(
+                        this.r2Service.bucketArchives,
+                        key,
+                        serializedMetadata,
+                        'application/json'
+                    );
+                    dbMetadata = {
+                        r2_archived: true,
+                        r2_url: r2Url,
+                        original_size: serializedMetadata.length,
+                    };
+                } catch (err: any) {
+                    this.logger.warn(`Failed to offload heavy notification metadata to R2: ${err.message}`);
+                }
+            }
+
             const { data, error } = await this.supabaseService
                 .getAdminClient()
                 .rpc('create_notification', {
@@ -268,6 +296,8 @@ export class NotificationsService {
                     p_message: message,
                     p_resource_type: options.resourceType || null,
                     p_resource_id: options.resourceId || null,
+                    p_data: dbMetadata,
+                    p_action_url: options.actionUrl || null,
                 });
 
             if (error) {
@@ -276,7 +306,7 @@ export class NotificationsService {
             }
 
             return data;
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(`Notification creation error: ${error.message}`);
             return null;
         }

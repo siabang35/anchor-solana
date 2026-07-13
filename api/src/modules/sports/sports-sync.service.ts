@@ -14,6 +14,7 @@ import { TheSportsDBClient } from './clients/thesportsdb.client.js';
 import { APIFootballClient } from './clients/api-football.client.js';
 import { APISportsClient, SPORT_API_CONFIGS } from './clients/api-sports.client.js';
 import { SportsService } from './sports.service.js';
+import { R2Service } from '../../database/r2.service.js';
 import {
     SportType,
     DataSource,
@@ -32,6 +33,7 @@ export class SportsSyncService implements OnModuleInit {
         private readonly theSportsDBClient: TheSportsDBClient,
         private readonly apiFootballClient: APIFootballClient,
         private readonly apiSportsClient: APISportsClient,
+        private readonly r2Service: R2Service,
     ) { }
 
     async onModuleInit() {
@@ -143,6 +145,7 @@ export class SportsSyncService implements OnModuleInit {
             let totalFetched = 0;
             let totalCreated = 0;
             let totalUpdated = 0;
+            const rawPayload: any[] = [];
 
             // Sync from TheSportsDB
             // If sport is provided, sync only that sport. Otherwise sync all supported sports.
@@ -152,6 +155,7 @@ export class SportsSyncService implements OnModuleInit {
                 try {
                     const leagues = await this.theSportsDBClient.getLeaguesBySport(s);
                     totalFetched += leagues.length;
+                    rawPayload.push({ source: 'thesportsdb', sport: s, count: leagues.length, data: leagues });
 
                     if (leagues.length > 0) {
                         const result = await this.sportsService.upsertLeagues(leagues);
@@ -173,6 +177,7 @@ export class SportsSyncService implements OnModuleInit {
                 try {
                     const footballLeagues = await this.apiFootballClient.getLeagues();
                     totalFetched += footballLeagues.length;
+                    rawPayload.push({ source: 'apifootball', sport: 'football', count: footballLeagues.length, data: footballLeagues });
 
                     if (footballLeagues.length > 0) {
                         const result = await this.sportsService.upsertLeagues(footballLeagues);
@@ -191,6 +196,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsCreated: totalCreated,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: rawPayload,
             });
 
             this.logger.log(`Leagues sync completed: ${totalFetched} fetched, ${totalCreated} created, ${totalUpdated} updated (${durationMs}ms)`);
@@ -233,10 +239,12 @@ export class SportsSyncService implements OnModuleInit {
             let totalFetched = 0;
             let totalCreated = 0;
             let totalUpdated = 0;
+            const rawPayload: any[] = [];
 
             // Sync from TheSportsDB
             const events = await this.theSportsDBClient.getEventsByDate(dateStr, sport);
             totalFetched += events.length;
+            rawPayload.push({ source: 'thesportsdb', sport, date: dateStr, count: events.length, data: events });
 
             if (events.length > 0) {
                 const result = await this.sportsService.upsertEvents(events);
@@ -249,6 +257,7 @@ export class SportsSyncService implements OnModuleInit {
                 try {
                     const footballEvents = await this.apiFootballClient.getUpcomingFixtures();
                     totalFetched += footballEvents.length;
+                    rawPayload.push({ source: 'apifootball', sport: 'football', count: footballEvents.length, data: footballEvents });
 
                     if (footballEvents.length > 0) {
                         const result = await this.sportsService.upsertEvents(footballEvents);
@@ -289,6 +298,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsCreated: totalCreated,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: rawPayload,
             });
 
             this.logger.log(`Events sync completed: ${totalFetched} fetched.`);
@@ -326,10 +336,12 @@ export class SportsSyncService implements OnModuleInit {
 
             let totalFetched = 0;
             let totalUpdated = 0;
+            const rawPayload: any[] = [];
 
             // Sync from TheSportsDB
             const liveEvents = await this.theSportsDBClient.getLiveScores(sport);
             totalFetched += liveEvents.length;
+            rawPayload.push({ source: 'thesportsdb', sport, count: liveEvents.length, data: liveEvents });
 
             if (liveEvents.length > 0) {
                 const result = await this.sportsService.upsertEvents(liveEvents);
@@ -341,6 +353,7 @@ export class SportsSyncService implements OnModuleInit {
                 try {
                     const footballLive = await this.apiFootballClient.getLiveFixtures();
                     totalFetched += footballLive.length;
+                    rawPayload.push({ source: 'apifootball', sport: 'football', count: footballLive.length, data: footballLive });
 
                     if (footballLive.length > 0) {
                         const result = await this.sportsService.upsertEvents(footballLive);
@@ -357,6 +370,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsFetched: totalFetched,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: rawPayload,
             });
 
             this.logger.log(`Live sync completed: ${totalFetched} fetched, ${totalUpdated} updated (${durationMs}ms)`);
@@ -396,10 +410,12 @@ export class SportsSyncService implements OnModuleInit {
             let totalFetched = 0;
             let totalCreated = 0;
             let totalUpdated = 0;
+            let fetchedTeams: any[] = [];
 
             if (source === DataSource.THESPORTSDB) {
                 const teams = await this.theSportsDBClient.getTeamsByLeague(leagueExternalId);
                 totalFetched = teams.length;
+                fetchedTeams = teams;
 
                 if (teams.length > 0) {
                     const result = await this.sportsService.upsertTeams(teams);
@@ -413,6 +429,7 @@ export class SportsSyncService implements OnModuleInit {
                     currentYear,
                 );
                 totalFetched = teams.length;
+                fetchedTeams = teams;
 
                 if (teams.length > 0) {
                     const result = await this.sportsService.upsertTeams(teams);
@@ -428,6 +445,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsCreated: totalCreated,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: fetchedTeams,
             });
 
             return {
@@ -481,6 +499,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsFetched: totalFetched,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: odds,
             });
 
             this.logger.log(`Odds sync completed: ${totalFetched} fetched, ${totalUpdated} upserted (${durationMs}ms)`);
@@ -567,11 +586,13 @@ export class SportsSyncService implements OnModuleInit {
             let totalFetched = 0;
             let totalCreated = 0;
             let totalUpdated = 0;
+            let fetchedData: any = null;
 
             switch (syncType) {
                 case 'leagues': {
                     const leagues = await this.apiSportsClient.getLeagues();
                     totalFetched = leagues.length;
+                    fetchedData = leagues;
 
                     if (leagues.length > 0) {
                         const result = await this.sportsService.upsertLeagues(leagues);
@@ -583,6 +604,7 @@ export class SportsSyncService implements OnModuleInit {
                 case 'games': {
                     const games = await this.apiSportsClient.getUpcomingGames();
                     totalFetched = games.length;
+                    fetchedData = games;
 
                     if (games.length > 0) {
                         const result = await this.sportsService.upsertEvents(games);
@@ -594,6 +616,7 @@ export class SportsSyncService implements OnModuleInit {
                 case 'live': {
                     const liveGames = await this.apiSportsClient.getLiveGames();
                     totalFetched = liveGames.length;
+                    fetchedData = liveGames;
 
                     if (liveGames.length > 0) {
                         const result = await this.sportsService.upsertEvents(liveGames);
@@ -610,6 +633,7 @@ export class SportsSyncService implements OnModuleInit {
                 recordsCreated: totalCreated,
                 recordsUpdated: totalUpdated,
                 durationMs,
+                payload: fetchedData,
             });
 
             this.logger.log(`API-Sports ${sport} ${syncType} sync completed: ${totalFetched} fetched (${durationMs}ms)`);
@@ -763,9 +787,28 @@ export class SportsSyncService implements OnModuleInit {
             recordsFailed?: number;
             errorMessage?: string;
             durationMs?: number;
+            payload?: any;
         },
     ): Promise<void> {
         if (id === 'unknown') return;
+
+        let r2Url: string | undefined = undefined;
+        if (updates.payload && this.r2Service.isActive()) {
+            try {
+                const now = new Date();
+                const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const key = `sports_sync_raw/${yearMonth}/${id}.json`;
+                this.logger.log(`Uploading raw sports sync payload to Cloudflare R2: ${key}`);
+                r2Url = await this.r2Service.uploadObject(
+                    this.r2Service.bucketEtlRaw,
+                    key,
+                    JSON.stringify(updates.payload),
+                    'application/json'
+                );
+            } catch (err: any) {
+                this.logger.warn(`Failed to upload sync raw payload to R2: ${err.message}`);
+            }
+        }
 
         const supabase = this.supabaseService.getAdminClient();
 
@@ -779,6 +822,7 @@ export class SportsSyncService implements OnModuleInit {
                 records_failed: updates.recordsFailed,
                 error_message: updates.errorMessage,
                 duration_ms: updates.durationMs,
+                r2_raw_payload_url: r2Url,
                 completed_at: new Date().toISOString(),
             })
             .eq('id', id);

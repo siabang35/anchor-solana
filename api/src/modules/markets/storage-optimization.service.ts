@@ -17,6 +17,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { SupabaseService } from '../../database/supabase.service.js';
+import { R2Service } from '../../database/r2.service.js';
 
 interface StorageHealthRow {
     table_name: string;
@@ -52,7 +53,10 @@ export class StorageOptimizationService implements OnModuleInit {
     private readonly ARCHIVE_BATCH_SIZE = 1000;            // Rows per archive batch file
     private readonly STORAGE_BUCKET = 'data-archives';
 
-    constructor(private readonly supabaseService: SupabaseService) {}
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly r2Service: R2Service
+    ) {}
 
     async onModuleInit() {
         // Log initial storage health on startup
@@ -225,17 +229,33 @@ export class StorageOptimizationService implements OnModuleInit {
                 const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
                 const storagePath = `probability_history/${yearMonth}/${comp.id}.json`;
 
-                // Upload to Supabase Storage
-                const { error: uploadError } = await supabase.storage
-                    .from(this.STORAGE_BUCKET)
-                    .upload(storagePath, jsonStr, {
-                        contentType: 'application/json',
-                        upsert: true,
-                    });
+                // Upload to Cloudflare R2 if configured, else fallback to Supabase Storage
+                if (this.r2Service.isActive()) {
+                    try {
+                        this.logger.log(`Using Cloudflare R2 for archival of ${comp.id}`);
+                        await this.r2Service.uploadObject(
+                            this.r2Service.bucketArchives,
+                            storagePath,
+                            jsonStr,
+                            'application/json'
+                        );
+                    } catch (uploadError: any) {
+                        this.logger.warn(`Failed to archive to R2 ${comp.id}: ${uploadError.message}`);
+                        continue;
+                    }
+                } else {
+                    this.logger.log(`R2 not configured. Falling back to Supabase Storage for ${comp.id}`);
+                    const { error: uploadError } = await supabase.storage
+                        .from(this.STORAGE_BUCKET)
+                        .upload(storagePath, jsonStr, {
+                            contentType: 'application/json',
+                            upsert: true,
+                        });
 
-                if (uploadError) {
-                    this.logger.warn(`Failed to archive ${comp.id}: ${uploadError.message}`);
-                    continue;
+                    if (uploadError) {
+                        this.logger.warn(`Failed to archive to Supabase Storage ${comp.id}: ${uploadError.message}`);
+                        continue;
+                    }
                 }
 
                 // Record the archive batch

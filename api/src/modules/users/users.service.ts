@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../database/supabase.service.js';
 import { EmailService } from '../email/email.service.js';
+import { R2Service } from '../../database/r2.service.js';
 
 export interface WalletAddress {
     address: string;
@@ -75,6 +76,7 @@ export class UsersService {
         private readonly supabaseService: SupabaseService,
         private readonly configService: ConfigService,
         private readonly emailService: EmailService,
+        private readonly r2Service: R2Service,
     ) {
         this.VERIFICATION_SECRET_KEY = this.configService.get('VERIFICATION_TOKEN_SECRET')
             || this.configService.get('JWT_SECRET')
@@ -345,30 +347,48 @@ export class UsersService {
      * Upload user avatar
      */
     async uploadAvatar(userId: string, file: MulterFile): Promise<string> {
-        const supabase = this.supabaseService.getAdminClient();
         const fileExt = file.originalname.split('.').pop();
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
+        const fileName = `avatars/${userId}/${Date.now()}.${fileExt}`;
+        let publicUrl = '';
 
-        const { error } = await supabase.storage
-            .from('avatars')
-            .upload(fileName, file.buffer, {
-                contentType: file.mimetype,
-                upsert: true,
-            });
+        if (this.r2Service.isActive()) {
+            try {
+                this.logger.log(`Uploading avatar to Cloudflare R2: ${fileName}`);
+                publicUrl = await this.r2Service.uploadObject(
+                    this.r2Service.bucketMedia,
+                    fileName,
+                    file.buffer,
+                    file.mimetype
+                );
+            } catch (err: any) {
+                this.logger.error(`Failed to upload avatar to R2: ${err.message}`);
+                throw new Error(`Failed to upload avatar to storage: ${err.message}`);
+            }
+        } else {
+            this.logger.log(`R2 not active, falling back to Supabase Storage for avatar: ${fileName}`);
+            const supabase = this.supabaseService.getAdminClient();
+            const { error } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: true,
+                });
 
-        if (error) {
-            this.logger.error(`Failed to upload avatar: ${error.message}`);
-            throw new Error(`Failed to upload avatar: ${error.message}`);
+            if (error) {
+                this.logger.error(`Failed to upload avatar to Supabase Storage: ${error.message}`);
+                throw new Error(`Failed to upload avatar: ${error.message}`);
+            }
+
+            const { data } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+            publicUrl = data.publicUrl;
         }
 
-        const { data } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(fileName);
-
         // Update profile with new avatar URL
-        await this.updateProfile(userId, { avatar_url: data.publicUrl });
+        await this.updateProfile(userId, { avatar_url: publicUrl });
 
-        return data.publicUrl;
+        return publicUrl;
     }
 
     /**
