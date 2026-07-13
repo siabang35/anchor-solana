@@ -108,23 +108,15 @@ export class AgentsService {
 
         if (wData?.user_id) return wData.user_id;
 
-        // 2. Efficient database-level search on profiles JSONB column
-        let { data: profile } = await supabase
-            .from('profiles')
-            .select('id')
-            .contains('wallet_addresses', [{ address: identifier }])
-            .maybeSingle();
-
-        if (!profile) {
-            const { data: pLower } = await supabase
+        // 2. Fallback check: Search by email if it looks like one, or directly on profiles table privy fields
+        if (identifier.includes('@')) {
+            const { data: profile } = await supabase
                 .from('profiles')
                 .select('id')
-                .contains('wallet_addresses', [{ address: identifier.toLowerCase() }])
+                .ilike('email', identifier)
                 .maybeSingle();
-            profile = pLower;
+            if (profile?.id) return profile.id;
         }
-
-        if (profile?.id) return profile.id;
 
         // Auto-provision a user if it's a valid Base58 Solana address structure (roughly 32-44 characters)
         if (identifier.length >= 32 && identifier.length <= 44 && !identifier.includes('@')) {
@@ -143,10 +135,10 @@ export class AgentsService {
 
                 if (authData?.user) {
                     const newUserId = authData.user.id;
-                    // Create Profile - Preserve case for Solana address
+                    // Create Profile without wallet_addresses column
                     await supabase.from('profiles').insert({
                         id: newUserId,
-                        wallet_addresses: [{ address: identifier, chain: 'solana', isPrimary: true }]
+                        full_name: `User ${identifier.slice(0, 4)}...${identifier.slice(-4)}`
                     });
                     // Insert Wallet Address Record - Preserve case for Solana address
                     await supabase.from('wallet_addresses').insert({
