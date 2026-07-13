@@ -42,8 +42,10 @@ CREATE INDEX IF NOT EXISTS idx_comp_pools_status ON public.competition_pools(set
 
 ALTER TABLE public.competition_pools ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view pools" ON public.competition_pools;
+DROP POLICY IF EXISTS "Public can view pools" ON competition_pools;
 CREATE POLICY "Public can view pools" ON public.competition_pools FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Service role manages pools" ON public.competition_pools;
+DROP POLICY IF EXISTS "Service role manages pools" ON competition_pools;
 CREATE POLICY "Service role manages pools" ON public.competition_pools FOR ALL USING (auth.role() = 'service_role');
 
 DROP TRIGGER IF EXISTS update_competition_pools_updated_at ON public.competition_pools;
@@ -80,12 +82,16 @@ CREATE INDEX IF NOT EXISTS idx_pool_stakes_comp ON public.pool_stakes(competitio
 
 ALTER TABLE public.pool_stakes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view own stakes" ON public.pool_stakes;
+DROP POLICY IF EXISTS "Users can view own stakes" ON pool_stakes;
 CREATE POLICY "Users can view own stakes" ON public.pool_stakes FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "Public can view all stakes" ON public.pool_stakes;
+DROP POLICY IF EXISTS "Public can view all stakes" ON pool_stakes;
 CREATE POLICY "Public can view all stakes" ON public.pool_stakes FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Users can insert own stakes" ON public.pool_stakes;
+DROP POLICY IF EXISTS "Users can insert own stakes" ON pool_stakes;
 CREATE POLICY "Users can insert own stakes" ON public.pool_stakes FOR INSERT WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "Service role manages stakes" ON public.pool_stakes;
+DROP POLICY IF EXISTS "Service role manages stakes" ON pool_stakes;
 CREATE POLICY "Service role manages stakes" ON public.pool_stakes FOR ALL USING (auth.role() = 'service_role');
 
 -- 3. Pool Winners
@@ -118,8 +124,10 @@ CREATE INDEX IF NOT EXISTS idx_pool_winners_rank ON public.pool_winners(competit
 
 ALTER TABLE public.pool_winners ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view winners" ON public.pool_winners;
+DROP POLICY IF EXISTS "Public can view winners" ON pool_winners;
 CREATE POLICY "Public can view winners" ON public.pool_winners FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Service role manages winners" ON public.pool_winners;
+DROP POLICY IF EXISTS "Service role manages winners" ON pool_winners;
 CREATE POLICY "Service role manages winners" ON public.pool_winners FOR ALL USING (auth.role() = 'service_role');
 
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pool_winners; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -143,6 +151,7 @@ CREATE TABLE IF NOT EXISTS public.pool_settlement_audit (
 CREATE INDEX IF NOT EXISTS idx_pool_audit_comp ON public.pool_settlement_audit(competition_id, created_at DESC);
 ALTER TABLE public.pool_settlement_audit ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Service role manages settlement audit" ON public.pool_settlement_audit;
+DROP POLICY IF EXISTS "Service role manages settlement audit" ON pool_settlement_audit;
 CREATE POLICY "Service role manages settlement audit" ON public.pool_settlement_audit FOR ALL USING (auth.role() = 'service_role');
 
 -- 5. Validate Stake Trigger
