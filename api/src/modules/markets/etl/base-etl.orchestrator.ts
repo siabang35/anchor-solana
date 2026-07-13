@@ -469,9 +469,165 @@ export abstract class BaseETLOrchestrator {
         return 'low';
     }
 
+    private s3ClientInstance: any = null;
+    private r2Config: {
+        accountId: string;
+        accessKeyId: string;
+        secretAccessKey: string;
+        bucketMedia: string;
+        publicUrl: string;
+    } | null = null;
+
+    /**
+     * Initialize S3 client for Cloudflare R2 on demand
+     */
+    protected async getR2Client() {
+        if (this.s3ClientInstance) {
+            return this.s3ClientInstance;
+        }
+
+        const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
+        const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
+        const bucketMedia = process.env.CLOUDFLARE_R2_BUCKET_MEDIA || 'exoduze';
+        const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+
+        if (!accountId || !accessKeyId || !secretAccessKey) {
+            this.logger.warn('Cloudflare R2 is not fully configured in environment. Skipping image mirroring.');
+            return null;
+        }
+
+        try {
+            const { S3Client } = await import('@aws-sdk/client-s3');
+            this.s3ClientInstance = new S3Client({
+                endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+                credentials: {
+                    accessKeyId,
+                    secretAccessKey,
+                },
+                region: 'auto',
+            });
+            this.r2Config = {
+                accountId,
+                accessKeyId,
+                secretAccessKey,
+                bucketMedia,
+                publicUrl: publicUrl || `https://${bucketMedia}.${accountId}.r2.cloudflarestorage.com`,
+            };
+            return this.s3ClientInstance;
+        } catch (err: any) {
+            this.logger.error(`Failed to initialize R2 S3 Client in base ETL: ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Download and mirror an external news image to Cloudflare R2
+     */
+    protected async mirrorImageToR2(
+        imageUrl: string,
+        category: string,
+        externalId: string
+    ): Promise<string | null> {
+        // Skip placeholders (Unsplash or fallback images) to save storage and writes
+        if (!imageUrl || imageUrl.startsWith('data:') || !imageUrl.startsWith('http') || imageUrl.includes('unsplash.com') || imageUrl.includes('placeholder')) {
+            return null;
+        }
+
+        // If it's already a public R2 CDN URL, return as is
+        const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+        if (publicUrlBase && imageUrl.startsWith(publicUrlBase)) {
+            return imageUrl;
+        }
+
+        const client = await this.getR2Client();
+        if (!client || !this.r2Config) {
+            return null;
+        }
+
+        try {
+            const crypto = await import('crypto');
+            // Generate a deterministic filename based on URL hash
+            const urlHash = crypto.createHash('sha256').update(imageUrl).digest('hex');
+            
+            // Extract original file extension, fallback to jpg
+            let ext = 'jpg';
+            try {
+                const parsedUrl = new URL(imageUrl);
+                const pathParts = parsedUrl.pathname.split('.');
+                if (pathParts.length > 1) {
+                    const possibleExt = pathParts.pop()?.toLowerCase();
+                    if (possibleExt && ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(possibleExt)) {
+                        ext = possibleExt;
+                    }
+                }
+            } catch {}
+
+            const key = `news_images/${category}/${externalId}_${urlHash}.${ext}`;
+            const cleanBase = this.r2Config.publicUrl.endsWith('/') ? this.r2Config.publicUrl.slice(0, -1) : this.r2Config.publicUrl;
+            const targetUrl = `${cleanBase}/${key}`;
+
+            // Download the image with 5s timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+            const response = await fetch(imageUrl, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'ExoduzeBot/1.0 (+https://exoduze.app; image-mirroring)',
+                },
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                this.logger.debug(`Failed to fetch original image for mirroring from ${imageUrl}: HTTP ${response.status}`);
+                return null;
+            }
+
+            const contentType = response.headers.get('content-type') || 'image/jpeg';
+            if (!contentType.startsWith('image/')) {
+                this.logger.debug(`Skipping mirroring: content-type ${contentType} is not an image`);
+                return null;
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+
+            // Size boundary protection: Max 2MB per image to preserve R2 Free Tier storage space
+            const MAX_SIZE = 2 * 1024 * 1024;
+            if (buffer.length > MAX_SIZE) {
+                this.logger.warn(`Image from ${imageUrl} exceeds maximum limit of 2MB (${(buffer.length / 1024 / 1024).toFixed(2)}MB). Skipping mirroring.`);
+                return null;
+            }
+
+            // Upload to Cloudflare R2
+            const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+            const command = new PutObjectCommand({
+                Bucket: this.r2Config.bucketMedia,
+                Key: key,
+                Body: buffer,
+                ContentType: contentType,
+                CacheControl: 'public, max-age=31536000, immutable', // Cache at edge CDN
+            });
+
+            await client.send(command);
+            this.logger.debug(`Successfully mirrored image to R2: ${targetUrl}`);
+            return targetUrl;
+
+        } catch (err: any) {
+            if (err.name !== 'AbortError') {
+                this.logger.warn(`Failed to mirror image ${imageUrl} to R2: ${err.message}`);
+            } else {
+                this.logger.warn(`Mirroring of image ${imageUrl} timed out (5s)`);
+            }
+            return null;
+        }
+    }
+
     /**
      * Enrich items with images scraped from their URLs
-     * Fetches og:image, twitter:image for items without images
+     * Fetches og:image, twitter:image for items without images, and mirrors all new images to Cloudflare R2.
      * @param items - Items to enrich
      * @param getFallbackImage - Optional callback to get topic-based fallback image from title
      */
@@ -482,45 +638,32 @@ export abstract class BaseETLOrchestrator {
         // Filter items that need images AND have URLs to scrape
         const itemsNeedingImages = items.filter(item => !item.imageUrl && item.url);
 
-        if (itemsNeedingImages.length === 0) {
-            // Still apply fallbacks to items without URLs
-            if (getFallbackImage) {
-                for (const item of items) {
-                    if (!item.imageUrl) {
+        if (itemsNeedingImages.length > 0) {
+            this.logger.log(`Enriching ${itemsNeedingImages.length} items with scraped images...`);
+
+            // Dynamic import to avoid circular dependencies
+            const { ImageScraperUtil } = await import('../../../common/utils/image-scraper.util.js');
+
+            const results = await ImageScraperUtil.scrapeImages(
+                itemsNeedingImages.map(item => ({ url: item.url, imageUrl: item.imageUrl })),
+                5, // concurrency
+                { timeout: 5000 }
+            );
+
+            // Apply scraped images to items
+            for (const item of itemsNeedingImages) {
+                if (item.url) {
+                    const result = results.get(item.url);
+                    if (result?.imageUrl && result.source !== 'placeholder') {
+                        // Use scraped image
+                        item.imageUrl = result.imageUrl;
+                    } else if (getFallbackImage) {
+                        // Use topic-based fallback from callback
                         item.imageUrl = getFallbackImage(item.title || '', item.description);
+                    } else {
+                        // Use generic category placeholder
+                        item.imageUrl = ImageScraperUtil.getPlaceholderForCategory(item.category);
                     }
-                }
-            }
-            this.logger.debug('All items already have images or no URLs, applied fallbacks');
-            return;
-        }
-
-        this.logger.log(`Enriching ${itemsNeedingImages.length} items with scraped images...`);
-
-        // Dynamic import to avoid circular dependencies
-        const { ImageScraperUtil } = await import('../../../common/utils/image-scraper.util.js');
-
-        const results = await ImageScraperUtil.scrapeImages(
-            itemsNeedingImages.map(item => ({ url: item.url, imageUrl: item.imageUrl })),
-            5, // concurrency
-            { timeout: 5000 }
-        );
-
-        // Apply scraped images to items
-        let enrichedCount = 0;
-        for (const item of itemsNeedingImages) {
-            if (item.url) {
-                const result = results.get(item.url);
-                if (result?.imageUrl && result.source !== 'placeholder') {
-                    // Use scraped image
-                    item.imageUrl = result.imageUrl;
-                    enrichedCount++;
-                } else if (getFallbackImage) {
-                    // Use topic-based fallback from callback
-                    item.imageUrl = getFallbackImage(item.title || '', item.description);
-                } else {
-                    // Use generic category placeholder
-                    item.imageUrl = ImageScraperUtil.getPlaceholderForCategory(item.category);
                 }
             }
         }
@@ -532,8 +675,56 @@ export abstract class BaseETLOrchestrator {
                     item.imageUrl = getFallbackImage(item.title || '', item.description);
                 }
             }
+        } else {
+            // Ensure no items are left with null imageUrl
+            const { ImageScraperUtil } = await import('../../../common/utils/image-scraper.util.js');
+            for (const item of items) {
+                if (!item.imageUrl) {
+                    item.imageUrl = ImageScraperUtil.getPlaceholderForCategory(item.category);
+                }
+            }
         }
 
-        this.logger.log(`Image enrichment complete: ${enrichedCount} real images scraped, ${itemsNeedingImages.length - enrichedCount} using fallbacks`);
+        // --- R2 Mirroring Optimization ---
+        // To preserve Class A operations (writes) and free-tier bandwidth, we only download
+        // and mirror images to Cloudflare R2 for NEW items that do not yet exist in the DB.
+        const externalIds = items.map(item => item.externalId).filter(Boolean);
+        let existingSet = new Set<string>();
+
+        if (externalIds.length > 0) {
+            try {
+                const { data: existingItems } = await this.supabase
+                    .from('market_data_items')
+                    .select('external_id')
+                    .in('external_id', externalIds);
+                existingSet = new Set(existingItems?.map(x => x.external_id) || []);
+            } catch (err: any) {
+                this.logger.warn(`Failed to check existing items for image mirroring: ${err.message}`);
+            }
+        }
+
+        // Filter items that are new AND have valid external imageUrl
+        const newItemsToMirror = items.filter(item => !existingSet.has(item.externalId) && item.imageUrl);
+        if (newItemsToMirror.length > 0) {
+            this.logger.log(`Found ${newItemsToMirror.length} new items. Mirroring original images to Cloudflare R2...`);
+            const concurrency = 5;
+            let mirroredCount = 0;
+
+            for (let i = 0; i < newItemsToMirror.length; i += concurrency) {
+                const batch = newItemsToMirror.slice(i, i + concurrency);
+                await Promise.all(
+                    batch.map(async item => {
+                        if (item.imageUrl) {
+                            const r2Url = await this.mirrorImageToR2(item.imageUrl, item.category, item.externalId);
+                            if (r2Url) {
+                                item.imageUrl = r2Url;
+                                mirroredCount++;
+                            }
+                        }
+                    })
+                );
+            }
+            this.logger.log(`Mirroring complete: ${mirroredCount}/${newItemsToMirror.length} images mirrored to R2 successfully.`);
+        }
     }
 }
