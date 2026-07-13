@@ -58,11 +58,11 @@ Add the following credentials to your environment configuration files. When thes
 # Cloudflare R2 Storage Configuration (S3-compatible API)
 # ============================================================================
 # Cloudflare Account ID (Found on your CF Dashboard sidebar)
-CLOUDFLARE_R2_ACCOUNT_ID=42611b51e1dafd707102798e46695b66
+CLOUDFLARE_R2_ACCOUNT_ID=your_cloudflare_account_id
 
 # S3-compatible API Token Credentials (R2 -> Manage R2 API Tokens)
-CLOUDFLARE_R2_ACCESS_KEY_ID=a17e4511331df5a52be6411c372cc05b
-CLOUDFLARE_R2_SECRET_ACCESS_KEY=53bba57270adfa871d519c5fa662a68c391b99895867dc45e572e200eb1b7527
+CLOUDFLARE_R2_ACCESS_KEY_ID=your_cloudflare_r2_access_key_id
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=your_cloudflare_r2_secret_access_key
 
 # Public CDN URL for serving public media (e.g. avatars, banners)
 # Format: https://pub-xxxxxx.r2.dev or a custom domain like https://media.exoduze.com
@@ -134,3 +134,39 @@ System alerts and predictions can carry extensive JSON metadata:
      }
    ]
    ```
+
+---
+
+## 💎 Cloudflare R2 Free Tier Protections & Cost Optimization
+
+To ensure that the Cloudflare R2 storage remains **100% free forever** during development and scaling, the following system limitations and configurations have been put in place:
+
+### 1. Understanding Cloudflare R2 Free Tier Quotas
+* **Storage Capacity**: Up to **10 GB** per month.
+* **Class A Operations** (Writes, Lists, State Changes): **1,000,000** (1 Million) per month.
+* **Class B Operations** (Reads, Downloads): **10,000,000** (10 Million) per month.
+* **Egress Bandwidth**: **$0.00** (Always Unlimited & Free) — *R2 has no bandwidth fees*.
+
+### 2. Safeguards Implemented in the Codebase
+* **Upload Buffers & File-Size Clamping**:
+  User avatar uploads are restricted to a maximum of **5 MB** and validated using NestJS `ParseFilePipe` (`MaxFileSizeValidator` and `FileTypeValidator` for images only).
+* **Batch Archiving (Class A Protection)**:
+  Instead of writing individual historical logs, the `StorageOptimizationService` runs a batch scheduler once every 6 hours. It maps up to 1,000 database rows into a single structured JSON file before uploading it to the `archives/` prefix. This batching method reduces write operations from hundreds of thousands to just **4 Class A operations per day per competition**.
+* **ETL Sync Logs (Class A Protection)**:
+  Sports sync raw payload uploads to R2 run on low-frequency cron schedules (e.g., every 5 minutes). At maximum frequency, this generates ~8,640 writes per month, which consumes **less than 0.9%** of the 1 million free Class A operations limit.
+
+### 3. Recommended Cloudflare Dashboard Configurations (Must-Dos)
+To fully bulletproof the R2 free tier from exceeding its limits:
+1. **Enable Cloudflare Edge Caching (Custom Domain)**:
+   Instead of using the default R2 Account URL (`https://<account_id>.r2.cloudflarestorage.com`) directly on the client, configure a **Custom Domain** (e.g. `media.exoduze.com`) for the R2 bucket.
+   * *Why?* Cloudflare caches public assets (like avatars and icons) at the edge CDN. Subsequent client requests are served directly from Cloudflare's CDN edge cache, consuming **0 Class B read operations** from R2.
+2. **Configure Lifecycle Rules (Storage Cleanup)**:
+   In the Cloudflare Dashboard, navigate to **R2 -> exoduze -> Settings -> Object Lifecycle Rules** and create rules to auto-delete stale temporary data:
+   * **Rule 1 (ETL Raw Payload Logs)**:
+     * Prefix: `sports_sync_raw/`
+     * Action: **Delete** objects older than **7 Days**.
+   * **Rule 2 (Historical Data Archives)**:
+     * Prefix: `archives/`
+     * Action: **Delete** objects older than **30 Days**.
+   * *Why?* Auto-deleting temporary data keeps the total bucket size constantly below **1 GB**, ensuring the 10 GB free storage limit is never exceeded.
+

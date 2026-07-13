@@ -48,6 +48,61 @@ export class SupabaseService implements OnModuleInit {
         } catch (err) {
             this.logger.warn('Supabase connection test failed (table may not exist yet)');
         }
+
+        // Run automatic migrations for wallet connect tables
+        const databaseUrl = this.configService.get<string>('DATABASE_URL');
+        if (databaseUrl) {
+            try {
+                const pgModule = await import('pg');
+                const pg = pgModule.default || pgModule;
+                const cleanedUrl = databaseUrl.replace(/^"(.*)"$/, '$1').replace('#', '%23').replace('$', '%24');
+                const client = new pg.Client({
+                    connectionString: cleanedUrl,
+                    ssl: {
+                        rejectUnauthorized: false
+                    }
+                });
+                await client.connect();
+                
+                // Check if wallet_auth_nonces exists
+                const tableCheck = await client.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'wallet_auth_nonces'
+                    );
+                `);
+                
+                const tableExists = tableCheck.rows[0]?.exists;
+                if (!tableExists) {
+                    this.logger.log('Table wallet_auth_nonces not found. Running wallet connect migrations...');
+                    const fs = await import('fs');
+                    const path = await import('path');
+                    
+                    const migrationFiles = [
+                        '025_wallet_connect_auth.sql',
+                        '026_quick_wallet_setup.sql'
+                    ];
+
+                    for (const file of migrationFiles) {
+                        const sqlPath = path.join(process.cwd(), 'supabase/migrations', file);
+                        if (fs.existsSync(sqlPath)) {
+                            this.logger.log(`Running migration file: ${file}`);
+                            const sql = fs.readFileSync(sqlPath, 'utf8');
+                            await client.query(sql);
+                            this.logger.log(`✅ Migration ${file} applied successfully!`);
+                        } else {
+                            this.logger.warn(`Migration file not found at ${sqlPath}`);
+                        }
+                    }
+                } else {
+                    this.logger.log('Wallet connect database tables are up-to-date.');
+                }
+                await client.end();
+            } catch (err) {
+                this.logger.error(`Failed to run automatic migrations: ${err.message}`, err.stack);
+            }
+        }
     }
 
     /**

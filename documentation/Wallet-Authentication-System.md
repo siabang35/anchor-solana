@@ -176,7 +176,7 @@ Audits every authentication attempt (success or failure) with a risk score based
 
 ---
 
-## 6. Security & Best Practices
+## 6. Security, CORS & Deployment Best Practices
 
 1. **Replay Attack Prevention**:
    Every signature must include a nonce that exists in `wallet_auth_nonces` with `status='pending'`. Upon verification, the nonce is atomically marked `used` via `consume_wallet_nonce()`.
@@ -192,6 +192,17 @@ Audits every authentication attempt (success or failure) with a risk score based
 
 5. **JWT Expiration Alignment**:
    To minimize signature fatigue on both mobile and desktop while maintaining security, the access token lifespan (`JWT_EXPIRES_IN`) has been extended to 7 days, aligning with modern Web3 standards where wallet connection serves as the primary authentication check.
+
+6. **Automatic Startup Migration Runner (Render/Production Deployment)**:
+   * To prevent manual SQL editing on Supabase when new database tables (like `wallet_auth_nonces` and `connected_wallets`) are introduced, the backend incorporates an **automatic database migration runner** in `SupabaseService.onModuleInit()`.
+   * On startup, the backend connects to the PostgreSQL database, checks if the required wallet authentication schema exists, and automatically executes `025_wallet_connect_auth.sql` and `026_quick_wallet_setup.sql` if it is missing.
+   * This is fully compatible with IPv6 and IPv4 networks (e.g. Render outbound networks).
+
+7. **Strict CORS Configurations**:
+   * To secure the wallet authentication and API endpoints, CORS is restricted to trusted origins.
+   * Production origins configured: `https://www.exoduze.com` and `https://exoduze.com` (alongside localhost and Vercel preview environments).
+   * In Render, set the `CORS_ORIGINS` environment variable to explicitly include your frontend domains.
+
 
 ---
 
