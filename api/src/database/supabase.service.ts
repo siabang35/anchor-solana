@@ -101,7 +101,7 @@ export class SupabaseService implements OnModuleInit {
                 }
 
                 // Always run the case sensitivity fix to ensure functions are correct and up-to-date
-                const fixMigration = '027_fix_solana_address_case.sql';
+                const fixMigration = 'full_sql/012_fix_solana_address.sql';
                 const sqlPath = path.join(process.cwd(), 'supabase/migrations', fixMigration);
                 if (fs.existsSync(sqlPath)) {
                     this.logger.log(`Applying case sensitivity fix: ${fixMigration}`);

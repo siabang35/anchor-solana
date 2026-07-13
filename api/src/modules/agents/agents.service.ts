@@ -284,7 +284,6 @@ export class AgentsService {
                 system_prompt: dto.system_prompt,
                 model: 'Qwen/Qwen2.5-7B-Instruct',
                 status: initialStatus,
-                competition_id: competitionIds[0], // Set primary competition_id to satisfy DB trigger
             })
             .select('*')
             .single();
