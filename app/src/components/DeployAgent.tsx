@@ -122,6 +122,74 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
     const [agentTypes, setAgentTypes] = useState<AgentType[]>([]);
     const [deploying, setDeploying] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [failedWagerSyncInfo, setFailedWagerSyncInfo] = useState<{
+        agentId: string;
+        competitionId: string;
+        wagerAmount: number;
+        onchainTx: string;
+    } | null>(null);
+
+    const retryWagerSync = useCallback(async () => {
+        if (!failedWagerSyncInfo || !publicKey) return;
+        setDeploying(true);
+        setError(null);
+        setStep('deploying');
+        setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '🔄 Retrying to sync your on-chain wager with backend...' }]);
+        
+        try {
+            await apiFetch('/agents/wager', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(publicKey ? { 'x-user-id': publicKey.toString() } : {})
+                },
+                body: JSON.stringify({
+                    agent_id: failedWagerSyncInfo.agentId,
+                    competition_id: failedWagerSyncInfo.competitionId,
+                    wager_amount: failedWagerSyncInfo.wagerAmount,
+                    onchain_tx: failedWagerSyncInfo.onchainTx,
+                }),
+            });
+
+            setLogs(prev => [
+                ...prev,
+                { timestamp: Date.now(), type: 'info', message: '✅ Wager synced successfully!' },
+                { timestamp: Date.now() + 100, type: 'signal', message: '✨ Agent is now LIVE!' }
+            ]);
+            
+            const matchedAgent = forecasters.find(f => f.id === failedWagerSyncInfo.agentId);
+            if (matchedAgent) {
+                setDeployedAgent(matchedAgent);
+            } else {
+                setDeployedAgent({
+                    id: failedWagerSyncInfo.agentId,
+                    name: agentName || 'Forecasting Agent',
+                    system_prompt: strategy,
+                    model: 'Qwen/Qwen2.5-7B-Instruct',
+                    status: 'active',
+                    max_free_prompts: 7,
+                    prompts_used: 0,
+                    stakes: [{ competition_id: failedWagerSyncInfo.competitionId, stake_status: 'confirmed' }]
+                });
+            }
+            
+            setFailedWagerSyncInfo(null);
+            setStep('active');
+            setViewTab('manage');
+            refreshAgents();
+        } catch (err: any) {
+            console.error('Wager sync retry failed:', err);
+            const errMsg = err.message || 'Wager sync failed again';
+            setError(errMsg);
+            setLogs(prev => [
+                ...prev,
+                { timestamp: Date.now(), type: 'error', message: `❌ Sync failed: ${errMsg}` }
+            ]);
+            setStep('failed');
+        } finally {
+            setDeploying(false);
+        }
+    }, [failedWagerSyncInfo, publicKey, forecasters, agentName, strategy, refreshAgents]);
 
     const selectedCategory = useMemo(() => CATEGORIES.find(c => c.id === categoryId), [categoryId]);
     const availableMarkets = useMemo(() => {
@@ -443,6 +511,12 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                     }),
                 });
             } catch (wagerErr: any) {
+                setFailedWagerSyncInfo({
+                    agentId: activeAgent.id,
+                    competitionId: marketIds[0],
+                    wagerAmount: stakeSOL,
+                    onchainTx: signature,
+                });
                 throw new Error(`Wager sync failed (SOL staked, TX: ${signature}). Error: ${wagerErr?.message}`);
             }
 
@@ -1168,6 +1242,33 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                                 </div>
                             ))}
                         </div>
+                    )}
+
+                    {failedWagerSyncInfo && (
+                        <button
+                            className="btn-primary"
+                            onClick={retryWagerSync}
+                            style={{
+                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                border: 'none',
+                                color: '#ffffff',
+                                padding: '0.6rem 1.5rem',
+                                borderRadius: 'var(--radius-round)',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                marginBottom: '0.75rem',
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                boxShadow: '0 4px 15px rgba(217, 119, 6, 0.4)',
+                            }}
+                        >
+                            <span>📥</span> Recover & Sync Wager (Retry)
+                        </button>
                     )}
 
                     <button

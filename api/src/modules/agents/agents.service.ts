@@ -98,14 +98,33 @@ export class AgentsService {
         if (isUuid) return identifier;
 
         const supabase = this.supabaseService.getAdminClient();
-        const { data: wData } = await supabase.from('wallet_addresses').select('user_id').eq('address', identifier.toLowerCase()).single();
+        
+        // 1. Case-insensitive search on wallet_addresses table using ilike
+        const { data: wData } = await supabase
+            .from('wallet_addresses')
+            .select('user_id')
+            .ilike('address', identifier)
+            .maybeSingle();
+
         if (wData?.user_id) return wData.user_id;
 
-        const { data: profiles } = await supabase.from('profiles').select('id, wallet_addresses');
-        if (profiles) {
-            const found = profiles.find((p) => p.wallet_addresses?.some((w: any) => w.address?.toLowerCase() === identifier.toLowerCase()));
-            if (found) return found.id;
+        // 2. Efficient database-level search on profiles JSONB column
+        let { data: profile } = await supabase
+            .from('profiles')
+            .select('id')
+            .contains('wallet_addresses', [{ address: identifier }])
+            .maybeSingle();
+
+        if (!profile) {
+            const { data: pLower } = await supabase
+                .from('profiles')
+                .select('id')
+                .contains('wallet_addresses', [{ address: identifier.toLowerCase() }])
+                .maybeSingle();
+            profile = pLower;
         }
+
+        if (profile?.id) return profile.id;
 
         // Auto-provision a user if it's a valid Base58 Solana address structure (roughly 32-44 characters)
         if (identifier.length >= 32 && identifier.length <= 44 && !identifier.includes('@')) {
@@ -124,15 +143,15 @@ export class AgentsService {
 
                 if (authData?.user) {
                     const newUserId = authData.user.id;
-                    // Create Profile
+                    // Create Profile - Preserve case for Solana address
                     await supabase.from('profiles').insert({
                         id: newUserId,
-                        wallet_addresses: [{ address: identifier.toLowerCase(), chain: 'solana', isPrimary: true }]
+                        wallet_addresses: [{ address: identifier, chain: 'solana', isPrimary: true }]
                     });
-                    // Insert Wallet Address Record
+                    // Insert Wallet Address Record - Preserve case for Solana address
                     await supabase.from('wallet_addresses').insert({
                         user_id: newUserId,
-                        address: identifier.toLowerCase(),
+                        address: identifier,
                         chain: 'solana',
                         is_primary: true
                     });

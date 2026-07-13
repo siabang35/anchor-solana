@@ -72,7 +72,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit, maxRetrie
                 throw new Error(err.message || `API Error: ${res.status}`);
             }
 
-            return res.json();
+            if (res.status === 204) {
+                return {} as T;
+            }
+            const text = await res.text();
+            return text ? JSON.parse(text) : ({} as T);
         } catch (error: any) {
             // Only retry on network errors or 429s (handled above), throw everything else
             if (retries >= maxRetries || (error.message && !error.message.includes('fetch'))) {
