@@ -166,7 +166,9 @@ export default function WalletProvider({ children }: { children: React.ReactNode
         };
     }, []);
 
-    const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+    const endpoint = useMemo(() => {
+        return process.env.NEXT_PUBLIC_SOLANA_RPC || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl('devnet');
+    }, []);
     
     const wallets = useMemo(() => {
         if (!mounted || typeof window === 'undefined') return [];

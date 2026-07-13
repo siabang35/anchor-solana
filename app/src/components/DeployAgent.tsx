@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { apiFetch } from '@/lib/supabase';
@@ -20,7 +20,6 @@ import {
 // The backend disburses prize claims from this same Treasury keypair.
 // PDA derivation is retained for on-chain audit reference only.
 // ═══════════════════════════════════════════════════════════════════════
-const DEVNET_CONNECTION = new Connection(clusterApiUrl('devnet'), 'confirmed');
 const PROGRAM_ID = new PublicKey('56Gp8kKmibdvxm7c1r9LJQh7D58YHujmwTSteCgYUTo7');
 const POOL_VAULT_SEED = Buffer.from('pool_vault');
 
@@ -81,6 +80,7 @@ type BuilderStep = 'config' | 'deploying' | 'active' | 'failed';
 type ViewTab = 'build' | 'manage';
 
 export default function DeployAgent({ initialCategory }: { initialCategory?: string }) {
+    const { connection } = useConnection();
     const { connected, publicKey, sendTransaction, signTransaction } = useWallet();
     const {
         agents: realtimeAgents,
@@ -306,7 +306,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `💰 Checking wallet balance for ${stakeSOL} SOL...` }]);
 
             // ═══ ANTI-EXPLOIT: Pre-flight balance check ═══
-            const balance = await DEVNET_CONNECTION.getBalance(publicKey);
+            const balance = await connection.getBalance(publicKey);
             const balanceSOL = balance / LAMPORTS_PER_SOL;
             const requiredLamports = stakeLamports + TX_FEE_BUFFER_LAMPORTS;
 
@@ -372,14 +372,14 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
                 })
             );
 
-            const { blockhash, lastValidBlockHeight } = await DEVNET_CONNECTION.getLatestBlockhash('confirmed');
+            const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
             tx.recentBlockhash = blockhash;
             tx.feePayer = publicKey;
             tx.lastValidBlockHeight = lastValidBlockHeight;
 
             // Send transaction
             try {
-                signature = await sendTransaction(tx, DEVNET_CONNECTION);
+                signature = await sendTransaction(tx, connection);
             } catch (walletErr: any) {
                 // Clean up reserved agent if transaction is rejected / denied
                 setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: '⚠️ Transaction rejected. Cleaning up reserved database records...' }]);
@@ -399,7 +399,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             setLogs(prev => [...prev, { timestamp: Date.now(), type: 'info', message: `⏳ Confirming on-chain: ${signature.slice(0, 16)}...` }]);
 
             // Wait for confirmation
-            const confirmation = await DEVNET_CONNECTION.confirmTransaction({
+            const confirmation = await connection.confirmTransaction({
                 signature,
                 blockhash,
                 lastValidBlockHeight,
@@ -476,7 +476,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         } finally {
             setDeploying(false);
         }
-    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota, publicKey, sendTransaction, refreshAgents]);
+    }, [canDeploy, agentName, strategy, selectedOutcome, direction, riskLevel, stakeAmount, selectedMarket, agentTypes, categoryId, marketIds, quota, publicKey, sendTransaction, connection, refreshAgents]);
 
     const handleTerminate = async () => {
         if (deployedAgent && !deployedAgent.id.startsWith('local-')) {
