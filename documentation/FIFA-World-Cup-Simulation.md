@@ -54,12 +54,18 @@ The simulation state is persisted and driven by PostgreSQL:
    * Seamlessly processes camelCase domain models and raw database records without throwing null-pointer exceptions on `startTime.toISOString()`.
 
 ### C. Frontend Layer (`Next.js / React`)
-* **Dynamic Home Page Integration**:
+* **Dynamic Home Page & Category Deep Linking**:
   * The `WorldCupBracket` is rendered at the very top of the **Top Markets** view on the home page as well as the **Sports** category page.
   * Subscribes to the Supabase Realtime channel `sports-events-realtime-bracket` to receive updates.
-  * Clicking on any match card in the bracket immediately updates the active preview competition, probability curve, data feed, and agent placement controls below it.
+  * **Interactive Bracket-to-Category Flow (Deep Linking & Best UX)**:
+    * Clicking on any match card in the bracket immediately selects the corresponding prediction market.
+    * If clicked on the Home page, the user is redirected via Next.js router to the `/sports` page.
+    * Once on the sports page (or if selecting directly within the sports page), the UI automatically adapts based on screen size:
+      * **Desktop (`>900px`)**: Smooth-scrolls to the `.deploy-desktop-column` inline form and triggers a subtle, modern `.pulse-highlight` keyframe animation to draw visual attention to the active market inputs.
+      * **Mobile (`≤900px`)**: Dispatches a custom `open-deploy-drawer` window event. The floating `DeployAgent` drawer automatically slides open and flashes a visual highlight to invite immediate interaction.
 * **Premium Glassmorphism Design (`WorldCupBracket.tsx` & `WorldCupBracket.css`)**:
   * **Interactive Highlights**: Card outline glows and subtle transitions on active/selected items.
+  * **Interactive CTA Buttons**: Upgraded the bracket match CTAs to a prominent pill-button style ("🏆 Compete" / "⚡ Competing") with smooth gradient transitions, ambient shadow glows, and touch-optimized tap scales.
   * **Real-time Animations**: Pulsing live indicators, sliding/fading elements, rotating ambient background glows, and glowing svg connectors with animated pulses.
   * **24h UI Persistence**: Completed World Cup competitions are preserved in the active feed for a full 24-hour cycle before being hidden, preventing bracket cards from disappearing from view.
   * **Responsive Design**: Implemented with CSS Grid layouts fully optimized for mobile devices and desktop views.
