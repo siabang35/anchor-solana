@@ -140,6 +140,98 @@ export class RSSClient {
         return allItems;
     }
 
+    // ========================
+    // Football / FIFA World Cup Feeds (Free, No API Key)
+    // ========================
+
+    /**
+     * Fetch FIFA World Cup 2026 news from Google News
+     */
+    async fetchGoogleNewsWorldCup(): Promise<MarketDataItem[]> {
+        const url = 'https://news.google.com/rss/search?q=FIFA+World+Cup+2026&hl=en-US&gl=US&ceid=US:en';
+        return this.fetchFeed(url, 'Google News', 'sports');
+    }
+
+    /**
+     * Fetch BBC Sport Football headlines
+     */
+    async fetchBBCSportFootball(): Promise<MarketDataItem[]> {
+        const url = 'https://feeds.bbci.co.uk/sport/football/rss.xml';
+        return this.fetchFeed(url, 'BBC Sport', 'sports');
+    }
+
+    /**
+     * Fetch ESPN FC Football news
+     */
+    async fetchESPNFootball(): Promise<MarketDataItem[]> {
+        const url = 'https://www.espn.com/espn/rss/soccer/news';
+        return this.fetchFeed(url, 'ESPN FC', 'sports');
+    }
+
+    /**
+     * Fetch Sky Sports Football news
+     */
+    async fetchSkySportsFootball(): Promise<MarketDataItem[]> {
+        const url = 'https://www.skysports.com/rss/12040'; // Football
+        return this.fetchFeed(url, 'Sky Sports', 'sports');
+    }
+
+    /**
+     * Fetch The Guardian Football
+     */
+    async fetchGuardianFootball(): Promise<MarketDataItem[]> {
+        const url = 'https://www.theguardian.com/football/rss';
+        return this.fetchFeed(url, 'The Guardian', 'sports');
+    }
+
+    /**
+     * Fetch all football/FIFA World Cup feeds concurrently
+     */
+    async fetchAllFootballFeeds(): Promise<MarketDataItem[]> {
+        const results = await Promise.allSettled([
+            this.fetchGoogleNewsWorldCup(),
+            this.fetchBBCSportFootball(),
+            this.fetchESPNFootball(),
+            this.fetchSkySportsFootball(),
+            this.fetchGuardianFootball(),
+            // Additional World Cup specific feeds
+            this.fetchFeed('https://news.google.com/rss/search?q=World+Cup+semifinal+2026&hl=en-US&gl=US&ceid=US:en', 'Google News WC SF', 'sports'),
+            this.fetchFeed('https://news.google.com/rss/search?q=Argentina+France+Spain+England+World+Cup&hl=en-US&gl=US&ceid=US:en', 'Google News WC Teams', 'sports'),
+        ]);
+
+        const allItems: MarketDataItem[] = [];
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                // Filter to football/world-cup relevant items, take top 15 per feed
+                const filtered = result.value
+                    .filter(item => this.isFootballContent(item.title + ' ' + (item.description || '')))
+                    .slice(0, 15);
+                allItems.push(...filtered);
+            } else {
+                this.logger.warn(`Football feed fetch failed: ${result.reason}`);
+            }
+        }
+
+        return allItems;
+    }
+
+    /**
+     * Check if content is football/World Cup relevant
+     */
+    private isFootballContent(text: string): boolean {
+        const footballKeywords = [
+            'world cup', 'fifa', 'football', 'soccer', 'semifinal', 'semi-final',
+            'goal', 'match', 'striker', 'goalkeeper', 'penalty', 'score',
+            'argentina', 'france', 'spain', 'england', 'messi', 'mbappé',
+            'mbappe', 'haaland', 'bellingham', 'yamal', 'pedri', 'kane',
+            'scaloni', 'deschamps', 'de la fuente', 'southgate', 'tuchel',
+            'final', 'knockout', 'bracket', 'qualifying', 'national team',
+            'stadium', 'referee', 'var', 'offside', 'free kick', 'corner',
+        ];
+        const lowerText = text.toLowerCase();
+        return footballKeywords.some(keyword => lowerText.includes(keyword));
+    }
+
     /**
      * Check if content is politically relevant
      */

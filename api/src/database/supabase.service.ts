@@ -112,7 +112,7 @@ export class SupabaseService implements OnModuleInit {
 
                 // Always reload PostgREST schema cache on startup to ensure API layer is in sync
                 this.logger.log('Reloading Supabase schema cache...');
-                await client.query("NOTIFY pgrst, 'reload' || ' schema';");
+                await client.query("SELECT pg_notify('pgrst', 'reload schema');");
                 this.logger.log('✅ Supabase schema cache reloaded successfully!');
 
                 await client.end();

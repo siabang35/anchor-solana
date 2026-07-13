@@ -21,6 +21,8 @@ import { TheSportsDBClient } from './clients/thesportsdb.client.js';
 import { APISportsClient, SPORT_API_CONFIGS } from './clients/api-sports.client.js';
 import { SportsService } from './sports.service.js';
 import { SportsMessagingService } from './sports-messaging.service.js';
+import { AntiManipulationUtil } from '../competitions/utils/anti-manipulation.util.js';
+import { RSSClient } from '../markets/clients/rss.client.js';
 import {
     SportType,
     DataSource,
@@ -127,6 +129,7 @@ interface DeduplicatedData<T> {
 export class SportsETLOrchestrator implements OnModuleInit {
     private readonly logger = new Logger(SportsETLOrchestrator.name);
     private readonly config: ETLSyncConfig;
+    private readonly rss: RSSClient;
     private isSyncing = false;
     private lastSyncTime: Date | null = null;
 
@@ -138,6 +141,7 @@ export class SportsETLOrchestrator implements OnModuleInit {
         private readonly theSportsDBClient: TheSportsDBClient,
         private readonly apiSportsClient: APISportsClient,
     ) {
+        this.rss = new RSSClient();
         this.config = {
             ...DEFAULT_CONFIG,
             enableTheSportsDB: this.configService.get('ETL_ENABLE_THESPORTSDB', 'true') === 'true',
@@ -153,6 +157,34 @@ export class SportsETLOrchestrator implements OnModuleInit {
         this.logger.log(`API-Sports enabled: ${this.config.enableAPISports}`);
         this.logger.log(`Sync interval: ${this.config.syncIntervalMinutes} minutes`);
         this.logger.log(`Deduplication by name: ${this.config.deduplicateByName}`);
+
+        // Seed FIFA World Cup simulation matches on startup
+        setTimeout(async () => {
+            try {
+                await this.seedFIFAWorldCupSimulation();
+            } catch (error) {
+                this.logger.error(`[FIFA World Cup Seed] Failed: ${(error as Error).message}`);
+            }
+        }, 1000);
+
+        // Fetch real-time football news on startup (delayed 15s to let DB settle)
+        setTimeout(async () => {
+            try {
+                this.logger.log('⚽ [RSS] Starting initial FIFA World Cup news feed sync...');
+                await this.syncFootballNewsFeeds();
+            } catch (error) {
+                this.logger.error(`[RSS] Initial football news sync failed: ${(error as Error).message}`);
+            }
+        }, 15000);
+
+        // Start World Cup simulation ticks every 10 seconds
+        setInterval(async () => {
+            try {
+                await this.runWorldCupSimulationTick();
+            } catch (error) {
+                this.logger.error(`[FIFA World Cup Sim] Error: ${(error as Error).message}`);
+            }
+        }, 10000);
 
         // AUTO-TRIGGER: Trigger a sync on startup to ensure data is available
         // Delay by 5 seconds to allow other services to initialize
@@ -247,6 +279,20 @@ export class SportsETLOrchestrator implements OnModuleInit {
 
         this.logger.log('Starting daily leagues sync...');
         await this.syncAllSports('leagues');
+    }
+
+    /**
+     * Sync real-time FIFA World Cup football news from free RSS feeds every 15 minutes.
+     * Sources: Google News (World Cup search), BBC Sport, ESPN FC, Sky Sports, The Guardian.
+     * Items are stored in market_data_items with category='sports' to power the Live Feed.
+     */
+    @Cron('*/15 * * * *')
+    async handleFootballNewsCron() {
+        try {
+            await this.syncFootballNewsFeeds();
+        } catch (error) {
+            this.logger.error(`[RSS Cron] Football news sync failed: ${(error as Error).message}`);
+        }
     }
 
     // ========================
@@ -943,4 +989,509 @@ export class SportsETLOrchestrator implements OnModuleInit {
     private sleep(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+
+    // ========================
+    // Real-Time Football News RSS Ingestion
+    // ========================
+
+    /**
+     * Fetch real-time FIFA World Cup 2026 football news from free RSS feeds
+     * and store them in market_data_items table with category='sports'.
+     * This powers the Live Feed section on the /category/sports page.
+     */
+    private async syncFootballNewsFeeds(): Promise<void> {
+        const supabase = this.supabaseService.getAdminClient();
+        const startTime = Date.now();
+
+        try {
+            // 1. Fetch all football/World Cup feeds concurrently
+            const items = await this.rss.fetchAllFootballFeeds();
+            this.logger.log(`⚽ [RSS] Fetched ${items.length} football news items from free RSS feeds`);
+
+            if (items.length === 0) return;
+
+            // 2. Enrich items with football-specific tags and impact scores
+            const enrichedItems = items.map(item => {
+                const title = (item.title || '').toLowerCase();
+                const desc = (item.description || '').toLowerCase();
+                const combined = title + ' ' + desc;
+
+                // Calculate football impact level
+                let impact: 'low' | 'medium' | 'high' | 'critical' = 'medium';
+                const criticalWords = ['breaking', 'goal', 'red card', 'penalty', 'injury', 'eliminated'];
+                const highWords = ['world cup', 'semifinal', 'semi-final', 'final', 'messi', 'mbappé', 'mbappe'];
+                if (criticalWords.some(w => combined.includes(w))) impact = 'critical';
+                else if (highWords.some(w => combined.includes(w))) impact = 'high';
+
+                // Simple sentiment analysis for sports
+                let sentiment: 'bearish' | 'neutral' | 'bullish' = 'neutral';
+                let sentimentScore = 0;
+                const positiveWords = ['win', 'victory', 'champion', 'brilliant', 'stunning', 'dominat', 'advance'];
+                const negativeWords = ['loss', 'defeat', 'eliminated', 'injury', 'miss', 'fail', 'crash'];
+                for (const w of positiveWords) { if (combined.includes(w)) sentimentScore += 0.15; }
+                for (const w of negativeWords) { if (combined.includes(w)) sentimentScore -= 0.15; }
+                sentimentScore = Math.max(-1, Math.min(1, sentimentScore));
+                sentiment = sentimentScore > 0.1 ? 'bullish' : sentimentScore < -0.1 ? 'bearish' : 'neutral';
+
+                // Extract team entities
+                const teams = ['Argentina', 'France', 'Spain', 'England'];
+                const foundTeams = teams.filter(t => combined.includes(t.toLowerCase()));
+
+                // Merge tags
+                const baseTags = item.tags || [];
+                const sportsTags = ['football', 'world-cup-2026', 'fifa', ...foundTeams.map(t => t.toLowerCase())];
+                const allTags = [...new Set([...baseTags, ...sportsTags])];
+
+                return {
+                    ...item,
+                    category: 'sports',
+                    impact,
+                    sentiment,
+                    sentimentScore,
+                    tags: allTags,
+                    metadata: {
+                        ...(item.metadata || {}),
+                        teams: foundTeams,
+                        sport: 'football',
+                        competition: 'FIFA World Cup 2026',
+                    },
+                };
+            });
+
+            // 3. Batch check existing items for dedup
+            const externalIds = enrichedItems.map(i => i.externalId).filter(Boolean);
+            const { data: existingItems } = await supabase
+                .from('market_data_items')
+                .select('external_id')
+                .in('external_id', externalIds);
+            const existingSet = new Set(existingItems?.map(x => x.external_id) || []);
+
+            // 4. Prepare upsert payload
+            const upsertData = enrichedItems.map(item => ({
+                external_id: item.externalId,
+                source: item.source || 'rss',
+                category: 'sports',
+                content_type: item.contentType || 'news',
+                title: item.title,
+                description: item.description,
+                content: item.content,
+                url: item.url,
+                image_url: item.imageUrl,
+                source_name: item.sourceName,
+                author: item.author,
+                published_at: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+                tags: item.tags || [],
+                keywords: item.metadata?.teams || [],
+                impact: item.impact || 'medium',
+                sentiment: item.sentiment || 'neutral',
+                sentiment_score: item.sentimentScore,
+                relevance_score: 0.7,
+                metadata: item.metadata || {},
+                updated_at: new Date().toISOString(),
+            }));
+
+            // 5. Execute batch upsert
+            const { error: upsertErr } = await supabase
+                .from('market_data_items')
+                .upsert(upsertData, { onConflict: 'external_id,source' });
+
+            if (upsertErr) {
+                this.logger.error(`[RSS] Batch upsert failed: ${upsertErr.message}`);
+                return;
+            }
+
+            const newCount = enrichedItems.filter(i => !existingSet.has(i.externalId)).length;
+            const updatedCount = enrichedItems.length - newCount;
+            const durationMs = Date.now() - startTime;
+
+            this.logger.log(
+                `⚽ [RSS] Football news sync complete in ${durationMs}ms: ` +
+                `${newCount} new, ${updatedCount} updated, ${enrichedItems.length} total`
+            );
+
+            // 6. Log sync result
+            try {
+                await supabase.from('market_data_sync_logs').insert({
+                    source: 'rss',
+                    category: 'sports',
+                    sync_type: 'incremental',
+                    started_at: new Date(startTime).toISOString(),
+                    completed_at: new Date().toISOString(),
+                    duration_ms: durationMs,
+                    status: 'completed',
+                    records_fetched: enrichedItems.length,
+                    records_created: newCount,
+                    records_updated: updatedCount,
+                    records_skipped: 0,
+                    records_failed: 0,
+                    duplicates_found: updatedCount,
+                });
+            } catch (err) {
+                // Ignore sync log table failures
+            }
+
+        } catch (error) {
+            this.logger.error(`[RSS] Football news sync error: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * Seed the FIFA World Cup 2026 Simulation League, Teams, and Events.
+     * Starts the semi-finals 1-2 minutes from server start, and the final 6 minutes from start.
+     */
+    private async seedFIFAWorldCupSimulation() {
+        const supabase = this.supabaseService.getAdminClient();
+        this.logger.log('🏆 Seeding FIFA World Cup 2026 Simulation...');
+
+        // 1. Ensure FIFA World Cup League exists
+        const { data: league, error: leagueErr } = await supabase
+            .from('sports_leagues')
+            .upsert({
+                external_id: '1',
+                source: DataSource.APIFOOTBALL,
+                sport: SportType.FOOTBALL,
+                name: 'FIFA World Cup',
+                country: 'World',
+                logo_url: 'https://media.api-sports.io/football/leagues/1.png',
+                is_active: true,
+                is_featured: true,
+                display_order: 1,
+                metadata: { type: 'Cup' },
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'external_id,source' })
+            .select('id')
+            .single();
+
+        if (leagueErr || !league) {
+            throw new Error(`Failed to seed FIFA World Cup league: ${leagueErr?.message}`);
+        }
+
+        const leagueId = league.id;
+
+        // 2. Ensure Teams exist
+        const teamsToUpsert = [
+            { externalId: '2', name: 'France', logoUrl: 'https://media.api-sports.io/football/teams/2.png' },
+            { externalId: '9', name: 'Spain', logoUrl: 'https://media.api-sports.io/football/teams/9.png' },
+            { externalId: '10', name: 'England', logoUrl: 'https://media.api-sports.io/football/teams/10.png' },
+            { externalId: '26', name: 'Argentina', logoUrl: 'https://media.api-sports.io/football/teams/26.png' },
+        ];
+
+        const teams: SportsTeam[] = [];
+        for (const t of teamsToUpsert) {
+            const { data: team, error: teamErr } = await supabase
+                .from('sports_teams')
+                .upsert({
+                    external_id: t.externalId,
+                    source: DataSource.APIFOOTBALL,
+                    league_id: leagueId,
+                    sport: SportType.FOOTBALL,
+                    name: t.name,
+                    logo_url: t.logoUrl,
+                    is_active: true,
+                    metadata: { national: true },
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'external_id,source' })
+                .select('*')
+                .single();
+
+            if (teamErr || !team) {
+                throw new Error(`Failed to seed team ${t.name}: ${teamErr?.message}`);
+            }
+            teams.push(team as any);
+        }
+
+        const franceId = teams.find(t => t.name === 'France')?.id;
+        const spainId = teams.find(t => t.name === 'Spain')?.id;
+        const englandId = teams.find(t => t.name === 'England')?.id;
+        const argentinaId = teams.find(t => t.name === 'Argentina')?.id;
+
+        // 3. Ensure Events exist
+        const now = Date.now();
+
+        const eventsToUpsert = [
+            {
+                external_id: 'wc2026_sf1',
+                name: 'France vs Spain',
+                home_team_id: franceId,
+                away_team_id: spainId,
+                start_time: new Date(now + 60 * 1000).toISOString(), // 1 min from now
+            },
+            {
+                external_id: 'wc2026_sf2',
+                name: 'England vs Argentina',
+                home_team_id: englandId,
+                away_team_id: argentinaId,
+                start_time: new Date(now + 120 * 1000).toISOString(), // 2 mins from now
+            },
+            {
+                external_id: 'wc2026_final',
+                name: 'FIFA World Cup Final',
+                home_team_id: spainId, // Spain as default home
+                away_team_id: argentinaId, // Argentina as default away
+                start_time: new Date(now + 360 * 1000).toISOString(), // 6 mins from now
+            }
+        ];
+
+        for (const ev of eventsToUpsert) {
+            // Check if already exists so we do not overwrite the start_time if it is already running/finished
+            const { data: existing } = await supabase
+                .from('sports_events')
+                .select('id, status')
+                .eq('external_id', ev.external_id)
+                .eq('source', DataSource.APIFOOTBALL)
+                .single();
+
+            if (existing) {
+                // If it already exists and is finished or live, don't reset its time
+                if (existing.status !== 'scheduled') {
+                    this.logger.log(`Event ${ev.external_id} already exists with status ${existing.status}, skipping seed`);
+                    continue;
+                }
+            }
+
+            const { error: evErr } = await supabase
+                .from('sports_events')
+                .upsert({
+                    external_id: ev.external_id,
+                    source: DataSource.APIFOOTBALL,
+                    league_id: leagueId,
+                    home_team_id: ev.home_team_id,
+                    away_team_id: ev.away_team_id,
+                    sport: SportType.FOOTBALL,
+                    name: ev.name,
+                    venue: ev.external_id === 'wc2026_final' ? 'AT&T Stadium (Dallas)' : 'Mercedes-Benz Stadium (Atlanta)',
+                    start_time: ev.start_time,
+                    timezone: 'UTC',
+                    status: 'scheduled',
+                    home_score: 0,
+                    away_score: 0,
+                    elapsed_time: 0,
+                    metadata: {
+                        isSimulated: true,
+                        leagueName: 'FIFA World Cup',
+                        homeTeamName: ev.external_id === 'wc2026_sf1' ? 'France' : (ev.external_id === 'wc2026_sf2' ? 'England' : 'Spain'),
+                        awayTeamName: ev.external_id === 'wc2026_sf1' ? 'Spain' : (ev.external_id === 'wc2026_sf2' ? 'Argentina' : 'Argentina'),
+                    },
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                }, { onConflict: 'external_id,source' });
+
+            if (evErr) {
+                this.logger.error(`Failed to seed event ${ev.external_id}: ${evErr.message}`);
+            }
+        }
+    }
+
+    /**
+     * Simulation tick for the seeded World Cup matches.
+     * Evaluates live scoring updates and transitions matches.
+     */
+    private async runWorldCupSimulationTick() {
+        const supabase = this.supabaseService.getAdminClient();
+        const { data: events, error } = await supabase
+            .from('sports_events')
+            .select('*')
+            .in('external_id', ['wc2026_sf1', 'wc2026_sf2', 'wc2026_final'])
+            .eq('source', DataSource.APIFOOTBALL);
+
+        if (error || !events || events.length === 0) return;
+
+        const now = Date.now();
+
+        for (const event of events) {
+            const startTime = new Date(event.start_time).getTime();
+            const elapsedSecs = Math.floor((now - startTime) / 1000);
+
+            if (event.status === 'scheduled') {
+                if (now >= startTime) {
+                    this.logger.log(`⚽ World Cup event ${event.name} (${event.external_id}) is now LIVE!`);
+                    await supabase
+                        .from('sports_events')
+                        .update({
+                            status: 'live',
+                            home_score: 0,
+                            away_score: 0,
+                            elapsed_time: 0,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', event.id);
+
+                    await this.sportsMessagingService.publishLiveScoreUpdate({
+                        ...event,
+                        status: 'live',
+                        home_score: 0,
+                        away_score: 0,
+                        elapsed_time: 0,
+                    } as any);
+                }
+            } else if (event.status === 'live') {
+                const DURATION_SECS = 180; // 3 minutes total duration
+                const matchMins = Math.min(90, Math.floor((elapsedSecs / DURATION_SECS) * 90));
+
+                let homeScore = 0;
+                let awayScore = 0;
+
+                if (event.external_id === 'wc2026_sf1') {
+                    // France vs Spain
+                    if (elapsedSecs >= 170) {
+                        homeScore = 1;
+                        awayScore = 2;
+                    } else if (elapsedSecs >= 130) {
+                        homeScore = 1;
+                        awayScore = 1;
+                    } else if (elapsedSecs >= 40) {
+                        homeScore = 1;
+                        awayScore = 0;
+                    }
+                } else if (event.external_id === 'wc2026_sf2') {
+                    // England vs Argentina
+                    if (elapsedSecs >= 140) {
+                        homeScore = 1;
+                        awayScore = 2;
+                    } else if (elapsedSecs >= 80) {
+                        homeScore = 1;
+                        awayScore = 1;
+                    } else if (elapsedSecs >= 30) {
+                        homeScore = 0;
+                        awayScore = 1;
+                    }
+                } else if (event.external_id === 'wc2026_final') {
+                    // Spain vs Argentina
+                    if (elapsedSecs >= 176) {
+                        homeScore = 1;
+                        awayScore = 2;
+                    } else if (elapsedSecs >= 120) {
+                        homeScore = 1;
+                        awayScore = 1;
+                    } else if (elapsedSecs >= 60) {
+                        homeScore = 1;
+                        awayScore = 0;
+                    }
+                }
+
+                if (elapsedSecs >= DURATION_SECS) {
+                    this.logger.log(`🏁 World Cup event ${event.name} (${event.external_id}) finished! Final Score: ${homeScore} - ${awayScore}`);
+                    await supabase
+                        .from('sports_events')
+                        .update({
+                            status: 'finished',
+                            home_score: homeScore,
+                            away_score: awayScore,
+                            elapsed_time: 90,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', event.id);
+
+                    await this.sportsMessagingService.publishLiveScoreUpdate({
+                        ...event,
+                        status: 'finished',
+                        home_score: homeScore,
+                        away_score: awayScore,
+                        elapsed_time: 90,
+                    } as any);
+
+                    // Resolve the prediction competition!
+                    await this.resolveCompetitionForEvent(event.id, homeScore, awayScore);
+                } else {
+                    // Update live scores
+                    await supabase
+                        .from('sports_events')
+                        .update({
+                            home_score: homeScore,
+                            away_score: awayScore,
+                            elapsed_time: matchMins,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq('id', event.id);
+
+                    await this.sportsMessagingService.publishLiveScoreUpdate({
+                        ...event,
+                        status: 'live',
+                        home_score: homeScore,
+                        away_score: awayScore,
+                        elapsed_time: matchMins,
+                    } as any);
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolves the active competition related to a finished simulated event.
+     */
+    private async resolveCompetitionForEvent(eventId: string, homeScore: number, awayScore: number) {
+        const supabase = this.supabaseService.getAdminClient();
+
+        const { data: sourceRef, error } = await supabase
+            .from('used_competition_sources')
+            .select('competition_id')
+            .eq('source_table', 'sports_events')
+            .eq('source_id', eventId)
+            .single();
+
+        if (error || !sourceRef) {
+            this.logger.warn(`Could not find competition linked to sports_event ${eventId} to resolve`);
+            return;
+        }
+
+        const compId = sourceRef.competition_id;
+
+        const { data: comp } = await supabase
+            .from('competitions')
+            .select('*')
+            .eq('id', compId)
+            .single();
+
+        if (!comp || comp.status === 'settled') return;
+
+        // Binary Yes/No: Yes (0) = Home team won, No (1) = Home team lost or drew
+        const winningOutcome = homeScore > awayScore ? 0 : 1;
+
+        const settlementNonce = AntiManipulationUtil.generateNonce();
+        const settlementHash = AntiManipulationUtil.hashSnapshot({
+            id: compId,
+            winningOutcome,
+            nonce: settlementNonce,
+            settledAt: new Date().toISOString(),
+        });
+
+        const { error: settleErr } = await supabase
+            .from('competitions')
+            .update({
+                status: 'settled',
+                winning_outcome: winningOutcome,
+                metadata: {
+                    ...comp.metadata,
+                    settlementHash,
+                    settlementNonce,
+                    settledAt: new Date().toISOString(),
+                    settledBy: 'simulated_world_cup_pipeline',
+                },
+            })
+            .eq('id', compId);
+
+        if (settleErr) {
+            this.logger.error(`Failed to settle competition ${compId}: ${settleErr.message}`);
+            return;
+        }
+
+        this.logger.log(`🏆 Competition "${comp.title}" resolved! Winner outcome: ${winningOutcome} (${winningOutcome === 0 ? 'Yes' : 'No'})`);
+
+        try {
+            const { error: poolErr } = await supabase.rpc('settle_competition_pool', {
+                p_competition_id: compId,
+                p_settled_by: 'simulated_world_cup_pipeline',
+            });
+            if (poolErr) {
+                this.logger.warn(`Failed to settle pool via RPC for ${compId}: ${poolErr.message}`);
+            } else {
+                this.logger.log(`💰 Pool settled for competition ${compId}`);
+            }
+        } catch (poolEx: any) {
+            this.logger.warn(`Pool settlement exception for ${compId}: ${poolEx.message}`);
+        }
+    }
 }
+

@@ -114,24 +114,36 @@ export class SportsMessagingService implements OnModuleInit, OnModuleDestroy {
     /**
      * Publish event update (live scores, status changes)
      */
-    async publishEventUpdate(event: SportsEvent): Promise<void> {
+    async publishEventUpdate(event: any): Promise<void> {
+        const eventId = event.id;
+        const externalId = event.externalId || event.external_id;
+        const sport = event.sport;
+        const status = event.status;
+        const homeScore = event.homeScore !== undefined ? event.homeScore : event.home_score;
+        const awayScore = event.awayScore !== undefined ? event.awayScore : event.away_score;
+        const homeTeam = (event.metadata?.homeTeamName || event.metadata?.home_team_name) as string;
+        const awayTeam = (event.metadata?.awayTeamName || event.metadata?.away_team_name) as string;
+        
+        const rawStartTime = event.startTime || event.start_time;
+        const startTime = rawStartTime ? new Date(rawStartTime).toISOString() : new Date().toISOString();
+
         const message: SportsEventMessage = {
-            eventId: event.id,
-            externalId: event.externalId,
-            sport: event.sport,
-            status: event.status,
-            homeScore: event.homeScore,
-            awayScore: event.awayScore,
-            homeTeam: event.metadata?.homeTeamName as string,
-            awayTeam: event.metadata?.awayTeamName as string,
-            startTime: event.startTime.toISOString(),
+            eventId,
+            externalId,
+            sport,
+            status,
+            homeScore,
+            awayScore,
+            homeTeam,
+            awayTeam,
+            startTime,
             updatedAt: new Date().toISOString(),
         };
 
         const routingKey = this.getEventRoutingKey(event.status);
         await this.publish(routingKey, message);
 
-        this.logger.debug(`Published event update: ${event.id} (${event.status})`);
+        this.logger.debug(`Published event update: ${eventId} (${status})`);
     }
 
     /**
@@ -248,22 +260,34 @@ export class SportsMessagingService implements OnModuleInit, OnModuleDestroy {
     /**
      * Publish live score update
      */
-    async publishLiveScoreUpdate(event: SportsEvent): Promise<void> {
+    async publishLiveScoreUpdate(event: any): Promise<void> {
+        const eventId = event.id;
+        const externalId = event.externalId || event.external_id;
+        const sport = event.sport;
+        const status = event.status;
+        const homeScore = event.homeScore !== undefined ? event.homeScore : event.home_score;
+        const awayScore = event.awayScore !== undefined ? event.awayScore : event.away_score;
+        const homeTeam = (event.metadata?.homeTeamName || event.metadata?.home_team_name) as string;
+        const awayTeam = (event.metadata?.awayTeamName || event.metadata?.away_team_name) as string;
+        
+        const rawStartTime = event.startTime || event.start_time;
+        const startTime = rawStartTime ? new Date(rawStartTime).toISOString() : new Date().toISOString();
+
         const message: SportsEventMessage = {
-            eventId: event.id,
-            externalId: event.externalId,
-            sport: event.sport,
-            status: event.status,
-            homeScore: event.homeScore,
-            awayScore: event.awayScore,
-            homeTeam: event.metadata?.homeTeamName as string,
-            awayTeam: event.metadata?.awayTeamName as string,
-            startTime: event.startTime.toISOString(),
+            eventId,
+            externalId,
+            sport,
+            status,
+            homeScore,
+            awayScore,
+            homeTeam,
+            awayTeam,
+            startTime,
             updatedAt: new Date().toISOString(),
         };
 
         await this.publish(SPORTS_ROUTING_KEYS.EVENT_LIVE, message);
-        this.logger.debug(`Published live score: ${event.id} (${event.homeScore}-${event.awayScore})`);
+        this.logger.debug(`Published live score: ${eventId} (${homeScore}-${awayScore})`);
     }
 
     // ========================

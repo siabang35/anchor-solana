@@ -10,7 +10,7 @@ import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useAgentPredictions } from '@/hooks/useAgentPredictions';
-import { apiFetch } from '@/lib/supabase';
+import { supabase, apiFetch } from '@/lib/supabase';
 import CompetitionPoolWinners from '@/components/CompetitionPoolWinners';
 
 const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
@@ -25,6 +25,7 @@ const SentimentAnalysis = dynamic(() => import('@/components/SentimentAnalysis')
 const ValueCreationPool = dynamic(() => import('@/components/ValueCreationPool'), { ssr: false });
 const Leaderboard = dynamic(() => import('@/components/Leaderboard'), { ssr: false });
 const CategoryPoolWinners = dynamic(() => import('@/components/CategoryPoolWinners'), { ssr: false });
+const WorldCupBracket = dynamic(() => import('@/components/WorldCupBracket'), { ssr: false });
 
 // ── Allowed sectors (anti-injection allowlist) ──────────────────
 const VALID_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'] as const;
@@ -126,6 +127,56 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
         }
     }, []);
 
+    // Fetch real-time sports events for World Cup bracket
+    const [events, setEvents] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (sector !== 'sports') return;
+
+        const fetchEvents = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('sports_events')
+                    .select('*, home_team:sports_teams(*), away_team:sports_teams(*)')
+                    .in('external_id', ['wc2026_sf1', 'wc2026_sf2', 'wc2026_final'])
+                    .eq('source', 'apifootball');
+                if (!error && data) {
+                    setEvents(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch sports events:', err);
+            }
+        };
+
+        fetchEvents();
+
+        // Subscribe to real-time updates for these events
+        const channel = supabase
+            .channel('sports-events-realtime-bracket')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'sports_events',
+                },
+                () => {
+                    fetchEvents();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [sector]);
+
+    const sf1 = useMemo(() => events.find(e => e.external_id === 'wc2026_sf1'), [events]);
+    const sf2 = useMemo(() => events.find(e => e.external_id === 'wc2026_sf2'), [events]);
+    const final = useMemo(() => events.find(e => e.external_id === 'wc2026_final'), [events]);
+
+
+
     // Agent data for neural lines on curve
     const { publicKey } = useWallet();
     const {
@@ -148,6 +199,14 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                 return end > now; // Only show competitions that haven't expired
             })
             .sort((a, b) => {
+                // Prioritize FIFA/World Cup/Football events when in sports sector
+                if (sector === 'sports') {
+                    const isFifaA = a.title.toLowerCase().includes('world cup') || a.title.toLowerCase().includes('fifa') || a.tags?.includes('football');
+                    const isFifaB = b.title.toLowerCase().includes('world cup') || b.title.toLowerCase().includes('fifa') || b.tags?.includes('football');
+                    if (isFifaA && !isFifaB) return -1;
+                    if (!isFifaA && isFifaB) return 1;
+                }
+
                 const order = { live: 0, upcoming: 1, ended: 2 };
                 const diff = order[getCompetitionStatus(a)] - order[getCompetitionStatus(b)];
                 if (diff !== 0) return diff;
@@ -158,7 +217,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
 
                 return new Date(a.competition_start).getTime() - new Date(b.competition_start).getTime();
             });
-    }, [competitions]);
+    }, [competitions, sector]);
 
     // Active competition for curve
     const activeComp = selectedCompId
@@ -264,6 +323,17 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                         </span>
                     </div>
                 </div>
+
+                {/* FIFA World Cup 2026 Bracket */}
+                {sector === 'sports' && (
+                    <WorldCupBracket
+                        sf1={sf1}
+                        sf2={sf2}
+                        final={final}
+                        activeCompId={activeComp?.id}
+                        onSelectComp={setSelectedCompId}
+                    />
+                )}
 
                 {/* Probability Curve for Selected Competition */}
                 <ProbabilityCurve

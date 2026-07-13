@@ -748,11 +748,25 @@ export class RealtimeCompetitionSeederService {
 
                 if (leagueIds.size > 0) {
                     const { data: leagues } = await supabase
-                        .from('sports_leagues')
-                        .select('id, name')
-                        .in('id', Array.from(leagueIds));
+                         .from('sports_leagues')
+                         .select('id, name')
+                         .in('id', Array.from(leagueIds));
                     if (leagues) leagues.forEach(l => leagueNameMap.set(l.id, l.name));
                 }
+
+                // Prioritize FIFA World Cup events and then sort by start_time
+                sportsEvents.sort((a, b) => {
+                    const nameA = (leagueNameMap.get(a.league_id) || '').toLowerCase();
+                    const nameB = (leagueNameMap.get(b.league_id) || '').toLowerCase();
+                    const isWcA = nameA.includes('world cup') || nameA.includes('fifa');
+                    const isWcB = nameB.includes('world cup') || nameB.includes('fifa');
+                    if (isWcA && !isWcB) return -1;
+                    if (!isWcA && isWcB) return 1;
+                    
+                    const timeA = a.start_time ? new Date(a.start_time).getTime() : 0;
+                    const timeB = b.start_time ? new Date(b.start_time).getTime() : 0;
+                    return timeA - timeB;
+                });
 
                 for (const event of sportsEvents) {
                     const homeName = teamNameMap.get(event.home_team_id) || event.name?.split(' vs ')?.[0] || `Team ${(event.home_team_id || '').substring(0, 8)}`;
@@ -761,8 +775,8 @@ export class RealtimeCompetitionSeederService {
                     const sportLabel = (event.sport || 'sports').charAt(0).toUpperCase() + (event.sport || 'sports').slice(1);
 
                     const title = leagueName
-                        ? `${leagueName}: ${homeName} vs ${awayName}`
-                        : `${sportLabel}: ${homeName} vs ${awayName}`;
+                        ? `${leagueName}: ${homeName} vs ${awayName} — Will ${homeName} win?`
+                        : `${sportLabel}: ${homeName} vs ${awayName} — Will ${homeName} win?`;
 
                     // SOURCE-ID anti-recycling
                     if (event.id && usedSportsIds.has(String(event.id))) continue;

@@ -122,6 +122,15 @@ export const envSchema = z.object({
     WS_RATE_LIMIT: z.string().transform(Number).pipe(z.number()).optional(),
     WS_BATCH_INTERVAL: z.string().transform(Number).pipe(z.number()).optional(),
     WS_MAX_SUBSCRIPTIONS: z.string().transform(Number).pipe(z.number()).optional(),
+
+    // Cloudflare R2
+    CLOUDFLARE_R2_ACCOUNT_ID: z.string().optional(),
+    CLOUDFLARE_R2_ACCESS_KEY_ID: z.string().optional(),
+    CLOUDFLARE_R2_SECRET_ACCESS_KEY: z.string().optional(),
+    CLOUDFLARE_R2_PUBLIC_URL: z.string().url().optional(),
+    CLOUDFLARE_R2_BUCKET_ARCHIVES: z.string().optional(),
+    CLOUDFLARE_R2_BUCKET_MEDIA: z.string().optional(),
+    CLOUDFLARE_R2_BUCKET_ETL_RAW: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
