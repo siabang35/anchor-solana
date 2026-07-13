@@ -1,121 +1,40 @@
 -- ============================================================================
--- Migration: 027_fix_solana_address_case.sql
--- Purpose: Preserve case-sensitivity for Solana wallet addresses in DB
+-- Migration: 029_robust_wallet_sync.sql
+-- Purpose: Sync profiles table columns, connect wallet_addresses & connected_wallets tables
+--          and ensure case-preservation for Solana wallets.
 -- ============================================================================
 
--- 1. Update log_wallet_auth_attempt to preserve Solana address case
-CREATE OR REPLACE FUNCTION log_wallet_auth_attempt(
-    p_wallet_address TEXT,
-    p_chain TEXT,
-    p_wallet_provider TEXT,
-    p_ip_address INET,
-    p_success BOOLEAN,
-    p_failure_reason TEXT DEFAULT NULL,
-    p_user_id UUID DEFAULT NULL,
-    p_nonce_id UUID DEFAULT NULL,
-    p_user_agent TEXT DEFAULT NULL,
-    p_device_fingerprint TEXT DEFAULT NULL
-)
-RETURNS UUID
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-    v_attempt_id UUID;
-    v_risk_score INTEGER := 0;
-    v_risk_factors TEXT[] := '{}';
+-- 1. Ensure profiles table has all necessary columns
+DO $$
 BEGIN
-    -- Calculate risk score
-    IF NOT p_success THEN
-        v_risk_score := v_risk_score + 20;
-        v_risk_factors := array_append(v_risk_factors, 'failed_attempt');
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'username') THEN
+        ALTER TABLE profiles ADD COLUMN username VARCHAR(30);
+        ALTER TABLE profiles ADD CONSTRAINT profiles_username_unique UNIQUE (username);
+        COMMENT ON COLUMN profiles.username IS 'Unique username for user profile';
     END IF;
-    
-    -- Check for rapid attempts (same wallet, last 5 minutes)
-    IF EXISTS (
-        SELECT 1 FROM wallet_auth_attempts
-        WHERE LOWER(wallet_address) = LOWER(p_wallet_address)
-          AND attempted_at > NOW() - INTERVAL '1 minute'
-    ) THEN
-        v_risk_score := v_risk_score + 30;
-        v_risk_factors := array_append(v_risk_factors, 'rapid_attempts');
-    END IF;
-    
-    -- Check for multiple wallets from same IP
-    IF (
-        SELECT COUNT(DISTINCT wallet_address) 
-        FROM wallet_auth_attempts
-        WHERE ip_address = p_ip_address
-          AND attempted_at > NOW() - INTERVAL '15 minutes'
-    ) > 3 THEN
-        v_risk_score := v_risk_score + 25;
-        v_risk_factors := array_append(v_risk_factors, 'multiple_wallets_same_ip');
-    END IF;
-    
-    -- Insert attempt record - Keep Solana address case-sensitive
-    INSERT INTO wallet_auth_attempts (
-        wallet_address,
-        chain,
-        wallet_provider,
-        success,
-        failure_reason,
-        ip_address,
-        user_agent,
-        device_fingerprint,
-        user_id,
-        nonce_id,
-        risk_score,
-        risk_factors
-    ) VALUES (
-        CASE WHEN p_chain = 'solana' THEN p_wallet_address ELSE LOWER(p_wallet_address) END,
-        p_chain,
-        p_wallet_provider,
-        p_success,
-        p_failure_reason,
-        p_ip_address,
-        p_user_agent,
-        p_device_fingerprint,
-        p_user_id,
-        p_nonce_id,
-        v_risk_score,
-        v_risk_factors
-    )
-    RETURNING id INTO v_attempt_id;
-    
-    -- Log high-risk attempts to suspicious_activity
-    IF v_risk_score >= 50 AND EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'suspicious_activity') THEN
-        INSERT INTO suspicious_activity (
-            user_id,
-            ip_address,
-            activity_type,
-            description,
-            risk_score,
-            details
-        ) VALUES (
-            p_user_id,
-            p_ip_address,
-            CASE 
-                WHEN NOT p_success THEN 'multiple_failed_logins'
-                ELSE 'other'
-            END,
-            format('Wallet auth attempt for %s: %s', p_wallet_address, COALESCE(p_failure_reason, 'success')),
-            v_risk_score,
-            jsonb_build_object(
-                'wallet_address', p_wallet_address,
-                'chain', p_chain,
-                'provider', p_wallet_provider,
-                'risk_factors', v_risk_factors
-            )
-        );
-    END IF;
-    
-    RETURN v_attempt_id;
-END;
-$$;
 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'agreed_to_terms_at') THEN
+        ALTER TABLE profiles ADD COLUMN agreed_to_terms_at TIMESTAMPTZ;
+    END IF;
 
--- 2. Update find_or_create_wallet_user to migrate addresses with case preservation for Solana and check both tables
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'agreed_to_privacy_at') THEN
+        ALTER TABLE profiles ADD COLUMN agreed_to_privacy_at TIMESTAMPTZ;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'profile_completed') THEN
+        ALTER TABLE profiles ADD COLUMN profile_completed BOOLEAN DEFAULT false;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'auth_provider') THEN
+        ALTER TABLE profiles ADD COLUMN auth_provider TEXT DEFAULT 'email';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'google_id') THEN
+        ALTER TABLE profiles ADD COLUMN google_id TEXT;
+    END IF;
+END $$;
+
+-- 2. Update find_or_create_wallet_user to check BOTH connected_wallets and wallet_addresses tables
 CREATE OR REPLACE FUNCTION find_or_create_wallet_user(
     p_wallet_address TEXT,
     p_chain TEXT,
@@ -136,7 +55,7 @@ DECLARE
     v_profile_completed BOOLEAN;
     v_username TEXT;
 BEGIN
-    -- First, try to find user by connected wallet
+    -- Step A: First try to find in connected_wallets (verified connection)
     SELECT cw.user_id, p.profile_completed, p.username
     INTO v_user_id, v_profile_completed, v_username
     FROM connected_wallets cw
@@ -150,7 +69,7 @@ BEGIN
         RETURN;
     END IF;
     
-    -- Try to find in new wallet_addresses table (dynamically provisioned during deployment)
+    -- Step B: Try to find in new wallet_addresses table (dynamically provisioned during deployment)
     SELECT wa.user_id, p.profile_completed, p.username
     INTO v_user_id, v_profile_completed, v_username
     FROM wallet_addresses wa
@@ -159,7 +78,7 @@ BEGIN
       AND wa.chain = p_chain;
 
     IF v_user_id IS NOT NULL THEN
-        -- Migrate to connected_wallets table - Keep Solana address case-sensitive
+        -- Migrate/link to connected_wallets table as verified
         INSERT INTO connected_wallets (
             user_id, address, chain, wallet_provider, is_verified, verified_at
         ) VALUES (
@@ -178,7 +97,7 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Try to find by legacy profiles.wallet_addresses JSONB column
+    -- Step C: Try to find by legacy profiles.wallet_addresses JSONB column
     SELECT p.id, p.profile_completed, p.username
     INTO v_user_id, v_profile_completed, v_username
     FROM profiles p
@@ -189,7 +108,7 @@ BEGIN
     );
     
     IF v_user_id IS NOT NULL THEN
-        -- Migrate to connected_wallets table - Keep Solana address case-sensitive
+        -- Migrate to connected_wallets table
         INSERT INTO connected_wallets (
             user_id, address, chain, wallet_provider, is_verified, verified_at
         ) VALUES (
@@ -218,13 +137,12 @@ BEGIN
         RETURN;
     END IF;
     
-    -- User not found - signal that new user creation is needed
+    -- Step D: User not found - return NULL to signal backend to provision auth user
     RETURN QUERY SELECT NULL::UUID, TRUE, FALSE, NULL::TEXT;
 END;
 $$;
 
-
--- 3. Update link_wallet_to_user to keep Solana address case-sensitive and sync tables
+-- 3. Update link_wallet_to_user to keep connected_wallets and wallet_addresses in sync
 CREATE OR REPLACE FUNCTION link_wallet_to_user(
     p_user_id UUID,
     p_wallet_address TEXT,
@@ -241,7 +159,7 @@ DECLARE
     v_wallet_id UUID;
     v_existing_user UUID;
 BEGIN
-    -- Check if wallet is already linked to another user
+    -- Check if wallet is already linked to another user in connected_wallets
     SELECT user_id INTO v_existing_user
     FROM connected_wallets
     WHERE LOWER(address) = LOWER(p_wallet_address) AND chain = p_chain;
@@ -251,7 +169,7 @@ BEGIN
         RETURN;
     END IF;
 
-    -- Check separate wallet_addresses table as well
+    -- Check if wallet is already linked to another user in wallet_addresses table
     SELECT user_id INTO v_existing_user
     FROM wallet_addresses
     WHERE LOWER(address) = LOWER(p_wallet_address) AND chain = p_chain;
@@ -261,18 +179,18 @@ BEGIN
         RETURN;
     END IF;
     
-    -- If setting as primary, unset other primary wallets for this user
+    -- If setting as primary, unset other primary wallets for this user in connected_wallets
     IF p_is_primary THEN
         UPDATE connected_wallets
         SET is_primary = false
         WHERE user_id = p_user_id AND is_primary = true;
-
+        
         UPDATE wallet_addresses
         SET is_primary = false
         WHERE user_id = p_user_id AND is_primary = true;
     END IF;
     
-    -- Insert or update the wallet connection - Keep Solana address case-sensitive
+    -- Insert or update the wallet connection in connected_wallets table
     INSERT INTO connected_wallets (
         user_id,
         address,
@@ -298,7 +216,7 @@ BEGIN
         updated_at = NOW()
     RETURNING id INTO v_wallet_id;
 
-    -- Sync to separate wallet_addresses table
+    -- Insert or update in separate wallet_addresses table to keep it in sync
     INSERT INTO wallet_addresses (
         user_id,
         address,
@@ -321,13 +239,12 @@ BEGIN
         verified_at = NOW(),
         is_primary = EXCLUDED.is_primary;
     
-    -- Update connected wallet in connected_wallets
+    -- Update last signature timestamp in connected_wallets
     UPDATE connected_wallets 
     SET last_signature_at = NOW()
     WHERE id = v_wallet_id;
     
-    -- Sync user profile wallet_addresses field
-    -- Update or insert JSONB array for backward compatibility
+    -- Sync user profile wallet_addresses field for backward compatibility
     UPDATE profiles
     SET 
         wallet_addresses = COALESCE(
@@ -365,3 +282,6 @@ BEGIN
     RETURN QUERY SELECT TRUE, 'Wallet linked successfully'::TEXT, v_wallet_id;
 END;
 $$;
+
+-- 4. Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';

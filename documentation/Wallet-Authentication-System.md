@@ -215,6 +215,13 @@ Audits every authentication attempt (success or failure) with a risk score based
    * This prevents casing mismatches (where legacy lowercased wallet addresses in storage mismatched with case-preserved Base58 Solana public keys) from clearing the token and forcing a re-signature loop on page refresh.
    * Debug console logging (`[WalletAuth] Check`) is implemented to provide transparency on token status, matches, and expiration.
 
+10. **Robust Dual-Lookup Synchronization between wallet_addresses and connected_wallets Tables**:
+    * **The Problem**: Pre-deployment of agents before user login provisions a user profile and associates their wallet in the `wallet_addresses` table. However, standard wallet login verifies signature and registers the connection in the `connected_wallets` table. If a user logs in after pre-deployment, a standard RPC check would not check `wallet_addresses`, fail to resolve the user, try to re-create the user, and conflict on duplicate email.
+    * **The Solution**: 
+      * `find_or_create_wallet_user()` has been upgraded to a dual-lookup approach: it first checks `connected_wallets`, and if not found, it checks `wallet_addresses` to resolve pre-provisioned user profiles. If found in `wallet_addresses`, it automatically links/migrates the verification to `connected_wallets`.
+      * `link_wallet_to_user()` has been upgraded to perform inserts/updates on BOTH the `connected_wallets` AND `wallet_addresses` tables in a single transaction, keeping both tables in lock-step synchronization.
+      * This ensures that agent portfolios (which are mapped by `wallet_addresses`) and authentication sessions (which are mapped by `connected_wallets`) always refer to the same user UUID, eliminating 400 Bad Request registration errors and rendering their deployed agents perfectly under the "My Agent" section.
+
 
 ---
 
