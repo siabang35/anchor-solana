@@ -159,17 +159,36 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
             
             const matchedAgent = forecasters.find(f => f.id === failedWagerSyncInfo.agentId);
             if (matchedAgent) {
-                setDeployedAgent(matchedAgent);
+                setDeployedAgent({
+                    id: matchedAgent.id,
+                    name: matchedAgent.name,
+                    status: matchedAgent.status,
+                    strategy_prompt: matchedAgent.system_prompt || strategy,
+                    target_outcome: '',
+                    direction: direction,
+                    risk_level: riskLevel,
+                    deploy_number: 0,
+                    accuracy_score: 0,
+                    total_trades: 0,
+                    total_pnl: 0,
+                    win_rate: 0,
+                    deployed_at: matchedAgent.updated_at || new Date().toISOString(),
+                });
             } else {
                 setDeployedAgent({
                     id: failedWagerSyncInfo.agentId,
                     name: agentName || 'Forecasting Agent',
-                    system_prompt: strategy,
-                    model: 'Qwen/Qwen2.5-7B-Instruct',
                     status: 'active',
-                    max_free_prompts: 7,
-                    prompts_used: 0,
-                    stakes: [{ competition_id: failedWagerSyncInfo.competitionId, stake_status: 'confirmed' }]
+                    strategy_prompt: strategy,
+                    target_outcome: '',
+                    direction: direction,
+                    risk_level: riskLevel,
+                    deploy_number: 0,
+                    accuracy_score: 0,
+                    total_trades: 0,
+                    total_pnl: 0,
+                    win_rate: 0,
+                    deployed_at: new Date().toISOString(),
                 });
             }
             
@@ -189,7 +208,7 @@ export default function DeployAgent({ initialCategory }: { initialCategory?: str
         } finally {
             setDeploying(false);
         }
-    }, [failedWagerSyncInfo, publicKey, forecasters, agentName, strategy, refreshAgents]);
+    }, [failedWagerSyncInfo, publicKey, forecasters, agentName, strategy, direction, riskLevel, refreshAgents]);
 
     const selectedCategory = useMemo(() => CATEGORIES.find(c => c.id === categoryId), [categoryId]);
     const availableMarkets = useMemo(() => {
