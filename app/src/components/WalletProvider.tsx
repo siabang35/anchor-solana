@@ -170,10 +170,10 @@ export default function WalletProvider({ children }: { children: React.ReactNode
         return process.env.NEXT_PUBLIC_SOLANA_RPC || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl('devnet');
     }, []);
     
+    const mobileAdapterRef = React.useRef<SolanaMobileWalletAdapter | null>(null);
+
     const wallets = useMemo(() => {
         if (!mounted || typeof window === 'undefined') return [];
-
-        const origin = window.location.origin;
 
         // If inside a mobile wallet in-app browser (Phantom / Solflare),
         // we omit SolanaMobileWalletAdapter to avoid socket connection failures.
@@ -181,19 +181,21 @@ export default function WalletProvider({ children }: { children: React.ReactNode
             return [];
         }
 
-        return [
-            new SolanaMobileWalletAdapter({
+        if (!mobileAdapterRef.current) {
+            mobileAdapterRef.current = new SolanaMobileWalletAdapter({
                 addressSelector: createDefaultAddressSelector(),
                 appIdentity: {
                     name: 'ExoDuZe',
-                    uri: origin,
+                    uri: window.location.origin,
                     icon: '/images/logo/exoduze-logo.png',
                 },
                 authorizationResultCache: createDefaultAuthorizationResultCache(),
                 cluster: 'devnet',
                 onWalletNotFound: createDefaultWalletNotFoundHandler(),
-            }),
-        ];
+            });
+        }
+
+        return [mobileAdapterRef.current];
     }, [mounted, isInApp]);
 
     return (
