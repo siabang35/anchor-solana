@@ -89,7 +89,7 @@ export class WalletConnectService {
             .from('wallet_auth_nonces')
             .insert({
                 nonce,
-                wallet_address: address.toLowerCase(),
+                wallet_address: this.normalizeAddress(address, chain),
                 chain,
                 message,
                 domain,
@@ -346,7 +346,7 @@ export class WalletConnectService {
             .from('connected_wallets')
             .delete()
             .eq('user_id', userId)
-            .eq('address', address.toLowerCase());
+            .ilike('address', address);
 
         if (error) {
             this.logger.error(`Failed to disconnect wallet: ${error.message}`);
@@ -367,7 +367,7 @@ export class WalletConnectService {
         const supabase = this.supabaseService.getAdminClient();
 
         const { data, error } = await supabase.rpc('check_wallet_auth_rate_limit', {
-            p_wallet_address: address.toLowerCase(),
+            p_wallet_address: address,
             p_ip_address: ipAddress,
             p_max_attempts: 50,
             p_window_minutes: 1,
@@ -401,7 +401,7 @@ export class WalletConnectService {
 
         const { data, error } = await supabase.rpc('consume_wallet_nonce', {
             p_nonce: nonce,
-            p_wallet_address: address.toLowerCase(),
+            p_wallet_address: this.normalizeAddress(address, chain as WalletChain),
             p_chain: chain,
         });
 
@@ -435,7 +435,7 @@ export class WalletConnectService {
             const supabase = this.supabaseService.getAdminClient();
 
             await supabase.rpc('log_wallet_auth_attempt', {
-                p_wallet_address: address.toLowerCase(),
+                p_wallet_address: this.normalizeAddress(address, chain as WalletChain),
                 p_chain: chain,
                 p_wallet_provider: provider || 'other',
                 p_ip_address: ipAddress || '0.0.0.0',
@@ -461,7 +461,7 @@ export class WalletConnectService {
         const supabase = this.supabaseService.getAdminClient();
 
         const { data, error } = await supabase.rpc('find_or_create_wallet_user', {
-            p_wallet_address: address.toLowerCase(),
+            p_wallet_address: this.normalizeAddress(address, chain as WalletChain),
             p_chain: chain,
             p_wallet_provider: provider || 'other',
         });
@@ -516,7 +516,7 @@ export class WalletConnectService {
             email: null, // No real email for wallet users
             full_name: null,
             avatar_url: null,
-            wallet_addresses: [{ address: address.toLowerCase(), chain, isPrimary: true }],
+            wallet_addresses: [{ address: this.normalizeAddress(address, chain as WalletChain), chain, isPrimary: true }],
         });
 
         // Set auth provider
@@ -546,7 +546,7 @@ export class WalletConnectService {
 
         const { error } = await supabase.rpc('link_wallet_to_user', {
             p_user_id: userId,
-            p_wallet_address: address.toLowerCase(),
+            p_wallet_address: this.normalizeAddress(address, chain as WalletChain),
             p_chain: chain,
             p_wallet_provider: provider,
             p_is_primary: true,
@@ -612,6 +612,17 @@ export class WalletConnectService {
             return false;
         }
         return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(username);
+    }
+
+    /**
+     * Normalize wallet address depending on the chain (e.g. lowercase EVM, keep Solana case)
+     */
+    private normalizeAddress(address: string, chain: WalletChain): string {
+        const trimmed = address.trim();
+        if (['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].includes(chain)) {
+            return trimmed.toLowerCase();
+        }
+        return trimmed;
     }
 
     /**

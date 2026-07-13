@@ -74,10 +74,11 @@ export class SupabaseService implements OnModuleInit {
                 `);
                 
                 const tableExists = tableCheck.rows[0]?.exists;
+                const fs = await import('fs');
+                const path = await import('path');
+
                 if (!tableExists) {
                     this.logger.log('Table wallet_auth_nonces not found. Running wallet connect migrations...');
-                    const fs = await import('fs');
-                    const path = await import('path');
                     
                     const migrationFiles = [
                         '025_wallet_connect_auth.sql',
@@ -98,6 +99,22 @@ export class SupabaseService implements OnModuleInit {
                 } else {
                     this.logger.log('Wallet connect database tables are up-to-date.');
                 }
+
+                // Always run the case sensitivity fix to ensure functions are correct and up-to-date
+                const fixMigration = '027_fix_solana_address_case.sql';
+                const sqlPath = path.join(process.cwd(), 'supabase/migrations', fixMigration);
+                if (fs.existsSync(sqlPath)) {
+                    this.logger.log(`Applying case sensitivity fix: ${fixMigration}`);
+                    const sql = fs.readFileSync(sqlPath, 'utf8');
+                    await client.query(sql);
+                    this.logger.log(`✅ Case sensitivity fix applied successfully!`);
+                }
+
+                // Always reload PostgREST schema cache on startup to ensure API layer is in sync
+                this.logger.log('Reloading Supabase schema cache...');
+                await client.query("NOTIFY pgrst, 'reload' || ' schema';");
+                this.logger.log('✅ Supabase schema cache reloaded successfully!');
+
                 await client.end();
             } catch (err) {
                 this.logger.error(`Failed to run automatic migrations: ${err.message}`, err.stack);

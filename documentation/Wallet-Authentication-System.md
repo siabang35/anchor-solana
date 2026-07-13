@@ -8,10 +8,11 @@
 
 ## 1. Overview
 
-The ExoDuZe Wallet Authentication System provides a secure, non-custodial login mechanism supporting multiple blockchain ecosystems (EVM, Solana, SUI). It acts as a unified identity layer allowing users to authenticate via cryptographic signatures without relying on passwords or traditional OAuth providers.
+The ExoDuZe Wallet Authentication System provides a secure, non-custodial login mechanism supporting multiple blockchain ecosystems (EVM, Solana, SUI). It serves as the primary and exclusive on-chain identity layer, replacing traditional password-based and email/Google OAuth flows to focus entirely on Web3 wallet connection.
 
 ### Key Capabilities
 - **Multi-Chain Support**: Ethereum (and L2s), Solana, and SUI.
+- **Full On-Chain Authentication**: Login is performed exclusively via Web3 wallet signatures.
 - **Mobile-First**: Deep linking via **Reown AppKit (WalletConnect v5)**.
 - **Security**: Challenge-Response (SIWE), Replay Protection (Nonces), and Domain Binding.
 - **Unified Identity**: Link multiple wallets (desktop & mobile) to a single user profile.
@@ -89,18 +90,18 @@ We utilize a **Strategy Pattern** to normalize interactions across disparate blo
 ### 3.2 Mobile Deep Linking & Adapter Strategy
 To ensure a seamless experience on mobile browsers (like Chrome or Safari) without forcing users into in-app dapp browsers, we explicitly instantiate targeted wallet adapters.
 
-#### **Desktop Integration**
+#### **Desktop & Extension Integration (Wallet Standard)**
 - **Primary Method**: Standard Wallet Standard detection (`@solana/wallet-adapter-react`) for installed extensions (Phantom, Solflare, etc.).
-- **UX Logic**: 
-  - Automatically detects browser extensions.
-  - Users can connect and sign seamlessly via extension popups.
+- **UX Logic & Memory Leak Fix**: 
+  - To prevent duplicate wallet adapter registration (which triggers console warnings and `MaxListenersExceededWarning` memory leaks), we **do not manually instantiate** `PhantomWalletAdapter` or `SolflareWalletAdapter` in the React frontend.
+  - Instead, the library automatically discovers and registers them via the Standard Wallet protocol.
+  - Users can connect and sign seamlessly via standard wallet popups.
 
 #### **Mobile Integration & EVM-Style SIWE Auto-Trigger**
 - **Architecture**: **Mobile Wallet Adapter (MWA) Protocol & Deep Linking**.
 - **Implementation**: 
   - We strictly adhere to Solana's best practices by implementing `SolanaMobileWalletAdapter` from `@solana-mobile/wallet-adapter-mobile`.
   - **MWA Protocol**: This ensures native OS-level intents (e.g., Android's bottom sheet) are correctly triggered, passing complete application identity payloads (`appIdentity`) so the wallet immediately prompts the user with "Sign and Accept" rather than just opening blindly.
-  - **Universal Fallbacks**: For iOS or scenarios where MWA is unavailable, explicit `PhantomWalletAdapter` and `SolflareWalletAdapter` instances ensure traditional Universal Links (`phantom://` or `solflare://`) function correctly.
   - **EVM-Style Auto-Trigger (`WalletAuthHandler`)**: A dedicated React component wrapper explicitly listens to the `useWallet()` connection state. The millisecond a mobile wallet connects, it fetches a challenge and triggers `signMessage()`. This perfectly mimics EVM WalletConnect behavior, ensuring the user immediately signs the SIWE message inside the wallet app before returning to Chrome.
   - **Auto-Disconnect**: If the user declines the signature, the wallet is aggressively disconnected to maintain strict security boundaries.
 
@@ -193,15 +194,21 @@ Audits every authentication attempt (success or failure) with a risk score based
 5. **JWT Expiration Alignment**:
    To minimize signature fatigue on both mobile and desktop while maintaining security, the access token lifespan (`JWT_EXPIRES_IN`) has been extended to 7 days, aligning with modern Web3 standards where wallet connection serves as the primary authentication check.
 
-6. **Automatic Startup Migration Runner (Render/Production Deployment)**:
-   * To prevent manual SQL editing on Supabase when new database tables (like `wallet_auth_nonces` and `connected_wallets`) are introduced, the backend incorporates an **automatic database migration runner** in `SupabaseService.onModuleInit()`.
-   * On startup, the backend connects to the PostgreSQL database, checks if the required wallet authentication schema exists, and automatically executes `025_wallet_connect_auth.sql` and `026_quick_wallet_setup.sql` if it is missing.
+6. **Automatic Startup Migration Runner & Schema Cache Reload**:
+   * To prevent manual SQL editing on Supabase when new database tables are introduced, the backend incorporates an **automatic database migration runner** in `SupabaseService.onModuleInit()`.
+   * On startup, the backend connects to the PostgreSQL database, checks if the required wallet authentication schema exists, and automatically executes migrations (including `025_wallet_connect_auth.sql`, `026_quick_wallet_setup.sql`, and `027_fix_solana_address_case.sql`).
+   * **Schema Cache Sync**: PostgREST (the API layer of Supabase) schema cache is automatically reloaded by executing `NOTIFY pgrst, 'reload schema';` after migrations are applied or checked on startup. This prevents `PGRST205` "Could not find table in the schema cache" errors on the client.
    * This is fully compatible with IPv6 and IPv4 networks (e.g. Render outbound networks).
 
 7. **Strict CORS Configurations**:
    * To secure the wallet authentication and API endpoints, CORS is restricted to trusted origins.
    * Production origins configured: `https://www.exoduze.com` and `https://exoduze.com` (alongside localhost and Vercel preview environments).
    * In Render, set the `CORS_ORIGINS` environment variable to explicitly include your frontend domains.
+
+8. **Address Normalization & Case-Sensitivity (Solana Compatibility)**:
+   * **Case-Sensitive Chains (Solana)**: Wallet addresses for Solana are case-sensitive. Lowercasing them breaks the cryptographic signature verification (which decodes Base58 bytes).
+   * **Implementation**: The backend uses the `normalizeAddress` helper to normalize addresses based on the chain. EVM addresses are converted to lowercase, whereas Solana addresses preserve their exact case sensitivity.
+   * **Database Support**: Database functions (like `find_or_create_wallet_user`, `link_wallet_to_user`, and `log_wallet_auth_attempt`) preserve Solana address casing while using `LOWER()` for search matching and indexing.
 
 
 ---

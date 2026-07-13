@@ -10,7 +10,7 @@ import {
     createDefaultAddressSelector, 
     createDefaultWalletNotFoundHandler 
 } from '@solana-mobile/wallet-adapter-mobile';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
+
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -176,10 +176,7 @@ export default function WalletProvider({ children }: { children: React.ReactNode
         // If inside a mobile wallet in-app browser (Phantom / Solflare),
         // we omit SolanaMobileWalletAdapter to avoid socket connection failures.
         if (isInApp) {
-            return [
-                new PhantomWalletAdapter(),
-                new SolflareWalletAdapter(),
-            ];
+            return [];
         }
 
         return [
@@ -194,8 +191,6 @@ export default function WalletProvider({ children }: { children: React.ReactNode
                 cluster: 'devnet',
                 onWalletNotFound: createDefaultWalletNotFoundHandler(),
             }),
-            new PhantomWalletAdapter(),
-            new SolflareWalletAdapter(),
         ];
     }, [mounted, isInApp]);
 
