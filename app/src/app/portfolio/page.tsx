@@ -84,7 +84,7 @@ function DashboardView() {
 
     const [balance, setBalance] = useState<number | null>(null);
     const [solPrice, setSolPrice] = useState<number | null>(null);
-    const [lastFetchedAt, setLastFetchedAt] = useState(0);
+    const lastFetchedAt = useRef(0);
     const fetchInFlight = useRef(false);
     const abortRef = useRef<AbortController | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -158,7 +158,7 @@ function DashboardView() {
 
     const fetchBalance = useCallback(async (force = false) => {
         if (!connected || !isValidPublicKey(publicKey)) { setBalance(null); return; }
-        if (!force && Date.now() - lastFetchedAt < MIN_FETCH_INTERVAL_MS) return;
+        if (!force && Date.now() - lastFetchedAt.current < MIN_FETCH_INTERVAL_MS) return;
         if (fetchInFlight.current) return;
         fetchInFlight.current = true;
         if (abortRef.current) abortRef.current.abort();
@@ -169,10 +169,10 @@ function DashboardView() {
                 new Promise<never>((_, rej) => setTimeout(() => rej(new Error('RPC_TIMEOUT')), FETCH_TIMEOUT_MS)),
             ]);
             const safe = sanitiseLamports(raw);
-            if (safe !== null) { setBalance(safe); setLastFetchedAt(Date.now()); }
+            if (safe !== null) { setBalance(safe); lastFetchedAt.current = Date.now(); }
         } catch (e) { console.error('[Portfolio]', e); }
         finally { fetchInFlight.current = false; }
-    }, [connected, publicKey, connection, lastFetchedAt]);
+    }, [connected, publicKey, connection]);
 
     useEffect(() => {
         if (connected && isValidPublicKey(publicKey)) fetchBalance(true);
