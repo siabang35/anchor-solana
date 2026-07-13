@@ -80,6 +80,10 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
             // Only trigger if connected, have public key, and signMessage is available
             if (!connected || !publicKey || !signMessage) return;
 
+            // Wait 500ms to let wallet adapter state settle and avoid race conditions (e.g. Invalid account)
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (!publicKey) return;
+
             // Synchronous check of localStorage to prevent race conditions on page load/refresh
             const token = localStorage.getItem('access_token');
             const storedAddress = localStorage.getItem('wallet_address');
@@ -138,12 +142,19 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
                     }
                     setIsAuthenticated(true);
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error('Wallet SIWE authentication failed:', err);
                 
-                // Set the declined flag in sessionStorage to prevent loop prompts
-                if (typeof window !== 'undefined') {
+                const errMessage = err?.message || '';
+                const isUserCancellation = /cancel|reject|decline|user/i.test(errMessage) || 
+                    (err?.name === 'WalletSignMessageError' && errMessage.includes('Cancelled'));
+
+                // Only set the declined flag in sessionStorage if the user explicitly cancelled/rejected
+                if (isUserCancellation && typeof window !== 'undefined') {
+                    console.debug('[WalletAuth] User explicitly cancelled signature, setting siwe_declined flag');
                     sessionStorage.setItem('siwe_declined', 'true');
+                } else {
+                    console.debug('[WalletAuth] Authentication failed due to connection/system error, NOT setting siwe_declined flag');
                 }
             } finally {
                 isSigningRef.current = false;
@@ -207,9 +218,11 @@ export default function WalletProvider({ children }: { children: React.ReactNode
     const wallets = useMemo(() => {
         if (!mounted || typeof window === 'undefined') return [];
 
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
         // If inside a mobile wallet in-app browser (Phantom / Solflare),
-        // we omit SolanaMobileWalletAdapter to avoid socket connection failures.
-        if (isInApp) {
+        // or if we are on a desktop browser, we omit SolanaMobileWalletAdapter.
+        if (isInApp || !isMobile) {
             return [];
         }
 
