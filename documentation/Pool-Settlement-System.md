@@ -468,4 +468,16 @@ To minimize the exposure of funds in the Hot Wallet, an automated sweep check ru
 2. **Threshold Trigger**: If the balance exceeds `20 SOL`, calculate the excess above a `5 SOL` reserve.
 3. **Sweep Transaction**: Construct and execute an on-chain Solana transfer sending the excess directly to the secure cold wallet or multi-sig address configured in `SOLANA_COLD_WALLET_PUBKEY`.
 
+## Schema Alignment & Fixes (v2.6)
+
+### `pool_winners` Column Synchronization
+To resolve API errors (e.g., Postgres code `42703` column does not exist) during forecasters list queries, the remote database table `public.pool_winners` was patched to ensure alignment with the latest migration specs. The following columns were verified and created:
+- `claimed_at` (TIMESTAMPTZ)
+- `claim_tx` (VARCHAR(128))
+- `disburse_tx` (VARCHAR(128))
+- `winner_wallet` (VARCHAR(64))
+- `settlement_snapshot` (JSONB)
+
+This ensures relational queries from the backend (`AgentsService.listForecasters` joining `pool_winners`) execute successfully and populate the "My Agent" section in the frontend.
+
 

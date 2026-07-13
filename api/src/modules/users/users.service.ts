@@ -100,7 +100,15 @@ export class UsersService {
             return null;
         }
 
-        return data as Profile;
+        const profile = data as Profile;
+        const wallets = await this.getWalletAddresses(id);
+        profile.wallet_addresses = wallets.map((w) => ({
+            address: w.address,
+            chain: w.chain,
+            isPrimary: w.is_primary,
+        }));
+
+        return profile;
     }
 
     /**
@@ -120,7 +128,15 @@ export class UsersService {
             return null;
         }
 
-        return data as Profile;
+        const profile = data as Profile;
+        const wallets = await this.getWalletAddresses(profile.id);
+        profile.wallet_addresses = wallets.map((w) => ({
+            address: w.address,
+            chain: w.chain,
+            isPrimary: w.is_primary,
+        }));
+
+        return profile;
     }
 
     /**
@@ -128,31 +144,20 @@ export class UsersService {
      */
     async findByWalletAddress(address: string, chain: string): Promise<Profile | null> {
         const supabase = this.supabaseService.getAdminClient();
+        const normalizedAddress = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].includes(chain?.toLowerCase())
+            ? address.toLowerCase()
+            : address;
 
         // First check wallet_addresses table
         const { data: walletData, error: walletError } = await supabase
             .from('wallet_addresses')
             .select('user_id')
-            .eq('address', address.toLowerCase())
+            .eq('address', normalizedAddress)
             .eq('chain', chain)
             .single();
 
         if (walletError || !walletData) {
-            // Try profiles table JSONB field as fallback
-            const { data: profiles, error: profileError } = await supabase
-                .from('profiles')
-                .select('*');
-
-            if (profileError || !profiles) return null;
-
-            // Search in wallet_addresses JSONB array
-            const found = (profiles as Profile[]).find((p) =>
-                p.wallet_addresses?.some(
-                    (w) => w.address.toLowerCase() === address.toLowerCase() && w.chain === chain
-                )
-            );
-
-            return found || null;
+            return null;
         }
 
         return this.findById((walletData as { user_id: string }).user_id);
@@ -172,7 +177,6 @@ export class UsersService {
                 avatar_url: profile.avatar_url,
                 bio: profile.bio,
                 preferences: profile.preferences || {},
-                wallet_addresses: profile.wallet_addresses || [],
             })
             .select()
             .single();
@@ -182,8 +186,19 @@ export class UsersService {
             throw new Error(`Failed to create profile: ${error.message}`);
         }
 
+        const createdProfile = data as Profile;
+        
+        if (profile.wallet_addresses && profile.wallet_addresses.length > 0) {
+            for (const w of profile.wallet_addresses) {
+                await this.addWalletAddress(profile.id, w.address, w.chain as any, w.isPrimary);
+            }
+            createdProfile.wallet_addresses = profile.wallet_addresses;
+        } else {
+            createdProfile.wallet_addresses = [];
+        }
+
         this.logger.log(`Profile created: ${profile.id}`);
-        return data as Profile;
+        return createdProfile;
     }
 
     /**
@@ -194,11 +209,12 @@ export class UsersService {
         this.logger.log(`Updating profile ${id} with data: ${JSON.stringify(update)}`);
 
         const supabase = this.supabaseService.getAdminClient();
+        const { wallet_addresses, ...profileUpdate } = update;
 
-        // First attempt with all fields
+        // First attempt with profiles table fields
         let { data, error } = await supabase
             .from('profiles')
-            .update({ ...update, updated_at: new Date().toISOString() })
+            .update({ ...profileUpdate, updated_at: new Date().toISOString() })
             .eq('id', id)
             .select()
             .single();
@@ -206,7 +222,7 @@ export class UsersService {
         // If error mentions email_verified column, retry without it
         if (error && (error.message?.includes('email_verified') || error.code === '42703')) {
             this.logger.warn(`email_verified column not found, retrying without it`);
-            const { email_verified, ...updateWithoutEmailVerified } = update;
+            const { email_verified, ...updateWithoutEmailVerified } = profileUpdate;
 
             // Store email_verified status in preferences as fallback
             if (email_verified !== undefined) {
@@ -233,8 +249,16 @@ export class UsersService {
             throw new NotFoundException('Profile not found');
         }
 
+        const updatedProfile = data as Profile;
+        const wallets = await this.getWalletAddresses(id);
+        updatedProfile.wallet_addresses = wallets.map((w) => ({
+            address: w.address,
+            chain: w.chain,
+            isPrimary: w.is_primary,
+        }));
+
         this.logger.log(`Profile ${id} updated successfully: ${JSON.stringify(data)}`);
-        return data as Profile;
+        return updatedProfile;
     }
 
     /**
@@ -265,9 +289,13 @@ export class UsersService {
         }
 
         // Insert new wallet
+        const normalizedAddress = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].includes(chain?.toLowerCase())
+            ? address.toLowerCase()
+            : address;
+
         const { error } = await supabase.from('wallet_addresses').insert({
             user_id: userId,
-            address: address.toLowerCase(),
+            address: normalizedAddress,
             chain,
             is_primary: shouldBePrimary,
         });
@@ -278,20 +306,6 @@ export class UsersService {
                 this.logger.error(`Failed to add wallet: ${error.message}`);
             }
         }
-
-        // Also update JSONB in profiles for quick lookups
-        const profile = await this.findById(userId);
-        if (profile) {
-            const wallets = profile.wallet_addresses || [];
-            const exists = wallets.some(
-                (w) => w.address.toLowerCase() === address.toLowerCase() && w.chain === chain
-            );
-
-            if (!exists) {
-                wallets.push({ address: address.toLowerCase(), chain, isPrimary: shouldBePrimary });
-                await this.updateProfile(userId, { wallet_addresses: wallets });
-            }
-        }
     }
 
     /**
@@ -299,22 +313,16 @@ export class UsersService {
      */
     async removeWalletAddress(userId: string, address: string, chain: string): Promise<void> {
         const supabase = this.supabaseService.getAdminClient();
+        const normalizedAddress = ['ethereum', 'base', 'polygon', 'arbitrum', 'optimism'].includes(chain?.toLowerCase())
+            ? address.toLowerCase()
+            : address;
 
         await supabase
             .from('wallet_addresses')
             .delete()
             .eq('user_id', userId)
-            .eq('address', address.toLowerCase())
+            .eq('address', normalizedAddress)
             .eq('chain', chain);
-
-        // Update profiles JSONB
-        const profile = await this.findById(userId);
-        if (profile) {
-            const wallets = profile.wallet_addresses?.filter(
-                (w) => !(w.address.toLowerCase() === address.toLowerCase() && w.chain === chain)
-            );
-            await this.updateProfile(userId, { wallet_addresses: wallets });
-        }
     }
 
     /**

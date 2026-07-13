@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Search } from 'lucide-react';
 
-const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
+
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
 const SectorNav = dynamic(() => import('@/components/SectorNav'), { ssr: false });
 const SectorFeed = dynamic(() => import('@/components/SectorFeed'), { ssr: false });
@@ -235,9 +235,5 @@ function SignalsInner() {
 }
 
 export default function SignalsPage() {
-  return (
-    <WalletProvider>
-      <SignalsInner />
-    </WalletProvider>
-  );
+  return <SignalsInner />;
 }

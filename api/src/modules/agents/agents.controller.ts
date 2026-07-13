@@ -62,6 +62,7 @@ export class AgentsController {
         @Query('offset') offset?: string,
     ) {
         const userId = req.user?.id || req.headers['x-user-id'];
+        console.log(`🔍 [listForecasters] req.user=${JSON.stringify(req.user)}, x-user-id header=${req.headers['x-user-id']}, resolved userId=${userId}`);
         return this.agentsService.listForecasters(
             userId,
             status,

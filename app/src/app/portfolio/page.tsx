@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/supabase';
 import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { Assets3DIcon, Agents3DIcon } from '@/components/Agents3DIcon';
 
-const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
+
 const SolanaChart = dynamic(() => import('@/components/SolanaChart'), { ssr: false });
 const MobileBottomNav = dynamic(() => import('@/components/MobileBottomNav'), { ssr: false });
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
@@ -1071,15 +1071,13 @@ function PortfolioContent() {
 
 export default function PortfolioPage() {
     return (
-        <WalletProvider>
-            <React.Suspense fallback={
-                <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="circular-spinner" />
-                    <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>Loading...</div>
-                </div>
-            }>
-                <PortfolioContent />
-            </React.Suspense>
-        </WalletProvider>
+        <React.Suspense fallback={
+            <div style={{ minHeight: '100vh', background: 'var(--bg-app)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="circular-spinner" />
+                <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500 }}>Loading...</div>
+            </div>
+        }>
+            <PortfolioContent />
+        </React.Suspense>
     );
 }

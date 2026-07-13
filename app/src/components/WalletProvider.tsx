@@ -18,6 +18,25 @@ import bs58 from 'bs58';
 import { apiFetch } from '@/lib/supabase';
 import { useWallet } from '@solana/wallet-adapter-react';
 
+function isTokenExpired(token: string | null): boolean {
+    if (!token) return true;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return true;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const padLength = (4 - (base64.length % 4)) % 4;
+        const paddedBase64 = base64 + '='.repeat(padLength);
+        const payload = JSON.parse(atob(paddedBase64));
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+            return true;
+        }
+        return false;
+    } catch {
+        return true;
+    }
+}
+
 function WalletAuthHandler({ children }: { children: React.ReactNode }) {
     const { publicKey, signMessage, connected } = useWallet();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -27,10 +46,21 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
         if (connected && publicKey) {
             const token = localStorage.getItem('access_token');
             const storedAddress = localStorage.getItem('wallet_address');
-            if (token && storedAddress === publicKey.toBase58()) {
+            const isMatch = storedAddress && storedAddress.toLowerCase() === publicKey.toBase58().toLowerCase();
+            
+            console.debug('[WalletAuth] Check:', { 
+                hasToken: !!token, 
+                storedAddress, 
+                currentAddress: publicKey.toBase58(), 
+                isMatch, 
+                isExpired: isTokenExpired(token) 
+            });
+
+            if (token && isMatch && !isTokenExpired(token)) {
                 setIsAuthenticated(true);
             } else {
                 if (token || storedAddress) {
+                    console.debug('[WalletAuth] Clearing token/address due to mismatch or expiration');
                     localStorage.removeItem('access_token');
                     localStorage.removeItem('wallet_address');
                 }
@@ -53,7 +83,9 @@ function WalletAuthHandler({ children }: { children: React.ReactNode }) {
             // Synchronous check of localStorage to prevent race conditions on page load/refresh
             const token = localStorage.getItem('access_token');
             const storedAddress = localStorage.getItem('wallet_address');
-            if (token && storedAddress === publicKey.toBase58()) {
+            const isMatch = storedAddress && storedAddress.toLowerCase() === publicKey.toBase58().toLowerCase();
+
+            if (token && isMatch && !isTokenExpired(token)) {
                 setIsAuthenticated(true);
                 return;
             }

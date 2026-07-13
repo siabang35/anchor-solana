@@ -9,7 +9,7 @@ import { useRealtimeAgents } from '@/hooks/useRealtimeAgents';
 import { useAgentPredictions } from '@/hooks/useAgentPredictions';
 import { apiFetch } from '@/lib/supabase';
 
-const WalletProvider = dynamic(() => import('@/components/WalletProvider'), { ssr: false });
+
 const Header = dynamic(() => import('@/components/Header'), { ssr: false });
 const SectorNav = dynamic(() => import('@/components/SectorNav'), { ssr: false });
 const SectorFeed = dynamic(() => import('@/components/SectorFeed'), { ssr: false });
@@ -209,9 +209,6 @@ function HomeInner() {
 }
 
 export default function Home() {
-    return (
-        <WalletProvider>
-            <HomeInner />
-        </WalletProvider>
-    );
+    return <HomeInner />;
 }
+

@@ -38,7 +38,12 @@ export default function AgentPosition() {
             // Validate JWT is not expired before making the request
             // This prevents the browser from logging 401 network errors
             try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const padLength = (4 - (base64.length % 4)) % 4;
+                const paddedBase64 = base64 + '='.repeat(padLength);
+                const payload = JSON.parse(atob(paddedBase64));
+                
                 if (payload.exp && payload.exp * 1000 < Date.now()) {
                     // Token expired — remove it and skip the request
                     localStorage.removeItem('access_token');
@@ -46,12 +51,9 @@ export default function AgentPosition() {
                     setLoading(false);
                     return;
                 }
-            } catch {
-                // Malformed token — remove it and skip
-                localStorage.removeItem('access_token');
-                setPositions([]);
-                setLoading(false);
-                return;
+            } catch (err) {
+                console.warn('Failed to parse JWT payload:', err);
+                // Do not delete token on parsing error to avoid logout loop from encoding anomalies
             }
 
             try {

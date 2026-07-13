@@ -93,19 +93,21 @@ export class AgentsService {
     }
 
     private async resolveUserId(identifier: string): Promise<string | null> {
-        if (!identifier) return null;
+        this.logger.debug(`🔍 resolveUserId called with: "${identifier}" (type: ${typeof identifier}, length: ${identifier?.length})`);
+        if (!identifier) { this.logger.warn('resolveUserId: identifier is falsy'); return null; }
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
-        if (isUuid) return identifier;
+        if (isUuid) { this.logger.debug(`resolveUserId: identifier is UUID, returning directly`); return identifier; }
 
         const supabase = this.supabaseService.getAdminClient();
         
         // 1. Case-insensitive search on wallet_addresses table using ilike
-        const { data: wData } = await supabase
+        const { data: wData, error: wError } = await supabase
             .from('wallet_addresses')
             .select('user_id')
             .ilike('address', identifier)
             .maybeSingle();
 
+        this.logger.debug(`resolveUserId: wallet_addresses ilike result: data=${JSON.stringify(wData)}, error=${wError?.message || 'none'}`);
         if (wData?.user_id) return wData.user_id;
 
         // 2. Fallback check: Search by email if it looks like one, or directly on profiles table privy fields

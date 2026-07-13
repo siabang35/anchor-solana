@@ -210,6 +210,11 @@ Audits every authentication attempt (success or failure) with a risk score based
    * **Implementation**: The backend uses the `normalizeAddress` helper to normalize addresses based on the chain. EVM addresses are converted to lowercase, whereas Solana addresses preserve their exact case sensitivity.
    * **Database Support**: Database functions (like `find_or_create_wallet_user`, `link_wallet_to_user`, and `log_wallet_auth_attempt`) preserve Solana address casing while using `LOWER()` for search matching and indexing.
 
+9. **Refresh SIWE Signature Mismatch Prevention (Case-Insensitive Frontend Check)**:
+   * To prevent redundant signature prompts when refreshing the page, the frontend `WalletProvider.tsx` performs a case-insensitive check (`toLowerCase()`) when comparing the connected wallet address against the `wallet_address` stored in `localStorage`.
+   * This prevents casing mismatches (where legacy lowercased wallet addresses in storage mismatched with case-preserved Base58 Solana public keys) from clearing the token and forcing a re-signature loop on page refresh.
+   * Debug console logging (`[WalletAuth] Check`) is implemented to provide transparency on token status, matches, and expiration.
+
 
 ---
 

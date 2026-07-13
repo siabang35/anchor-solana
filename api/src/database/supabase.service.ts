@@ -63,7 +63,7 @@ export class SupabaseService implements OnModuleInit {
                     }
                 });
                 await client.connect();
-                
+
                 // Check if wallet_auth_nonces exists
                 const tableCheck = await client.query(`
                     SELECT EXISTS (
@@ -72,14 +72,14 @@ export class SupabaseService implements OnModuleInit {
                         AND table_name = 'wallet_auth_nonces'
                     );
                 `);
-                
+
                 const tableExists = tableCheck.rows[0]?.exists;
                 const fs = await import('fs');
                 const path = await import('path');
 
                 if (!tableExists) {
                     this.logger.log('Table wallet_auth_nonces not found. Running wallet connect migrations...');
-                    
+
                     const migrationFiles = [
                         '025_wallet_connect_auth.sql',
                         '026_quick_wallet_setup.sql'
