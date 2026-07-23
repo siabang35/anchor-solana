@@ -280,10 +280,17 @@ High-performance TradingView integration:
 - Real-time price streaming via Binance WebSocket API for live market data.
 - Fully responsive and theme-aware (Dark mode integration).
 
+#### Header (~28KB)
+Main application navigation header optimized for desktop and mobile:
+- **Logo & Solana Badge**: Displays the enlarged ExoDuZe logo icon (`58px` desktop / `50px` mobile) side-by-side with the `Powered by Solana` badge (`gap: 0.12rem`).
+- **Real-Time Clock**: Live clock `⏱ {time}` positioned in a sub-row directly underneath the logo link.
+- **Mobile Menu Drawer**: Theme toggle button (`Dark/Light`) integrated into the slide-out navigation drawer.
+- **Header Right**: Clean layout containing `<WalletMultiButton />` and the hamburger drawer toggle.
+
 #### MobileBottomNav (~8KB)
-Global bottom navigation specifically for mobile users:
-- Quick access to Home, Search, For You, and Portfolio.
-- Animated active states and icons.
+Global bottom navigation specifically for mobile viewports:
+- Quick access to Home, Search, **For You** (utilizing the professional **`SlidersHorizontal`** icon `🎛️`), and Portfolio.
+- Animated active states, glassmorphism backdrop, and tactile touch targets.
 
 ---
 

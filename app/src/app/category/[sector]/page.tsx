@@ -25,7 +25,6 @@ const SentimentAnalysis = dynamic(() => import('@/components/SentimentAnalysis')
 const ValueCreationPool = dynamic(() => import('@/components/ValueCreationPool'), { ssr: false });
 const Leaderboard = dynamic(() => import('@/components/Leaderboard'), { ssr: false });
 const CategoryPoolWinners = dynamic(() => import('@/components/CategoryPoolWinners'), { ssr: false });
-const WorldCupBracket = dynamic(() => import('@/components/WorldCupBracket'), { ssr: false });
 
 // ── Allowed sectors (anti-injection allowlist) ──────────────────
 const VALID_SECTORS = ['politics', 'finance', 'tech', 'crypto', 'sports', 'economy', 'science'] as const;
@@ -317,7 +316,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
             />
             <main className="main-container">
                 {/* SectorNav — Polymarket-style pill navigation for category switching */}
-                <SectorNav activeSector={sector} onSectorChange={() => {}} />
+                <SectorNav activeSector={sector} onSectorChange={() => { }} />
 
                 {/* Sector Title — compact */}
                 <div className="glass-card" style={{
@@ -350,33 +349,7 @@ function CategoryPageInner({ sector, meta }: { sector: string, meta: any }) {
                     </div>
                 </div>
 
-                {/* FIFA World Cup 2026 Bracket */}
-                {sector === 'sports' && (
-                    <WorldCupBracket
-                        sf1={sf1}
-                        sf2={sf2}
-                        final={final}
-                        activeCompId={activeComp?.id}
-                        onSelectComp={(id) => {
-                            setSelectedCompId(id);
-                            const isMobile = window.matchMedia('(max-width: 900px)').matches;
-                            if (isMobile) {
-                                // Open the mobile deploy drawer after a short tick
-                                setTimeout(() => window.dispatchEvent(new Event('open-deploy-drawer')), 150);
-                            } else {
-                                setTimeout(() => {
-                                    const target = document.querySelector('.deploy-desktop-column');
-                                    if (target) {
-                                        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        const deployBox = target.querySelector('.glass-card') || target;
-                                        deployBox.classList.add('pulse-highlight');
-                                        setTimeout(() => deployBox.classList.remove('pulse-highlight'), 2500);
-                                    }
-                                }, 100);
-                            }
-                        }}
-                    />
-                )}
+
 
                 {/* Probability Curve for Selected Competition */}
                 <ProbabilityCurve

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useCompetitionPool, PoolStake } from '@/hooks/usePool';
 import { apiFetch } from '@/lib/supabase';
@@ -42,7 +42,29 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
     const { publicKey } = useWallet();
     const { pool, winners, stakes, loading, refetch } = useCompetitionPool(competitionId);
     const sectorColor = SECTOR_COLORS[sector] || '#818cf8';
+    const [claimableIds, setClaimableIds] = useState<string[]>([]);
     const [claimingId, setClaimingId] = useState<string | null>(null);
+
+    // Fetch claim eligibility from backend API when wallet or competition changes
+    useEffect(() => {
+        if (!publicKey || !competitionId) {
+            setClaimableIds([]);
+            return;
+        }
+
+        let isMounted = true;
+        apiFetch<{ claimable: string[] }>(`/pool/claim-eligibility?competition_id=${competitionId}&wallet=${publicKey.toString()}`)
+            .then(res => {
+                if (isMounted && res?.claimable) {
+                    setClaimableIds(res.claimable);
+                }
+            })
+            .catch(err => {
+                console.warn('Failed to check claim eligibility:', err);
+            });
+
+        return () => { isMounted = false; };
+    }, [publicKey, competitionId, winners]);
 
     const handleClaim = async (winnerId: string) => {
         if (!publicKey) {
@@ -343,12 +365,11 @@ export default function CompetitionPoolWinners({ competitionId, sector }: Props)
                                                                     TX: {shortTx(winner.disburse_tx)} ↗
                                                                 </button>
                                                             </>
-                                                        ) : publicKey && (
-                                                            winner.user_id === publicKey.toString() ||
+                                                        ) : publicKey && !winner.claimed && winner.id && (
+                                                            claimableIds.includes(winner.id) ||
                                                             winner.winner_wallet === publicKey.toString() ||
-                                                            // Also check if user_id is the wallet address (ExoDuZe wallet-auth pattern)
-                                                            (winner.user_id && winner.user_id.length >= 32 && winner.user_id.length <= 44 && !winner.user_id.includes('-'))
-                                                        ) && !winner.claimed && winner.id ? (
+                                                            winner.user_id === publicKey.toString()
+                                                        ) ? (
                                                             <>
                                                                 <span>·</span>
                                                                 <button

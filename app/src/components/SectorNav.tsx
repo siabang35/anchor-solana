@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useCompetitions, SectorSummary } from '@/hooks/useCompetitions';
-import { TrendingUp, Sparkles, Radio, Zap, Landmark, BarChart3, Monitor, Bitcoin, Trophy, Globe2, FlaskConical } from 'lucide-react';
+import { TrendingUp, SlidersHorizontal, Radio, Zap, Landmark, BarChart3, Monitor, Bitcoin, Trophy, Globe2, FlaskConical } from 'lucide-react';
 
 export interface Sector {
     id: string;
@@ -14,7 +14,7 @@ export interface Sector {
 
 export const SECTORS: Sector[] = [
     { id: 'top', label: 'Top Markets', icon: <TrendingUp size={16} strokeWidth={2.2} />, emoji: '🔥' },
-    { id: 'foryou', label: 'For You', icon: <Sparkles size={16} strokeWidth={2.2} />, emoji: '✨' },
+    { id: 'foryou', label: 'For You', icon: <SlidersHorizontal size={16} strokeWidth={2.2} />, emoji: '🎛️' },
     { id: 'signals', label: 'Signals', icon: <Radio size={16} strokeWidth={2.2} />, emoji: '📡' },
     { id: 'latest', label: 'Latest', icon: <Zap size={16} strokeWidth={2.2} />, emoji: '⚡' },
     { id: 'politics', label: 'Politics', icon: <Landmark size={16} strokeWidth={2.2} />, emoji: '🏛️' },

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { House, Search, Sparkles, Wallet } from 'lucide-react';
+import { House, Search, SlidersHorizontal, Wallet } from 'lucide-react';
 
 interface Props {
     onOpenMenu?: () => void;
@@ -15,7 +15,7 @@ export default function MobileBottomNav({ onOpenMenu }: Props) {
     const navItems = [
         { href: '/', label: 'Home', icon: House, isButton: false },
         { href: '/signals', label: 'Search', icon: Search, isButton: false },
-        { href: '/for-you', label: 'For You', icon: Sparkles, isButton: false },
+        { href: '/for-you', label: 'For You', icon: SlidersHorizontal, isButton: false },
         { href: '/portfolio', label: 'Portfolio', icon: Wallet, isButton: false },
     ];
 

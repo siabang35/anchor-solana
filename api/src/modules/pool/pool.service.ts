@@ -39,17 +39,23 @@ export class PoolService {
 
         const result = data || { pool: {}, winners: [], stakes: [] };
 
-        // Ensure winners have their 'id' field for claim functionality
+        // Ensure winners have their 'id' field + wallet info for claim functionality
         if (result.winners && result.winners.length > 0) {
             const { data: winnerIds } = await supabase
                 .from('pool_winners')
-                .select('id, agent_id')
+                .select('id, agent_id, user_id, winner_wallet, claimed')
                 .eq('competition_id', competitionId);
             
             if (winnerIds) {
                 result.winners = result.winners.map((w: any) => {
                     const match = winnerIds.find(wid => wid.agent_id === w.agent_id);
-                    return { ...w, id: match?.id };
+                    return {
+                        ...w,
+                        id: match?.id,
+                        user_id: w.user_id || match?.user_id,
+                        winner_wallet: w.winner_wallet || match?.winner_wallet,
+                        claimed: w.claimed ?? match?.claimed ?? false,
+                    };
                 });
             }
         }
@@ -323,6 +329,53 @@ export class PoolService {
         return settlementResult;
     }
 
+    /**
+     * Check which winners the requesting wallet can claim for a given competition.
+     * Used by the frontend to show/hide the claim button accurately.
+     */
+    async checkClaimEligibility(competitionId: string, walletAddress: string): Promise<string[]> {
+        const supabase = this.supabaseService.getAdminClient();
+
+        // Get all unclaimed winners for this competition
+        const { data: winners, error } = await supabase
+            .from('pool_winners')
+            .select('id, user_id, winner_wallet, agent_id, claimed')
+            .eq('competition_id', competitionId)
+            .eq('claimed', false);
+
+        if (error || !winners || winners.length === 0) {
+            return [];
+        }
+
+        const claimableIds: string[] = [];
+
+        for (const winner of winners) {
+            // Fast path: winner_wallet matches directly
+            if (winner.winner_wallet && winner.winner_wallet === walletAddress) {
+                claimableIds.push(winner.id);
+                continue;
+            }
+
+            // Fast path: user_id IS the wallet
+            if (winner.user_id === walletAddress) {
+                claimableIds.push(winner.id);
+                continue;
+            }
+
+            // Verify through agents + stakes (same logic as verifyWalletOwnership but lighter)
+            try {
+                const isOwner = await this.verifyWalletOwnership(winner.user_id, walletAddress);
+                if (isOwner) {
+                    claimableIds.push(winner.id);
+                }
+            } catch {
+                // Skip on error
+            }
+        }
+
+        return claimableIds;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // CLAIM PRIZE — Enterprise-Grade Pull Mechanism
     // Security: Concurrency Lock + Settlement Check + Wallet Auth
@@ -387,10 +440,23 @@ export class PoolService {
             }
 
             // ── Layer 5: Multi-layer wallet ownership verification ──
-            const isOwner = await this.verifyWalletOwnership(winner.user_id, requestingWallet);
+            // Priority: direct winner_wallet match → multi-table verification
+            let isOwner = false;
+
+            // Fast path: winner_wallet was resolved at settlement time
+            if (winner.winner_wallet && winner.winner_wallet === requestingWallet) {
+                isOwner = true;
+                this.logger.log(`✅ Direct winner_wallet match for winner ${winnerId}`);
+            }
+
+            // Full verification through agents/stakes/profiles
+            if (!isOwner) {
+                isOwner = await this.verifyWalletOwnership(winner.user_id, requestingWallet);
+            }
+
             if (!isOwner) {
                 await this.logClaimAttempt(supabase, winnerId, requestingWallet, 'wallet_mismatch', req);
-                this.logger.error(`🚨 UNAUTHORIZED claim attempt: winner=${winnerId} expected_user=${winner.user_id} got_wallet=${requestingWallet.slice(0, 12)}...`);
+                this.logger.error(`🚨 UNAUTHORIZED claim attempt: winner=${winnerId} expected_user=${winner.user_id} winner_wallet=${winner.winner_wallet || 'NULL'} got_wallet=${requestingWallet.slice(0, 12)}...`);
                 throw new BadRequestException('Unauthorized: Connected wallet does not match the winner');
             }
 
@@ -548,43 +614,142 @@ export class PoolService {
 
     /**
      * Multi-layer wallet ownership verification.
-     * Checks: direct match → wallet_addresses table → profiles table
+     * Checks: direct match → winner_wallet → agents→pool_stakes → wallet_addresses → profiles
+     *
+     * FIX: When user_id is a Supabase auth UUID (not a wallet pubkey), we need to
+     * resolve ownership through the agents table and pool_stakes records.
      */
     private async verifyWalletOwnership(userId: string, requestingWallet: string): Promise<boolean> {
-        // Direct match: user_id IS the wallet pubkey (most common in ExoDuZe)
+        // Direct match: user_id IS the wallet pubkey (most common in ExoDuZe wallet-auth)
         if (userId === requestingWallet) return true;
 
         const supabase = this.supabaseService.getAdminClient();
 
-        // Check wallet_addresses table
+        // ── Check 1: Agents table ──
+        // The winner's user_id owns agents. Check if the requesting wallet
+        // is the same user who deployed/staked on those agents.
+        // This handles the case where user_id is a UUID and the wallet is different.
+        const { data: userAgents } = await supabase
+            .from('agents')
+            .select('id, user_id')
+            .eq('user_id', userId)
+            .limit(10);
+
+        if (userAgents && userAgents.length > 0) {
+            // Check if the requesting wallet staked on any of these agents
+            const agentIds = userAgents.map(a => a.id);
+            const { data: stakeMatch } = await supabase
+                .from('pool_stakes')
+                .select('user_id')
+                .in('agent_id', agentIds)
+                .eq('user_id', requestingWallet)
+                .eq('status', 'active')
+                .limit(1)
+                .maybeSingle();
+
+            if (stakeMatch) {
+                this.logger.log(`✅ Wallet ownership verified via pool_stakes: agent owner ${userId} ↔ staker wallet ${requestingWallet.slice(0, 12)}...`);
+                return true;
+            }
+        }
+
+        // ── Check 2: Reverse lookup — wallet owns agents that belong to this user_id ──
+        // The requesting wallet might have directly created agents with user_id = wallet
+        const { data: walletAgents } = await supabase
+            .from('agents')
+            .select('id, user_id')
+            .eq('user_id', requestingWallet)
+            .limit(10);
+
+        if (walletAgents && walletAgents.length > 0) {
+            // Check if any of these wallet-owned agents also appear in pool_stakes
+            // for the same competitions as the winner's agents
+            const walletAgentIds = walletAgents.map(a => a.id);
+
+            // Also directly check: does userId's agent match any wallet agent?
+            // This handles the edge case where the same person has both UUID and wallet as user_id
+            if (userAgents && userAgents.length > 0) {
+                const overlapIds = new Set(walletAgentIds);
+                const userAgentIds = userAgents.map(a => a.id);
+                for (const id of userAgentIds) {
+                    if (overlapIds.has(id)) {
+                        this.logger.log(`✅ Wallet ownership verified via shared agent: ${id}`);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // ── Check 3: wallet_addresses table ──
         const { data: walletRecord } = await supabase
             .from('wallet_addresses')
             .select('user_id')
-            .eq('address', requestingWallet.toLowerCase())
+            .eq('address', requestingWallet)
             .eq('user_id', userId)
             .limit(1)
             .maybeSingle();
 
         if (walletRecord) return true;
 
-        // Check profiles.wallet_addresses JSONB array
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('wallet_addresses')
-            .eq('id', userId)
-            .single();
+        // Also check case-insensitive (some wallets stored lowercased)
+        if (!walletRecord) {
+            const { data: walletRecordLower } = await supabase
+                .from('wallet_addresses')
+                .select('user_id')
+                .eq('address', requestingWallet.toLowerCase())
+                .eq('user_id', userId)
+                .limit(1)
+                .maybeSingle();
 
-        if (profile?.wallet_addresses) {
-            const wallets = Array.isArray(profile.wallet_addresses) ? profile.wallet_addresses : [];
-            const match = wallets.some((w: any) =>
-                w.address?.toLowerCase() === requestingWallet.toLowerCase()
-            );
-            if (match) return true;
+            if (walletRecordLower) return true;
         }
 
-        // Fallback: resolveWalletAddress (legacy path)
+        // ── Check 4: profiles.wallet_addresses JSONB array ──
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('wallet_addresses, wallet_address')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (profile) {
+            // Check direct wallet_address field
+            if (profile.wallet_address === requestingWallet) return true;
+
+            // Check wallet_addresses JSONB array
+            if (profile.wallet_addresses) {
+                const wallets = Array.isArray(profile.wallet_addresses) ? profile.wallet_addresses : [];
+                const match = wallets.some((w: any) =>
+                    w.address === requestingWallet || w.address?.toLowerCase() === requestingWallet.toLowerCase()
+                );
+                if (match) return true;
+            }
+        }
+
+        // ── Check 5: Fallback resolveWalletAddress (legacy path) ──
         const resolved = await this.resolveWalletAddress(userId);
-        return resolved === requestingWallet;
+        if (resolved === requestingWallet) return true;
+
+        // ── Check 6: Final check — any pool_stake where user_id matches requesting wallet ──
+        // This is the broadest check: if the requesting wallet has ANY stake in ANY competition,
+        // and the winner's agent matches one of those staked agents
+        if (userAgents && userAgents.length > 0) {
+            const agentIds = userAgents.map(a => a.id);
+            const { data: broadMatch } = await supabase
+                .from('pool_stakes')
+                .select('id')
+                .in('agent_id', agentIds)
+                .or(`user_id.eq.${requestingWallet}`)
+                .eq('status', 'active')
+                .limit(1)
+                .maybeSingle();
+
+            if (broadMatch) {
+                this.logger.log(`✅ Wallet ownership verified via broad pool_stakes match`);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -56,31 +56,38 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                     pointerEvents: 'none', zIndex: -1
                 }} />
 
-                <div className="header-left">
-                    <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.8rem', marginTop: '3px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                            <img
-                                src="/images/logo/exoduze-logo.png"
-                                alt="ExoDuZe Logo"
-                                className="header-exoduze-logo"
-                                style={{ transform: 'scale(1.15)' }}
-                            />
-                            <div className="header-logo-text" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <div className="logo" style={{ lineHeight: 1, fontSize: '1.35em', paddingTop: '3px' }}>ExoDuZe</div>
-
-                                <div className="powered-by-sol-wrap" style={{ marginTop: 0 }}>
-                                    <div className="powered-by-sol-inner">
-                                        <img src="/images/logo/poweredbysol.svg" alt="Powered by Solana" className="powered-by-sol-img" />
-                                    </div>
-                                </div>
+                <div className="header-left" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                    <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '0.12rem' }}>
+                        <img
+                            src="/images/logo/exoduze-logo.png"
+                            alt="ExoDuZe Logo"
+                            className="header-exoduze-logo"
+                            style={{ width: '58px', height: '58px', objectFit: 'contain', flexShrink: 0 }}
+                        />
+                        <div className="powered-by-sol-wrap">
+                            <div className="powered-by-sol-inner">
+                                <img
+                                    src="/images/logo/poweredbysol.svg"
+                                    alt="Powered by Solana"
+                                    className="powered-by-sol-img"
+                                />
                             </div>
                         </div>
                     </Link>
-
-                    <div className="header-badges-mobile" style={{ display: 'flex', gap: '8px', marginLeft: '0.6rem' }}>
-                        <span className="badge live">● LIVE</span>
-                        <span className="badge devnet">⚡ DEVNET</span>
-                    </div>
+                    {/* Live Clock directly under logo */}
+                    <span className="header-time-under-logo" style={{
+                        fontSize: '0.58rem',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono, monospace)',
+                        letterSpacing: '0.04em',
+                        fontWeight: 600,
+                        opacity: 0.75,
+                        marginTop: '1px',
+                        paddingLeft: '2px',
+                        lineHeight: 1
+                    }}>
+                        ⏱ {time}
+                    </span>
                     {/* Desktop Navigation — Image 1 style */}
                     <nav className="header-desktop-nav">
                         <Link href="/" className={`header-nav-item ${pathname === '/' ? 'header-nav-item--active' : ''}`}>
@@ -104,7 +111,6 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                 </div>
 
                 <div className="header-right">
-                    <span className="header-time" style={{ marginRight: 'auto', fontSize: '0.65rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}>{time}</span>
                     {publicKey && (
                         <div className="header-portfolio-activity" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <Link href="/portfolio" className="header-portfolio-btn" style={{
@@ -130,18 +136,6 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                         </div>
                     )}
 
-                    <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme" style={{
-                        boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.1), 0 4px 8px rgba(0,0,0,0.2)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '32px', height: '32px', borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)'
-                    }}>
-                        {theme === 'dark' ? (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
-                        ) : (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
-                        )}
-                    </button>
                     <div className="wallet-btn-wrap">
                         <WalletMultiButton />
                     </div>
@@ -241,6 +235,31 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                                 <span>About</span>
                             </Link>
 
+                            <button
+                                onClick={() => { onToggleTheme(); closeMenu(); }}
+                                className="drawer-nav-link"
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    color: 'inherit',
+                                    fontFamily: 'inherit',
+                                    fontSize: 'inherit'
+                                }}
+                            >
+                                <div className="drawer-nav-icon" style={{ color: 'var(--accent-amber)' }}>
+                                    {theme === 'dark' ? (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-amber)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
+                                    ) : (
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                                    )}
+                                </div>
+                                <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+                            </button>
+
                             <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)', margin: '0.5rem 0' }}></div>
 
                             <div className="drawer-auth-section">
@@ -271,9 +290,11 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                 .powered-by-sol-wrap {
                     position: relative;
                     display: inline-flex;
-                    border-radius: 8px;
+                    width: fit-content;
+                    max-width: max-content;
+                    border-radius: 7px;
                     overflow: hidden;
-                    margin-top: 3px;
+                    flex-shrink: 0;
                 }
                 .powered-by-sol-wrap::before {
                     content: '';
@@ -288,17 +309,19 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                 .powered-by-sol-inner {
                     position: relative;
                     z-index: 1;
-                    margin: 1.5px;
-                    border-radius: 6.5px;
+                    margin: 1.2px;
+                    border-radius: 5.5px;
                     background: var(--bg-primary, #181728);
-                    padding: 2px 6px;
+                    padding: 1.5px 5px;
                     display: flex;
                     align-items: center;
+                    justify-content: center;
                 }
                 .powered-by-sol-img {
-                    height: 18px;
+                    height: 14px;
                     width: auto;
                     display: block;
+                    object-fit: contain;
                 }
 
                 /* ===== DESKTOP NAVIGATION ===== */
@@ -387,44 +410,36 @@ export default function Header({ theme, onToggleTheme, activeSector, onSectorCha
                         display: flex; align-items: center; gap: 0.25rem; margin-left: 1.5rem;
                     }
                     .mobile-menu-btn { display: none !important; }
-                    .header-exoduze-logo { width: 46px; height: 46px; }
-                    .header-logo-text .logo-sub { display: none; }
+                    .header-exoduze-logo { width: 58px; height: 58px; }
                     .header-badges-mobile { display: none !important; }
-                    .powered-by-sol-img { height: 20px; }
+                    .powered-by-sol-img { height: 14px; }
                 }
 
                 /* ===== MOBILE (<= 768px) ===== */
                 @media (max-width: 768px) {
                     .header {
-                        flex-wrap: wrap; align-items: center; gap: 0;
-                        padding: 0.6rem 1.1rem 0.5rem;
+                        flex-wrap: nowrap; align-items: center; justify-content: space-between;
+                        padding: 0.5rem 0.75rem;
                         border-radius: 0 !important; margin: 0 !important; top: 0;
                         width: 100%; max-width: 100vw;
                         border-left: none; border-right: none; border-top: none;
                     }
                     .header-left {
-                        width: 100%; display: flex; align-items: center;
-                        gap: 0.35rem; min-width: 0; margin-bottom: 0.35rem;
-                    }
-                    .header-badges-mobile { display: flex !important; }
-                    .header-badges-mobile .badge {
-                        padding: 3px 10px; font-size: 0.62rem;
+                        width: auto; display: flex; align-items: center;
+                        gap: 0.12rem; min-width: 0; margin-bottom: 0;
                     }
                     .header-right {
-                        width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem;
+                        width: auto; display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem;
                     }
+                    .header-badges-mobile { display: none !important; }
                     .header-desktop-nav { display: none !important; }
                     .mobile-menu-btn { display: flex !important; margin-left: 0 !important; }
-                    .header-exoduze-logo { width: 32px; height: 32px; }
-                    .header-logo-text .logo { font-size: 1.15rem; }
-                    .header-logo-text .logo-sub { display: none; }
-                    .powered-by-sol-img { height: 14px; }
-                    .powered-by-sol-wrap { margin-top: 2px; }
-                    .powered-by-sol-inner { padding: 1.5px 5px; margin: 1px; }
-                    .header-time {
-                        display: block !important; font-size: 0.58rem !important;
-                        line-height: 1.2; opacity: 0.5;
-                    }
+                    .header-exoduze-logo { width: 50px; height: 50px; }
+                    .header-logo-text { display: none !important; }
+                    .powered-by-sol-img { height: 13px; }
+                    .powered-by-sol-wrap { margin-top: 0; width: fit-content; max-width: max-content; flex-shrink: 0; }
+                    .powered-by-sol-inner { padding: 1px 4px; margin: 1px; }
+                    .header-time-pill { font-size: 0.55rem !important; padding: 2px 6px !important; }
                     .header-portfolio-activity { display: none !important; }
                     .header-portfolio-btn { padding: 4px 6px !important; }
                     .portfolio-text { display: none; }

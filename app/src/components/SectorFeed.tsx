@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCompetitions, Competition } from '@/hooks/useCompetitions';
 import { useLiveFeed, LiveFeedItem } from '@/hooks/useLiveFeed';
@@ -15,8 +16,8 @@ interface Props {
 
 // ── Tab metadata ────────────────────────────────────────────────
 const TAB_META: Record<string, { icon: string; title: string; description: string }> = {
-    top: { icon: '🔥', title: 'Top Markets', description: 'Most popular competitions by participant count' },
-    foryou: { icon: '✨', title: 'Recommended For You', description: 'Curated competitions based on your activity, prize pools, and market potential.' },
+    top: { icon: '🔥', title: 'Top Markets', description: 'Most active forecasting competitions with highest engagement and prize pools.' },
+    foryou: { icon: '🎛️', title: 'Recommended For You', description: 'Curated competitions based on your activity, prize pools, and market potential.' },
     signals: { icon: '📡', title: 'Market Signals', description: 'Latest intelligence and sentiment changes from live data feeds' },
     latest: { icon: '⚡', title: 'Latest Competitions', description: 'Newest competitions just created — be the first to deploy your AI agent.' },
 };
@@ -85,7 +86,6 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
     const status = getCompetitionStatus(comp);
     const statusConfig = getStatusConfig(status);
     const timeLeft = getTimeRemaining(comp);
-    const horizon = getHorizonLabel(comp);
     const progress = getProgressPct(comp);
 
     return (
@@ -98,203 +98,146 @@ function CompetitionCard({ comp, selected, onClick }: { comp: Competition, selec
                 transition: 'all 0.2s ease',
                 boxShadow: selected ? '0 0 20px rgba(99,102,241,0.15)' : statusConfig.glow,
                 opacity: status === 'ended' ? 0.7 : 1,
-                padding: 0, // Remove padding from article to allow full-width image
-                overflow: 'hidden',
+                padding: '1.2rem',
                 display: 'flex',
                 flexDirection: 'column',
             }}
             onClick={onClick}
         >
-            {/* Animated Interactive Image Banner */}
-            {comp.image_url && (
-                <div style={{
-                    height: '140px',
-                    width: '100%',
-                    position: 'relative',
-                    borderBottom: '1px solid var(--border-glass)',
-                    flexShrink: 0,
-                    overflow: 'hidden',
-                }} className="feed-card-img-container">
-                    <img 
-                        src={comp.image_url} 
-                        alt={comp.title} 
-                        loading="lazy"
-                        className="hover-zoom"
-                        style={{ 
-                            width: '100%', 
-                            height: '100%', 
-                            objectFit: 'cover',
-                            transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)'
-                        }} 
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                    <div style={{
-                        position: 'absolute',
-                        top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'linear-gradient(to bottom, transparent 40%, rgba(10, 11, 20, 0.95) 100%)',
-                        pointerEvents: 'none'
-                    }} />
-                    <div className="img-overlay-hover" style={{
-                        position: 'absolute',
-                        top: 0, left: 0, right: 0, bottom: 0,
-                        background: 'rgba(99, 102, 241, 0.15)',
-                        backdropFilter: 'blur(2px)',
-                        opacity: 0,
-                        transition: 'all 0.4s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        pointerEvents: 'none'
+            <div className="feed-card__header">
+                <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                    <span className="feed-card__badge" style={{
+                        background: 'rgba(99,102,241,0.15)',
+                        color: 'var(--accent-indigo)',
+                        fontSize: '0.5rem',
+                        padding: '2px 6px',
+                        borderRadius: 'var(--radius-round)',
+                        fontWeight: 700,
+                        textTransform: 'capitalize',
                     }}>
-                        <span style={{
-                            background: 'rgba(0,0,0,0.6)',
-                            color: '#fff',
-                            padding: '6px 16px',
-                            borderRadius: '20px',
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            letterSpacing: '0.05em',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                            transform: 'translateY(10px)',
-                            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                        }} className="view-market-pill">
-                            View Market
-                        </span>
-                    </div>
+                        🏆 {comp.sector || 'Competition'}
+                    </span>
+                </div>
+                <span style={{
+                    fontSize: '0.55rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-round)',
+                    background: statusConfig.bg,
+                    color: statusConfig.color,
+                    animation: status === 'live' ? 'pulse 2s infinite' : 'none',
+                }}>
+                    {statusConfig.label}
+                </span>
+            </div>
+
+            <h3 className="feed-card__title" style={{
+                fontSize: '0.92rem',
+                fontWeight: 700,
+                lineHeight: 1.3,
+                margin: '0.6rem 0'
+            }}>
+                {comp.title}
+            </h3>
+
+            {comp.description && (
+                <p className="feed-card__desc" style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--text-muted)',
+                    margin: '0 0 0.6rem 0'
+                }}>
+                    {comp.description}
+                </p>
+            )}
+
+            {/* Progress bar for live competitions */}
+            {status === 'live' && (
+                <div style={{ margin: '0.4rem 0', height: '3px', borderRadius: '2px', background: 'var(--border-glass)', overflow: 'hidden' }}>
+                    <div style={{
+                        height: '100%',
+                        width: `${progress}%`,
+                        borderRadius: '2px',
+                        background: 'linear-gradient(90deg, var(--accent-indigo), var(--accent-purple))',
+                        transition: 'width 1s ease',
+                    }} />
                 </div>
             )}
-            
-            <div className="feed-card__content" style={{ padding: '1.2rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <div className="feed-card__header">
-                    <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                        <span className="feed-card__badge" style={{
-                            background: 'rgba(99,102,241,0.15)',
-                            color: 'var(--accent-indigo)',
-                            fontSize: '0.5rem',
-                            padding: '2px 6px',
-                            borderRadius: 'var(--radius-round)',
-                            fontWeight: 700,
-                            textTransform: 'capitalize',
-                        }}>
-                            🏆 {comp.sector || 'Competition'}
-                        </span>
-                        <span style={{
-                            fontSize: '0.5rem',
-                            fontWeight: 800,
-                            padding: '2px 6px',
-                            borderRadius: 'var(--radius-round)',
-                            background: 'rgba(139,92,246,0.15)',
-                            color: 'var(--accent-purple)',
-                            letterSpacing: '0.05em',
-                        }}>
-                            {horizon}
-                        </span>
-                    </div>
-                    <span style={{
-                        fontSize: '0.55rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-round)',
-                        background: statusConfig.bg,
-                        color: statusConfig.color,
-                        animation: status === 'live' ? 'pulse 2s infinite' : 'none',
+
+            {/* Probability bars */}
+            <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                {probLabels.map((label, i) => (
+                    <div key={i} style={{
+                        flex: 1,
+                        minWidth: 70,
+                        textAlign: 'center',
+                        padding: '0.3rem 0.4rem',
+                        borderRadius: 'var(--radius-xs)',
+                        background: 'var(--gradient-card)',
+                        border: '1px solid var(--border-card)',
                     }}>
-                        {statusConfig.label}
-                    </span>
-                </div>
-                <h3 className="feed-card__title">{comp.title}</h3>
-                {comp.description && (
-                    <p className="feed-card__desc">{comp.description}</p>
-                )}
-
-                {/* Progress bar for live competitions */}
-                {status === 'live' && (
-                    <div style={{ margin: '0.4rem 0', height: '3px', borderRadius: '2px', background: 'var(--border-glass)', overflow: 'hidden' }}>
+                        <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</div>
                         <div style={{
-                            height: '100%',
-                            width: `${progress}%`,
-                            borderRadius: '2px',
-                            background: 'linear-gradient(90deg, var(--accent-indigo), var(--accent-purple))',
-                            transition: 'width 1s ease',
-                        }} />
-                    </div>
-                )}
-
-                {/* Probability bars */}
-                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                    {probLabels.map((label, i) => (
-                        <div key={i} style={{
-                            flex: 1,
-                            minWidth: 70,
-                            textAlign: 'center',
-                            padding: '0.3rem 0.4rem',
-                            borderRadius: 'var(--radius-xs)',
-                            background: 'var(--gradient-card)',
-                            border: '1px solid var(--border-card)',
+                            fontSize: '0.85rem',
+                            fontWeight: 800,
+                            fontFamily: 'var(--font-mono)',
+                            color: i === 0 ? 'var(--accent-indigo)' : i === 1 ? 'var(--accent-amber)' : 'var(--accent-red)',
                         }}>
-                            <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</div>
-                            <div style={{
-                                fontSize: '0.85rem',
-                                fontWeight: 800,
-                                fontFamily: 'var(--font-mono)',
-                                color: i === 0 ? 'var(--accent-indigo)' : i === 1 ? 'var(--accent-amber)' : 'var(--accent-red)',
-                            }}>
-                                {((probs[i] || 0) / 100).toFixed(1)}%
-                            </div>
+                            {((probs[i] || 0) / 100).toFixed(1)}%
                         </div>
+                    </div>
+                ))}
+            </div>
+
+            {comp.tags && comp.tags.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '0.8rem', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>SOURCES:</span>
+                    {comp.tags.slice(0, 3).map((tag, idx) => (
+                        <span key={`${tag}-${idx}`} style={{
+                            fontSize: '0.55rem',
+                            color: 'var(--text-primary)',
+                            background: 'var(--bg-input)',
+                            border: '1px solid var(--border-glass)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 500,
+                            textTransform: 'capitalize'
+                        }}>
+                            #{tag}
+                        </span>
                     ))}
                 </div>
-                
-                {comp.tags && comp.tags.length > 0 && (
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '0.8rem', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.05em' }}>SOURCES:</span>
-                        {comp.tags.slice(0, 3).map((tag, idx) => (
-                            <span key={`${tag}-${idx}`} style={{ 
-                                fontSize: '0.55rem', 
-                                color: 'var(--text-primary)', 
-                                background: 'var(--bg-input)', 
-                                border: '1px solid var(--border-glass)',
-                                padding: '2px 6px', 
-                                borderRadius: '4px',
-                                fontWeight: 500,
-                                textTransform: 'capitalize'
-                            }}>
-                                #{tag}
-                            </span>
-                        ))}
-                    </div>
-                )}
+            )}
 
-                <div className="feed-card__footer" style={{ marginTop: '0.6rem' }}>
-                    <span className="feed-card__source">
-                        💰 {comp.prize_pool} SOL Pool
-                    </span>
-                    <span className="feed-card__time" style={{
-                        fontWeight: 700,
-                        color: status === 'live' ? 'var(--accent-green)' : status === 'upcoming' ? 'var(--accent-amber)' : 'var(--text-muted)',
-                    }}>
-                        {status === 'live' ? `⏱ ${timeLeft} left` : status === 'upcoming' ? `Starts in ${timeLeft}` : `✓ ${timeLeft}`}
-                    </span>
-                </div>
-                <div className="feed-card__footer" style={{ marginTop: '0.2rem' }}>
-                    <span className="feed-card__source" style={{ fontSize: '0.5rem' }}>
-                        👥 {comp.entry_count}/{comp.max_entries} entries
-                    </span>
-                </div>
-                {selected && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            localStorage.setItem('selected_competition_id', comp.id);
-                            router.push(`/${comp.sector.toLowerCase()}`);
-                        }}
-                        className="btn-compete-premium"
-                    >
-                        <span className="sword-icon">⚔️</span> Compete Now
-                    </button>
-                )}
+            <div className="feed-card__footer" style={{ marginTop: '0.6rem' }}>
+                <span className="feed-card__source">
+                    💰 {comp.prize_pool} SOL Pool
+                </span>
+                <span className="feed-card__time" style={{
+                    fontWeight: 700,
+                    color: status === 'live' ? 'var(--accent-green)' : status === 'upcoming' ? 'var(--accent-amber)' : 'var(--text-muted)',
+                }}>
+                    {status === 'live' ? `⏱ ${timeLeft} left` : status === 'upcoming' ? `Starts in ${timeLeft}` : `✓ ${timeLeft}`}
+                </span>
             </div>
+            <div className="feed-card__footer" style={{ marginTop: '0.2rem' }}>
+                <span className="feed-card__source" style={{ fontSize: '0.5rem' }}>
+                    👥 {comp.entry_count}/{comp.max_entries} entries
+                </span>
+            </div>
+
+            {selected && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        localStorage.setItem('selected_competition_id', comp.id);
+                        router.push(`/${comp.sector.toLowerCase()}`);
+                    }}
+                    className="btn-compete-premium"
+                    style={{ marginTop: '0.35rem', padding: '0.45rem' }}
+                >
+                    <span className="sword-icon">⚔️</span> Compete Now
+                </button>
+            )}
         </article>
     );
 }
@@ -339,7 +282,7 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                     />
                 </div>
             ) : null}
-            
+
             {/* Content */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -360,7 +303,7 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                         <span style={{ opacity: 0.5, fontSize: '0.65rem' }}>↗</span>
                     )}
                 </div>
-                
+
                 <h3 style={{
                     fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)',
                     lineHeight: 1.4, margin: 0, wordBreak: 'break-word',
@@ -369,14 +312,14 @@ function SignalCard({ item }: { item: LiveFeedItem }) {
                 }}>
                     {item.text}
                 </h3>
-                
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                     {item.tags && item.tags.length > 0 && (
                         <span style={{
                             fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)',
                             display: 'flex', alignItems: 'center', gap: '0.3rem'
                         }}>
-                            <span style={{ opacity: 0.6 }}>💬</span> {item.tags.slice(0,2).join(', ')}
+                            <span style={{ opacity: 0.6 }}>💬</span> {item.tags.slice(0, 2).join(', ')}
                         </span>
                     )}
                     <span style={{
@@ -451,7 +394,7 @@ function SectionHeader({ sector, liveCount, connected }: { sector: string; liveC
 // ── Main SectorFeed Component ──────────────────────────────────
 export default function SectorFeed({ sector, selectedCompId, onSelectCompetition, searchQuery, activeCategory, activeFilter }: Props) {
     const { competitions, loading, connected } = useCompetitions(sector);
-    
+
     // Pass activeCategory to useLiveFeed so it fetches the correct sector data from backend
     const feedCategory = sector === 'signals' && activeCategory !== 'all' ? activeCategory : undefined;
     const { feeds: signalFeeds, loading: signalsLoading, connected: signalsConnected } = useLiveFeed(30, feedCategory);
@@ -507,8 +450,8 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
     // Apply searchQuery filter for competitions
     if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        sorted = sorted.filter(c => 
-            (c.title || '').toLowerCase().includes(query) || 
+        sorted = sorted.filter(c =>
+            (c.title || '').toLowerCase().includes(query) ||
             (c.description || '').toLowerCase().includes(query) ||
             (c.sector || '').toLowerCase().includes(query)
         );
@@ -519,16 +462,14 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
         if (activeFilter === 'new') {
             sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         } else if (activeFilter === 'trending') {
-            // Sort by entry count / prize pool
             sorted.sort((a, b) => ((b.entry_count || 0) * (b.prize_pool || 1)) - ((a.entry_count || 0) * (a.prize_pool || 1)));
         } else if (activeFilter === 'ending') {
-            // Ending soon: sort by competition_end closest to now, must be 'live'
             sorted = sorted.filter(c => getCompetitionStatus(c) === 'live');
             sorted.sort((a, b) => new Date(a.competition_end).getTime() - new Date(b.competition_end).getTime());
         }
     }
 
-    // FILTER OUT ended competitions — they should NEVER appear in the feed
+    // FILTER OUT ended competitions
     sorted = sorted.filter(c => getCompetitionStatus(c) !== 'ended');
 
     const liveCount = sorted.filter(c => getCompetitionStatus(c) === 'live').length;
@@ -546,20 +487,11 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
-            filteredSignals = filteredSignals.filter(item => 
-                item.text.toLowerCase().includes(query) || 
+            filteredSignals = filteredSignals.filter(item =>
+                item.text.toLowerCase().includes(query) ||
                 item.source.toLowerCase().includes(query) ||
                 (item.category && item.category.toLowerCase().includes(query))
             );
-        }
-
-        if (activeFilter) {
-             if (activeFilter === 'new') {
-                 filteredSignals.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-             } else if (activeFilter === 'trending') {
-                 // Sort by high impact first
-                 filteredSignals.sort((a, b) => (b.impact === 'high' ? 1 : 0) - (a.impact === 'high' ? 1 : 0));
-             }
         }
 
         return (
@@ -567,16 +499,9 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
                 <SectionHeader sector={sector} liveCount={filteredSignals.length} connected={signalsConnected} />
 
                 {signalsLoading && filteredSignals.length === 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0', animation: 'dbFadeIn 0.3s ease' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0' }}>
                         <div className="circular-spinner" />
-                        <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500, letterSpacing: '0.05em' }}>Loading signals...</div>
-                    </div>
-                )}
-
-                {!signalsLoading && filteredSignals.length === 0 && (
-                    <div className="sector-feed__empty">
-                        <p>No signals available yet for these filters.</p>
-                        <p className="sector-feed__empty-sub">Market intelligence will appear as events are detected from live data feeds.</p>
+                        <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading signals...</div>
                     </div>
                 )}
 
@@ -615,29 +540,30 @@ export default function SectorFeed({ sector, selectedCompId, onSelectCompetition
             </div>
 
             {loading && competitions.length === 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0', animation: 'dbFadeIn 0.3s ease' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 0' }}>
                     <div className="circular-spinner" />
-                    <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 500, letterSpacing: '0.05em' }}>Loading markets...</div>
+                    <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading markets...</div>
                 </div>
             )}
 
             {!loading && sorted.length === 0 && (
                 <div className="sector-feed__empty">
                     <p>No competitions available for this sector yet.</p>
-                    <p className="sector-feed__empty-sub">Competitions will be auto-created from live data feeds.</p>
                 </div>
             )}
 
-            <div className="sector-feed__grid">
-                {sorted.map((comp) => (
-                    <CompetitionCard
-                        key={comp.id}
-                        comp={comp}
-                        selected={comp.id === selectedCompId}
-                        onClick={() => onSelectCompetition?.(comp.id)}
-                    />
-                ))}
-            </div>
+            {sorted.length > 0 && (
+                <div className="sector-feed__grid">
+                    {sorted.map((comp) => (
+                        <CompetitionCard
+                            key={comp.id}
+                            comp={comp}
+                            selected={comp.id === selectedCompId}
+                            onClick={() => onSelectCompetition?.(comp.id)}
+                        />
+                    ))}
+                </div>
+            )}
         </section>
     );
 }

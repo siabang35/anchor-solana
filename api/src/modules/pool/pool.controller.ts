@@ -146,4 +146,30 @@ export class PoolController {
 
         return this.poolService.claimPrize(body.winner_id, requestingWallet, req);
     }
+
+    /**
+     * Check claim eligibility — returns winner IDs that the connected wallet can claim
+     */
+    @Get('claim-eligibility')
+    @Public()
+    @ApiOperation({ summary: 'Check which winners the connected wallet can claim' })
+    async checkClaimEligibility(
+        @Query('competition_id') competitionId: string,
+        @Query('wallet') wallet: string,
+    ) {
+        if (!competitionId || !wallet) return { claimable: [] };
+
+        // Validate UUID format
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(competitionId)) {
+            return { claimable: [] };
+        }
+
+        // Validate Solana pubkey format
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(wallet)) {
+            return { claimable: [] };
+        }
+
+        const claimable = await this.poolService.checkClaimEligibility(competitionId, wallet);
+        return { claimable };
+    }
 }
